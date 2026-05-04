@@ -30,6 +30,17 @@ final class EventTap {
     /// fire double-tap immediately to keep latency identical to v0.1.
     private static let tripleGrace: TimeInterval = 0.20
 
+    /// How long the polling loop waits for the focused app to update the
+    /// pasteboard after we synthesize Cmd+C.
+    private static let copyPollDeadline: TimeInterval = 0.25
+    private static let copyPollInterval: TimeInterval = 0.015
+
+    /// How long to wait after synthesizing Cmd+V before restoring the user's
+    /// original clipboard. Some slow apps (Pages, MS Word) read the
+    /// pasteboard with a debounce; if we restore too eagerly they consume
+    /// the original text instead of our converted text.
+    private static let pasteRestoreDelay: TimeInterval = 0.30
+
     private var tapCount = 0
     private var lastShiftReleaseTime: Date?
     private var pendingFire: DispatchWorkItem?
@@ -253,9 +264,9 @@ final class EventTap {
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let deadline = Date().addingTimeInterval(0.25)
+            let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
             while Date() < deadline && pb.changeCount == countBefore {
-                Thread.sleep(forTimeInterval: 0.015)
+                Thread.sleep(forTimeInterval: Self.copyPollInterval)
             }
 
             DispatchQueue.main.async {
@@ -291,7 +302,7 @@ final class EventTap {
                 InputSource.switchTo(to)
                 self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
 
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
                     snapshot.restore(to: pb)
                 }
                 completion(true)
