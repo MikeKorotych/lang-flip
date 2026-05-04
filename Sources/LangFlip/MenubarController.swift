@@ -24,7 +24,7 @@ final class MenubarController: NSObject {
         menu.addItem(autoFlipItem)
         menu.addItem(.separator())
 
-        let hotkeyHint = NSMenuItem(title: "Hotkey: double-tap ⇧ converts last word", action: nil, keyEquivalent: "")
+        let hotkeyHint = NSMenuItem(title: "Hotkey: double-tap ⇧ — selection if any, else last word", action: nil, keyEquivalent: "")
         hotkeyHint.isEnabled = false
         menu.addItem(hotkeyHint)
         menu.addItem(.separator())

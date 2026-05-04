@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import CoreGraphics
 import Carbon.HIToolbox
 
@@ -127,11 +128,9 @@ final class EventTap {
         let nowDown = flags.contains(.maskShift)
 
         if nowDown {
-            // Shift just went down.
             shiftCurrentlyHeld = true
             shiftUsedAsModifier = false
         } else {
-            // Shift just went up.
             shiftCurrentlyHeld = false
             defer { shiftUsedAsModifier = false }
 
@@ -145,13 +144,12 @@ final class EventTap {
             let now = Date()
             if let last = lastCleanShiftRelease,
                now.timeIntervalSince(last) <= Self.doubleShiftWindow {
-                // Second tap inside the window → DOUBLE-SHIFT.
                 lastCleanShiftRelease = nil
                 if debug { FileHandle.standardError.write(Data("lang-flip[debug]: double-shift detected\n".utf8)) }
                 // Defer to the next runloop tick so the Shift release event
                 // settles before we start posting synthesized events.
                 DispatchQueue.main.async { [weak self] in
-                    self?.convertLastWord()
+                    self?.handleHotkey()
                 }
             } else {
                 lastCleanShiftRelease = now
@@ -159,9 +157,83 @@ final class EventTap {
         }
     }
 
-    /// Called right after the user typed a boundary char (space, punctuation).
-    /// At this point the boundary char has already reached the focused app, so
-    /// we erase `word.count + 1` characters before retyping.
+    /// Hotkey entry point: if there's selected text, convert it; otherwise
+    /// fall back to converting the last word in the buffer.
+    private func handleHotkey() {
+        convertSelectionIfPresent { [weak self] didConvertSelection in
+            guard let self else { return }
+            if !didConvertSelection {
+                if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: no selection — falling back to last-word flip\n".utf8)) }
+                self.convertLastWord()
+            }
+        }
+    }
+
+    // MARK: - Selection-based flip (Cmd+C / convert / Cmd+V)
+
+    private func convertSelectionIfPresent(completion: @escaping (Bool) -> Void) {
+        let pb = NSPasteboard.general
+        let snapshot = PasteboardSnapshot.capture(pb)
+        let countBefore = pb.changeCount
+
+        // Trigger a copy on the focused app.
+        postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_C))
+
+        // Pasteboard updates asynchronously — poll on a background queue with
+        // a short deadline so we don't block the event tap callback.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let deadline = Date().addingTimeInterval(0.25)
+            while Date() < deadline && pb.changeCount == countBefore {
+                Thread.sleep(forTimeInterval: 0.015)
+            }
+
+            DispatchQueue.main.async {
+                guard pb.changeCount > countBefore,
+                      let text = pb.string(forType: .string),
+                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      text.count >= 2
+                else {
+                    snapshot.restore(to: pb)
+                    completion(false)
+                    return
+                }
+
+                guard let from = detectLayout(text) else {
+                    snapshot.restore(to: pb)
+                    completion(false)
+                    return
+                }
+                let to: Layout = (from == .en) ? .uk : .en
+                let converted = convert(text, from: from, to: to)
+
+                guard converted != text else {
+                    snapshot.restore(to: pb)
+                    completion(false)
+                    return
+                }
+
+                if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection \(from)→\(to), \(text.count) chars\n".utf8)) }
+
+                pb.clearContents()
+                pb.setString(converted, forType: .string)
+
+                InputSource.switchTo(to)
+                self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+
+                // Restore the user's clipboard after the paste has had time
+                // to be consumed by the focused app.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    snapshot.restore(to: pb)
+                }
+                completion(true)
+            }
+        }
+    }
+
+    // MARK: - Word-buffer flip (manual hotkey when no selection)
+
+    /// Auto-flip on word boundary (called from key tracking when enabled).
     private func autoFlipIfNeeded(completedWord: String) {
         guard let current = InputSource.currentLayout() else { return }
         guard let target = AutoFlip.shared.suggestedFlip(for: completedWord, currentLayout: current) else { return }
@@ -184,7 +256,7 @@ final class EventTap {
         let converted = convert(word, from: from, to: to)
         guard converted != word else { return }
 
-        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: converting '\(word)' (\(from)) → '\(converted)' (\(to))\n".utf8)) }
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: word flip '\(word)' (\(from)) → '\(converted)' (\(to))\n".utf8)) }
 
         for _ in 0..<word.count { postKey(virtualKey: CGKeyCode(kVK_Delete)) }
         InputSource.switchTo(to)
@@ -196,30 +268,39 @@ final class EventTap {
 
     // MARK: - Posting synthesized events
 
-    /// Build a fresh event source. We avoid `.combinedSessionState` because it
-    /// inherits the user's currently-pressed modifier flags, which is exactly
-    /// what we don't want.
+    /// Build a fresh event source. We use `.privateState` so the event source
+    /// doesn't inherit the user's currently-pressed modifier flags.
     private func makeSource() -> CGEventSource? {
         return CGEventSource(stateID: .privateState)
     }
 
+    /// Tag an event so we recognise it on round-trip through the tap.
     private func stamp(_ event: CGEvent) {
-        // Erase any inherited modifier flags AND tag the event so we recognise
-        // it on round-trip.
-        event.flags = []
         event.setIntegerValueField(.eventSourceUserData, value: Self.userDataMagic)
     }
 
+    /// Post a plain (no-modifier) key press + release.
     private func postKey(virtualKey: CGKeyCode) {
+        postKey(virtualKey: virtualKey, flags: [])
+    }
+
+    private func postKey(virtualKey: CGKeyCode, flags: CGEventFlags) {
         let src = makeSource()
         if let down = CGEvent(keyboardEventSource: src, virtualKey: virtualKey, keyDown: true) {
+            down.flags = flags
             stamp(down)
             down.post(tap: .cghidEventTap)
         }
         if let up = CGEvent(keyboardEventSource: src, virtualKey: virtualKey, keyDown: false) {
+            up.flags = flags
             stamp(up)
             up.post(tap: .cghidEventTap)
         }
+    }
+
+    /// Post a Command-key shortcut (e.g. Cmd+C, Cmd+V).
+    private func postCmdShortcut(virtualKey: CGKeyCode) {
+        postKey(virtualKey: virtualKey, flags: .maskCommand)
     }
 
     private func postUnicode(_ s: String) {
@@ -229,6 +310,7 @@ final class EventTap {
             chars.withUnsafeBufferPointer { ptr in
                 down.keyboardSetUnicodeString(stringLength: ptr.count, unicodeString: ptr.baseAddress)
             }
+            down.flags = []
             stamp(down)
             down.post(tap: .cghidEventTap)
         }
@@ -236,6 +318,7 @@ final class EventTap {
             chars.withUnsafeBufferPointer { ptr in
                 up.keyboardSetUnicodeString(stringLength: ptr.count, unicodeString: ptr.baseAddress)
             }
+            up.flags = []
             stamp(up)
             up.post(tap: .cghidEventTap)
         }
