@@ -7,6 +7,17 @@ import Foundation
 
 enum Layout: String, CaseIterable {
     case en, uk, ru
+
+    var displayName: String {
+        switch self {
+        case .en: return "English"
+        case .uk: return "Українська"
+        case .ru: return "Русский"
+        }
+    }
+
+    /// Languages that can be selected as primary / secondary (i.e. not English).
+    static var nonEnglish: [Layout] { [.uk, .ru] }
 }
 
 private let rows: [Layout: [String]] = [

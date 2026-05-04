@@ -18,15 +18,21 @@ final class EventTap {
     /// Set LANG_FLIP_DEBUG=1 in the environment to log every keystroke seen.
     private let debug = ProcessInfo.processInfo.environment["LANG_FLIP_DEBUG"] == "1"
 
-    // MARK: - Double-shift hotkey state
+    // MARK: - Multi-tap Shift hotkey state
 
-    /// Maximum gap between the two Shift releases for them to count as a
-    /// double-tap (matches Caramba's feel — ~300–400ms).
-    private static let doubleShiftWindow: TimeInterval = 0.40
+    /// Maximum gap between two consecutive Shift releases for them to count
+    /// as part of the same tap sequence.
+    private static let tapWindow: TimeInterval = 0.35
 
-    /// Time of the most recent "clean" Shift release (one where Shift wasn't
-    /// used as a modifier on another key). nil means no pending tap.
-    private var lastCleanShiftRelease: Date?
+    /// After detecting a double-tap, wait this long before committing — gives
+    /// the user time to add a third tap and trigger the secondary action.
+    /// Only applied when a secondary language is configured; otherwise we
+    /// fire double-tap immediately to keep latency identical to v0.1.
+    private static let tripleGrace: TimeInterval = 0.20
+
+    private var tapCount = 0
+    private var lastShiftReleaseTime: Date?
+    private var pendingFire: DispatchWorkItem?
 
     /// Set true on any non-shift keyDown event while Shift is held — it means
     /// the user used Shift as a real modifier, not as a hotkey tap.
@@ -95,8 +101,8 @@ final class EventTap {
         if shiftCurrentlyHeld {
             shiftUsedAsModifier = true
         }
-        // Cancel any pending double-tap if the user typed something between taps.
-        lastCleanShiftRelease = nil
+        // Any non-shift keypress cancels any pending tap sequence.
+        cancelPendingTaps()
 
         // Track what the user types into the word buffer.
         if keyCode == CGKeyCode(kVK_Delete) {
@@ -120,8 +126,8 @@ final class EventTap {
     private func handleFlagsChanged(keyCode: CGKeyCode, flags: CGEventFlags) {
         let isShiftKey = (keyCode == CGKeyCode(kVK_Shift) || keyCode == CGKeyCode(kVK_RightShift))
         guard isShiftKey else {
-            // Some other modifier changed — cancel pending double-tap.
-            lastCleanShiftRelease = nil
+            // Some other modifier changed — cancel pending taps.
+            cancelPendingTaps()
             return
         }
 
@@ -133,54 +139,118 @@ final class EventTap {
         } else {
             shiftCurrentlyHeld = false
             defer { shiftUsedAsModifier = false }
-
-            // If Shift was used as a real modifier (e.g. Shift+a → "A"),
-            // it doesn't count as a tap.
             guard !shiftUsedAsModifier else {
-                lastCleanShiftRelease = nil
+                cancelPendingTaps()
                 return
             }
+            registerCleanShiftTap()
+        }
+    }
 
-            let now = Date()
-            if let last = lastCleanShiftRelease,
-               now.timeIntervalSince(last) <= Self.doubleShiftWindow {
-                lastCleanShiftRelease = nil
-                if debug { FileHandle.standardError.write(Data("lang-flip[debug]: double-shift detected\n".utf8)) }
-                // Defer to the next runloop tick so the Shift release event
-                // settles before we start posting synthesized events.
-                DispatchQueue.main.async { [weak self] in
-                    self?.handleHotkey()
-                }
-            } else {
-                lastCleanShiftRelease = now
+    // MARK: - Tap counting
+
+    private func registerCleanShiftTap() {
+        let now = Date()
+        if let last = lastShiftReleaseTime, now.timeIntervalSince(last) > Self.tapWindow {
+            tapCount = 0
+        }
+        lastShiftReleaseTime = now
+        tapCount += 1
+
+        // Cancel previous schedule — we'll either fire now or reschedule.
+        pendingFire?.cancel()
+        pendingFire = nil
+
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: shift tap #\(tapCount)\n".utf8)) }
+
+        // Cap at 3 — anything beyond is treated as 3 (or ignored, see fire()).
+        if tapCount >= 3 {
+            let count = tapCount
+            tapCount = 0
+            lastShiftReleaseTime = nil
+            fire(taps: count)
+            return
+        }
+
+        if tapCount == 2 {
+            // If no secondary configured, no need to wait for triple — fire now.
+            if Settings.shared.secondaryLanguage == nil {
+                let count = tapCount
+                tapCount = 0
+                lastShiftReleaseTime = nil
+                fire(taps: count)
+                return
+            }
+            // Otherwise wait briefly to see if the user is going for triple.
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                let count = self.tapCount
+                self.tapCount = 0
+                self.lastShiftReleaseTime = nil
+                self.fire(taps: count)
+            }
+            pendingFire = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.tripleGrace, execute: work)
+        }
+        // tapCount == 1: do nothing, wait for second tap (or timeout).
+    }
+
+    private func cancelPendingTaps() {
+        pendingFire?.cancel()
+        pendingFire = nil
+        tapCount = 0
+        lastShiftReleaseTime = nil
+    }
+
+    private func fire(taps: Int) {
+        guard let target = chooseTarget(forTapCount: taps) else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: tap count \(taps) — no target configured\n".utf8)) }
+            return
+        }
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: firing \(taps)-tap → target=\(target)\n".utf8)) }
+        DispatchQueue.main.async { [weak self] in
+            self?.handleHotkey(targetNonEnglish: target)
+        }
+    }
+
+    /// Returns the configured non-English language for this tap count, or nil
+    /// if nothing should happen (e.g. triple-tap with no secondary set).
+    private func chooseTarget(forTapCount taps: Int) -> Layout? {
+        switch taps {
+        case 2: return Settings.shared.primaryLanguage
+        case 3: return Settings.shared.secondaryLanguage
+        default: return nil
+        }
+    }
+
+    /// Hotkey entry point: try selection-based flip first, fall back to last
+    /// word in the buffer. The "non-English target" comes from the user's
+    /// primary/secondary choice based on tap count.
+    private func handleHotkey(targetNonEnglish: Layout) {
+        convertSelectionIfPresent(targetNonEnglish: targetNonEnglish) { [weak self] didConvertSelection in
+            guard let self else { return }
+            if !didConvertSelection {
+                if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: no selection — falling back to last-word flip\n".utf8)) }
+                self.convertLastWord(targetNonEnglish: targetNonEnglish)
             }
         }
     }
 
-    /// Hotkey entry point: if there's selected text, convert it; otherwise
-    /// fall back to converting the last word in the buffer.
-    private func handleHotkey() {
-        convertSelectionIfPresent { [weak self] didConvertSelection in
-            guard let self else { return }
-            if !didConvertSelection {
-                if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: no selection — falling back to last-word flip\n".utf8)) }
-                self.convertLastWord()
-            }
-        }
+    /// Given the source layout detected from text, choose where to flip to.
+    /// Rule: source==EN → target = configured non-English; source!=EN → EN.
+    private func resolveTarget(source: Layout, configured: Layout) -> Layout {
+        return (source == .en) ? configured : .en
     }
 
     // MARK: - Selection-based flip (Cmd+C / convert / Cmd+V)
 
-    private func convertSelectionIfPresent(completion: @escaping (Bool) -> Void) {
+    private func convertSelectionIfPresent(targetNonEnglish: Layout, completion: @escaping (Bool) -> Void) {
         let pb = NSPasteboard.general
         let snapshot = PasteboardSnapshot.capture(pb)
         let countBefore = pb.changeCount
 
-        // Trigger a copy on the focused app.
         postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_C))
 
-        // Pasteboard updates asynchronously — poll on a background queue with
-        // a short deadline so we don't block the event tap callback.
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let deadline = Date().addingTimeInterval(0.25)
@@ -204,7 +274,7 @@ final class EventTap {
                     completion(false)
                     return
                 }
-                let to: Layout = (from == .en) ? .uk : .en
+                let to = self.resolveTarget(source: from, configured: targetNonEnglish)
                 let converted = convert(text, from: from, to: to)
 
                 guard converted != text else {
@@ -221,8 +291,6 @@ final class EventTap {
                 InputSource.switchTo(to)
                 self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
 
-                // Restore the user's clipboard after the paste has had time
-                // to be consumed by the focused app.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     snapshot.restore(to: pb)
                 }
@@ -233,7 +301,6 @@ final class EventTap {
 
     // MARK: - Word-buffer flip (manual hotkey when no selection)
 
-    /// Auto-flip on word boundary (called from key tracking when enabled).
     private func autoFlipIfNeeded(completedWord: String) {
         guard let current = InputSource.currentLayout() else { return }
         guard let target = AutoFlip.shared.suggestedFlip(for: completedWord, currentLayout: current) else { return }
@@ -247,11 +314,11 @@ final class EventTap {
         postUnicode(" ")
     }
 
-    private func convertLastWord() {
+    private func convertLastWord(targetNonEnglish: Layout) {
         let word = buffer.current
         guard !word.isEmpty else { return }
         guard let from = detectLayout(word) else { return }
-        let to: Layout = (from == .en) ? .uk : .en
+        let to = resolveTarget(source: from, configured: targetNonEnglish)
 
         let converted = convert(word, from: from, to: to)
         guard converted != word else { return }
@@ -268,18 +335,14 @@ final class EventTap {
 
     // MARK: - Posting synthesized events
 
-    /// Build a fresh event source. We use `.privateState` so the event source
-    /// doesn't inherit the user's currently-pressed modifier flags.
     private func makeSource() -> CGEventSource? {
         return CGEventSource(stateID: .privateState)
     }
 
-    /// Tag an event so we recognise it on round-trip through the tap.
     private func stamp(_ event: CGEvent) {
         event.setIntegerValueField(.eventSourceUserData, value: Self.userDataMagic)
     }
 
-    /// Post a plain (no-modifier) key press + release.
     private func postKey(virtualKey: CGKeyCode) {
         postKey(virtualKey: virtualKey, flags: [])
     }
@@ -298,7 +361,6 @@ final class EventTap {
         }
     }
 
-    /// Post a Command-key shortcut (e.g. Cmd+C, Cmd+V).
     private func postCmdShortcut(virtualKey: CGKeyCode) {
         postKey(virtualKey: virtualKey, flags: .maskCommand)
     }

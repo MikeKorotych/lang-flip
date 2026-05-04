@@ -11,11 +11,16 @@ Supports **EN ↔ UK ↔ RU**.
 - 🪄 **Auto-flip** on word boundary. Type `руддщ` (= `hello` typed on Ukrainian) followed by
   space → it becomes `hello ` and the system layout switches to ABC. Uses macOS's built-in
   English dictionary plus an embedded list of common UK / RU words to avoid touching real words.
-- ⌨️ **Manual hotkey** double-tap `⇧` (Shift) — same trigger as Caramba Switcher. Two modes:
+- ⌨️ **Manual hotkey** Shift taps — same trigger as Caramba Switcher.
+  - **Double-tap ⇧⇧** → swap with the primary non-English language (default: Українська).
+  - **Triple-tap ⇧⇧⇧** → swap with the optional secondary language (default: none).
   - If text is selected → converts the entire selection (good for fixing whole sentences /
-    paragraphs you only noticed at the end).
+    paragraphs you only noticed at the end). Uses Cmd+C / Cmd+V under the hood and restores
+    your original clipboard.
   - If nothing is selected → converts the last word in the buffer.
-  Selection mode uses Cmd+C / Cmd+V under the hood and restores your original clipboard.
+  - Direction rule: `EN ↔ chosen non-English`. Source detected from the text characters.
+  - Pick primary / secondary in the menubar. When secondary is `None`, double-tap fires
+    immediately; when it's set, double-tap waits ~200 ms for a possible third tap.
 - 🟦 **Menubar app** — toggle Enabled / Auto-flip / Quit. No Dock icon, no preferences window.
 
 ## Build
