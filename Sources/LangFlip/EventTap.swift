@@ -13,7 +13,11 @@ final class EventTap {
     /// Without this we get a feedback loop because `event.post` is async and
     /// any boolean "isSimulating" flag has already flipped back by the time
     /// the events reach our callback.
-    private static let userDataMagic: Int64 = 0x1A4C46_4C49 // "LFLI"
+    ///
+    /// The value is the ASCII bytes of "LFLI" (lang-flip identifier), encoded
+    /// big-endian: 0x1A is the leading byte of an arbitrary tag namespace,
+    /// followed by 'L' 'F' 'L' 'I' = 0x4C 0x46 0x4C 0x49.
+    private static let userDataMagic: Int64 = 0x1A4C46_4C49
 
     /// Set LANG_FLIP_DEBUG=1 in the environment to log every keystroke seen.
     private let debug = ProcessInfo.processInfo.environment["LANG_FLIP_DEBUG"] == "1"

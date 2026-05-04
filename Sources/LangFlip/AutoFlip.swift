@@ -15,10 +15,16 @@ final class AutoFlip {
     private let ruCommon: Set<String>
 
     private init() {
-        // System English dictionary (preinstalled on macOS).
-        if let raw = try? String(contentsOfFile: "/usr/share/dict/words", encoding: .utf8) {
+        // System English dictionary (preinstalled on macOS in /usr/share/dict/words).
+        // If absent (chrooted env, customized macOS, etc.), auto-flip can still
+        // work but loses its strongest "is this a real English word?" signal.
+        let dictPath = "/usr/share/dict/words"
+        if let raw = try? String(contentsOfFile: dictPath, encoding: .utf8) {
             enWords = Set(raw.split(separator: "\n").map { $0.lowercased() })
         } else {
+            FileHandle.standardError.write(Data(
+                "lang-flip: could not read \(dictPath); auto-flip will rely on heuristics for English.\n".utf8
+            ))
             enWords = []
         }
         ukCommon = Set(EmbeddedDicts.ukrainian)

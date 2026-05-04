@@ -65,8 +65,11 @@ private let shiftedRows: [Layout: [String]] = [
 /// Returns the dictionary that maps each character of `from` to the character
 /// at the same physical key in `to`. Both upper- and lower-case are included.
 func charMap(from: Layout, to: Layout) -> [Character: Character] {
+    if let cached = charMapCache[CharMapKey(from: from, to: to)] {
+        return cached
+    }
     var result: [Character: Character] = [:]
-    for (rowsTable) in [rows, shiftedRows] {
+    for rowsTable in [rows, shiftedRows] {
         guard let src = rowsTable[from], let dst = rowsTable[to] else { continue }
         for (rowIdx, srcRow) in src.enumerated() {
             let dstRow = dst[rowIdx]
@@ -77,8 +80,12 @@ func charMap(from: Layout, to: Layout) -> [Character: Character] {
             }
         }
     }
+    charMapCache[CharMapKey(from: from, to: to)] = result
     return result
 }
+
+private struct CharMapKey: Hashable { let from: Layout; let to: Layout }
+private var charMapCache: [CharMapKey: [Character: Character]] = [:]
 
 /// Detects which layout a string was most likely typed in, by counting how
 /// many of its alphabetic characters belong to each layout's alphabet.
