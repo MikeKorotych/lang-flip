@@ -11,7 +11,8 @@ Supports **EN ↔ UK ↔ RU**.
 - 🪄 **Auto-flip** on word boundary. Type `руддщ` (= `hello` typed on Ukrainian) followed by
   space → it becomes `hello ` and the system layout switches to ABC. Uses macOS's built-in
   English dictionary plus an embedded list of common UK / RU words to avoid touching real words.
-- ⌨️ **Manual hotkey** `⌃⌥⌘\` — converts the last word, regardless of the auto-flip setting.
+- ⌨️ **Manual hotkey** double-tap `⇧` (Shift) — converts the last word, regardless of the
+  auto-flip setting. Same trigger as Caramba Switcher.
 - 🟦 **Menubar app** — toggle Enabled / Auto-flip / Quit. No Dock icon, no preferences window.
 
 ## Build
