@@ -1,67 +1,82 @@
 # lang-flip
 
 Free, open-source alternative to [Caramba Switcher](https://caramba-switcher.com/) for macOS.
-Type a word in the wrong keyboard layout, hit a hotkey, and it converts the word **and** switches
-the system input source.
+Type a word in the wrong keyboard layout — `lang-flip` notices on the next space, fixes the
+word, and switches the system input source. Runs as a menubar app.
 
-Supports **EN ↔ UK ↔ RU** out of the box.
+Supports **EN ↔ UK ↔ RU**.
 
-## Status
+## Features
 
-MVP — manual hotkey conversion. Auto-detection on space/punctuation is on the roadmap.
-
-## How it works
-
-1. A `CGEventTap` watches keystrokes globally and keeps a buffer of the current word.
-2. When you press the hotkey, the last word is converted character-by-character using a physical-key
-   map (e.g. UK `й` lives on the same key as EN `q`).
-3. The original word is erased with backspaces, the system layout is switched via
-   `TISSelectInputSource`, and the converted text is re-typed.
+- 🪄 **Auto-flip** on word boundary. Type `руддщ` (= `hello` typed on Ukrainian) followed by
+  space → it becomes `hello ` and the system layout switches to ABC. Uses macOS's built-in
+  English dictionary plus an embedded list of common UK / RU words to avoid touching real words.
+- ⌨️ **Manual hotkey** `⌃⌥⌘\` — converts the last word, regardless of the auto-flip setting.
+- 🟦 **Menubar app** — toggle Enabled / Auto-flip / Quit. No Dock icon, no preferences window.
 
 ## Build
 
 ```sh
+# Just the binary:
 swift build -c release
+
+# Full .app bundle (recommended):
+make app                # → build/lang-flip.app
+make install            # → /Applications/lang-flip.app
+make run                # build + open
 ```
 
-The binary lands at `.build/release/LangFlip`.
+## First launch
 
-## Run
+macOS will prompt for **Accessibility** permission — required for the global event tap.
+Approve it in **System Settings → Privacy & Security → Accessibility** and relaunch. Some
+macOS versions also require **Input Monitoring** for the same binary; grant it the same way.
 
-```sh
-./.build/release/LangFlip
+## How it works
+
+1. A `CGEventTap` watches every keystroke and keeps a buffer of the in-progress word.
+2. On a word boundary (space, punctuation, newline), the just-completed word is scored:
+   - 2 points if it's in the dictionary of its current layout
+   - 1 if it just *looks* like a word in that layout (vowels, no triple-letter runs)
+   - 0 otherwise
+3. The same word is then converted to each of the other two layouts and scored again.
+4. If the original scores 0 and a converted version scores ≥ 2, we erase the word + boundary,
+   switch the system input source via `TISSelectInputSource`, retype the converted text and
+   re-emit a space.
+5. The manual hotkey skips the scoring and just flips the current buffer.
+
+## Project layout
+
 ```
-
-The first run will trigger a macOS permission prompt for **Accessibility**. Approve it in
-**System Settings → Privacy & Security → Accessibility**, then run again. Some macOS versions also
-require **Input Monitoring** for the same binary.
-
-## Hotkey
-
-Default: `⌃⌥⌘\` (control + option + command + backslash).
-
-To change it, edit `hotkeyKeyCode` / `hotkeyMask` in [`Sources/LangFlip/EventTap.swift`](Sources/LangFlip/EventTap.swift).
-
-## Conversion direction
-
-Heuristic for now:
-
-- Word looks like EN → convert to UK.
-- Word looks like UK or RU → convert to EN.
-
-If you primarily switch EN ↔ RU, change the target in `convertLastWord()`.
+Sources/LangFlip/
+  main.swift              — NSApplication bootstrap
+  MenubarController.swift — NSStatusItem menu
+  Settings.swift          — UserDefaults toggles
+  EventTap.swift          — CGEventTap + key synthesis
+  WordBuffer.swift        — current-word buffer
+  Layouts.swift           — physical-key char maps + layout detection
+  InputSource.swift       — TIS API wrapper
+  AutoFlip.swift          — score / suggest flip
+  EmbeddedDicts.swift     — compact UK / RU common-word lists
+Resources/Info.plist      — bundle metadata, LSUIElement=YES
+Makefile                  — wraps swift build into a .app
+```
 
 ## Limitations
 
-- Some apps (terminals, password fields, IME-driven editors) may reject synthesized unicode
-  keystrokes. The hotkey will appear to do nothing in those.
-- If your installed keyboard layouts have different IDs than `com.apple.keylayout.ABC` /
-  `…Ukrainian` / `…Russian`, edit `InputSource.switchTo`.
-- No menubar UI, no preferences panel — yet.
+- Some apps (terminals, password fields, some IME-driven editors) reject synthesized unicode
+  keystrokes — auto-flip will appear to do nothing inside them.
+- If your installed input sources have unusual IDs, edit `InputSource.switchTo`.
+- The embedded UK / RU word lists are tiny (~250 each). Real words outside them won't be
+  *protected* from accidental flip, but the auto-flip threshold (`originalScore == 0`) keeps
+  this rare in practice.
+- No code signing / notarization yet — you'll see a Gatekeeper warning on a fresh install
+  until the binary is notarized.
 
 ## Roadmap
 
-- [ ] Auto-flip on word boundary using a frequency dictionary
-- [ ] Menubar app + preferences (hotkey, target layout pairs)
-- [ ] App bundle + notarization for distribution
-- [ ] Per-app blacklist (don't act inside Terminal, password fields, etc.)
+- [ ] Configurable hotkey + target layout pairs in the menubar
+- [ ] Per-app blacklist (skip Terminal, password fields, etc.)
+- [ ] Bigger embedded dictionaries (or pull from the system if available)
+- [ ] Notarized release builds
+- [ ] Login item / launch-at-login toggle

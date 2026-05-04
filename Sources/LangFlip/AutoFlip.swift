@@ -1,0 +1,99 @@
+import Foundation
+
+/// Decides whether a freshly-completed word was typed in the wrong layout
+/// and, if so, what layout to flip it to.
+///
+/// Strategy:
+///   - For each candidate target layout, convert the word to that layout.
+///   - Score each variant: in-dictionary > looks-like-word > otherwise.
+///   - If the best variant beats the original by a clear margin, flip.
+final class AutoFlip {
+    static let shared = AutoFlip()
+
+    private let enWords: Set<String>
+    private let ukCommon: Set<String>
+    private let ruCommon: Set<String>
+
+    private init() {
+        // System English dictionary (preinstalled on macOS).
+        if let raw = try? String(contentsOfFile: "/usr/share/dict/words", encoding: .utf8) {
+            enWords = Set(raw.split(separator: "\n").map { $0.lowercased() })
+        } else {
+            enWords = []
+        }
+        ukCommon = Set(EmbeddedDicts.ukrainian)
+        ruCommon = Set(EmbeddedDicts.russian)
+    }
+
+    /// Returns target layout if we should auto-flip; nil otherwise.
+    func suggestedFlip(for word: String, currentLayout: Layout) -> Layout? {
+        // Skip very short tokens — high false-positive rate ("я", "is", "и").
+        guard word.count >= 3 else { return nil }
+        // Skip anything with digits or non-letter cruft.
+        if word.contains(where: { $0.isNumber }) { return nil }
+
+        let lower = word.lowercased()
+        let originalScore = score(lower, in: currentLayout)
+
+        var bestLayout: Layout?
+        var bestScore = originalScore
+
+        for target in Layout.allCases where target != currentLayout {
+            let converted = convert(lower, from: currentLayout, to: target)
+            let s = score(converted, in: target)
+            if s > bestScore {
+                bestScore = s
+                bestLayout = target
+            }
+        }
+
+        // Require a clear win — original must be "unknown" (score 0)
+        // and target must be a known dict word (score >= 2).
+        guard let layout = bestLayout, originalScore == 0, bestScore >= 2 else {
+            return nil
+        }
+        return layout
+    }
+
+    /// 2 = in dictionary, 1 = plausibly word-shaped, 0 = noise.
+    private func score(_ word: String, in layout: Layout) -> Int {
+        switch layout {
+        case .en:
+            return enWords.contains(word) ? 2 : (looksLikeEnglish(word) ? 1 : 0)
+        case .uk:
+            return ukCommon.contains(word) ? 2 : (looksLikeCyrillic(word, allowed: ukAlphabet) ? 1 : 0)
+        case .ru:
+            return ruCommon.contains(word) ? 2 : (looksLikeCyrillic(word, allowed: ruAlphabet) ? 1 : 0)
+        }
+    }
+
+    // MARK: - Heuristics
+
+    private let ukAlphabet: Set<Character> = Set("абвгґдеєжзиіїйклмнопрстуфхцчшщьюя'")
+    private let ruAlphabet: Set<Character> = Set("абвгдеёжзийклмнопрстуфхцчшщъыьэюя")
+
+    private func looksLikeEnglish(_ word: String) -> Bool {
+        // All ASCII letters AND has at least one vowel AND no triple-same letter.
+        let chars = Array(word)
+        guard chars.allSatisfy({ $0.isLetter && $0.isASCII }) else { return false }
+        let hasVowel = chars.contains(where: { "aeiouy".contains($0) })
+        guard hasVowel else { return false }
+        return !hasTripleRepeat(chars)
+    }
+
+    private func looksLikeCyrillic(_ word: String, allowed: Set<Character>) -> Bool {
+        let chars = Array(word)
+        guard chars.allSatisfy({ allowed.contains($0) }) else { return false }
+        let hasVowel = chars.contains(where: { "аеєиіїоуюяыэё".contains($0) })
+        guard hasVowel else { return false }
+        return !hasTripleRepeat(chars)
+    }
+
+    private func hasTripleRepeat(_ chars: [Character]) -> Bool {
+        guard chars.count >= 3 else { return false }
+        for i in 0..<(chars.count - 2) where chars[i] == chars[i+1] && chars[i+1] == chars[i+2] {
+            return true
+        }
+        return false
+    }
+}

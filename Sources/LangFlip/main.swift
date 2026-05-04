@@ -1,18 +1,36 @@
 import Foundation
 import AppKit
 
-guard AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary) else {
-    FileHandle.standardError.write(Data("lang-flip: Accessibility permission not granted yet. Approve in System Settings → Privacy & Security → Accessibility, then re-run.\n".utf8))
-    exit(1)
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var menubar: MenubarController?
+    private var tap: EventTap?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Ask for Accessibility on first launch — the only way the event tap works.
+        let trusted = AXIsProcessTrustedWithOptions(
+            [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+        )
+        if !trusted {
+            FileHandle.standardError.write(Data(
+                "lang-flip: waiting for Accessibility permission. Approve in System Settings → Privacy & Security → Accessibility, then relaunch.\n".utf8
+            ))
+        }
+
+        menubar = MenubarController()
+
+        let tap = EventTap()
+        do {
+            try tap.start()
+            self.tap = tap
+        } catch {
+            FileHandle.standardError.write(Data("lang-flip: \(error.localizedDescription)\n".utf8))
+        }
+    }
 }
 
-let tap = EventTap()
-do {
-    try tap.start()
-} catch {
-    FileHandle.standardError.write(Data("lang-flip: \(error.localizedDescription)\n".utf8))
-    exit(1)
-}
-
-print("lang-flip: running. Hotkey: ⌃⌥⌘\\ converts the last word.")
-CFRunLoopRun()
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+// Accessory: status bar app, no Dock icon, no main menu.
+app.setActivationPolicy(.accessory)
+app.run()

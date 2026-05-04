@@ -53,8 +53,11 @@ final class EventTap {
         let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags
 
+        // Master kill-switch from menubar.
+        guard Settings.shared.enabled else { return Unmanaged.passUnretained(event) }
+
         if keyCode == hotkeyKeyCode && flags.intersection(hotkeyMask) == hotkeyMask {
-            convertLastWord()
+            convertLastWord(force: true)
             return nil // swallow the hotkey
         }
 
@@ -67,14 +70,42 @@ final class EventTap {
             event.keyboardGetUnicodeString(maxStringLength: chars.count, actualStringLength: &len, unicodeString: &chars)
             if len > 0 {
                 let s = String(utf16CodeUnits: chars, count: len)
-                buffer.feed(s)
+                if let completed = buffer.feedReturningCompleted(s),
+                   Settings.shared.autoFlip {
+                    autoFlipIfNeeded(completedWord: completed)
+                }
             }
         }
 
         return Unmanaged.passUnretained(event)
     }
 
-    private func convertLastWord() {
+    /// Called right after the user typed a boundary char (space, punctuation).
+    /// `completedWord` is whatever was in the buffer before the boundary.
+    /// At this point the boundary char has already been emitted to the focused
+    /// app and the word is N characters back behind that boundary.
+    private func autoFlipIfNeeded(completedWord: String) {
+        guard let current = InputSource.currentLayout() else { return }
+        guard let target = AutoFlip.shared.suggestedFlip(for: completedWord, currentLayout: current) else { return }
+        let converted = convert(completedWord, from: current, to: target)
+        guard converted != completedWord else { return }
+
+        isSimulating = true
+        defer { isSimulating = false }
+
+        // Erase: word + the boundary char that came after it.
+        let eraseCount = completedWord.count + 1
+        for _ in 0..<eraseCount {
+            postKey(virtualKey: CGKeyCode(kVK_Delete))
+        }
+
+        InputSource.switchTo(target)
+        for ch in converted { postUnicode(String(ch)) }
+        // Re-emit the original boundary (space) — keeps the user's flow intact.
+        postUnicode(" ")
+    }
+
+    private func convertLastWord(force: Bool = false) {
         let word = buffer.current
         guard !word.isEmpty else { return }
         guard let from = detectLayout(word) else { return }
@@ -82,6 +113,7 @@ final class EventTap {
         // Target layout: anything non-EN converts to EN; EN converts to UK by default.
         // Quick heuristic — works for most "I typed in the wrong layout" cases.
         let to: Layout = (from == .en) ? .uk : .en
+        _ = force // currently unused; kept for future "always flip" semantics
 
         let converted = convert(word, from: from, to: to)
         guard converted != word else { return }
