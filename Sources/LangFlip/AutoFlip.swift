@@ -55,9 +55,24 @@ final class AutoFlip {
             }
         }
 
-        // Require a clear win — original must be "unknown" (score 0)
-        // and target must be a known dict word (score >= 2).
-        guard let layout = bestLayout, originalScore == 0, bestScore >= 2 else {
+        // Require a clear win:
+        //   - some target layout must score *higher* than the original
+        //     (otherwise there's no reason to flip),
+        //   - the target must be a real dictionary word (score 2),
+        //   - the target must beat the original by at least one tier.
+        //
+        // Older logic required `originalScore == 0`, but that missed cases
+        // like "руддщ" — the cyrillic gibberish has a vowel ("у") and so
+        // passes the looksLikeCyrillic check (score 1), even though it's
+        // clearly the result of typing English on a Ukrainian keyboard.
+        // Real cyrillic words score 2 (in dict) and aren't affected by
+        // this loosening — and any false positive that slips through can
+        // be fixed permanently with a single Backspace thanks to
+        // BackspaceLearner.
+        guard let layout = bestLayout,
+              bestScore >= 2,
+              bestScore - originalScore >= 1
+        else {
             return nil
         }
         return layout
