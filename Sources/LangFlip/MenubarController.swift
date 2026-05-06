@@ -83,7 +83,10 @@ final class MenubarController: NSObject {
 
         let hotkeyHint = NSMenuItem(title: "Hotkey: ⇧⇧ → primary, ⇧⇧⇧ → secondary (selection if any, else last word)", action: nil, keyEquivalent: "")
         hotkeyHint.isEnabled = false
+        let pauseHint = NSMenuItem(title: "Pause / resume: press both ⇧ at once", action: nil, keyEquivalent: "")
+        pauseHint.isEnabled = false
         menu.addItem(hotkeyHint)
+        menu.addItem(pauseHint)
         menu.addItem(.separator())
 
         let quit = NSMenuItem(title: "Quit lang-flip", action: #selector(quit), keyEquivalent: "q")
@@ -96,6 +99,18 @@ final class MenubarController: NSObject {
         // catches words just added by Backspace-learning.
         menu.delegate = self
 
+        // Listen for external Enabled changes (both-Shifts gesture).
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(externalEnabledChange),
+            name: .langFlipEnabledChanged,
+            object: nil
+        )
+
+        refresh()
+    }
+
+    @objc private func externalEnabledChange() {
         refresh()
     }
 

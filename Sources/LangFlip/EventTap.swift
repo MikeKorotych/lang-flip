@@ -53,8 +53,18 @@ final class EventTap {
     /// the user used Shift as a real modifier, not as a hotkey tap.
     private var shiftUsedAsModifier = false
 
-    /// Whether a Shift key is currently held.
+    /// Whether *any* Shift key is currently held.
     private var shiftCurrentlyHeld = false
+
+    // MARK: - Both-Shifts pause toggle (Phase 1.6)
+
+    /// How close the two Shift presses must be for the gesture to count.
+    private static let bothShiftsWindow: TimeInterval = 0.10
+
+    private var leftShiftHeld = false
+    private var rightShiftHeld = false
+    private var leftShiftDownTime: Date?
+    private var rightShiftDownTime: Date?
 
     func start() throws {
         let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.flagsChanged.rawValue)
@@ -207,12 +217,54 @@ final class EventTap {
             return
         }
 
-        let nowDown = flags.contains(.maskShift)
+        // Read the per-side Shift bits from the raw flag word (NX device flags).
+        // CGEventFlags.maskShift is the aggregate bit ("any shift held"); we
+        // need to know specifically which physical key just changed state to
+        // (a) detect both-shifts simultaneous press, and (b) decide whether
+        // a release is a clean tap or just one of two shifts going up.
+        let leftBit:  UInt64 = 0x2  // NX_DEVICELSHIFTKEYMASK
+        let rightBit: UInt64 = 0x4  // NX_DEVICERSHIFTKEYMASK
+        let leftHeldNow  = (flags.rawValue & leftBit)  != 0
+        let rightHeldNow = (flags.rawValue & rightBit) != 0
 
-        if nowDown {
+        let leftWasHeld  = leftShiftHeld
+        let rightWasHeld = rightShiftHeld
+        leftShiftHeld  = leftHeldNow
+        rightShiftHeld = rightHeldNow
+
+        let now = Date()
+        if leftHeldNow,  !leftWasHeld  { leftShiftDownTime  = now }
+        if rightHeldNow, !rightWasHeld { rightShiftDownTime = now }
+        if !leftHeldNow  { leftShiftDownTime  = nil }
+        if !rightHeldNow { rightShiftDownTime = nil }
+
+        let anyHeldBefore = leftWasHeld  || rightWasHeld
+        let anyHeldNow    = leftHeldNow  || rightHeldNow
+
+        // Both-Shifts simultaneous press → toggle the master Enabled switch.
+        if leftHeldNow && rightHeldNow,
+           let lt = leftShiftDownTime, let rt = rightShiftDownTime,
+           abs(lt.timeIntervalSince(rt)) < Self.bothShiftsWindow {
+            // Fire once per press-pair: clear so we don't re-trigger while held.
+            leftShiftDownTime = nil
+            rightShiftDownTime = nil
+            // Disqualify any double-tap interpretation of the same release.
+            shiftUsedAsModifier = true
+            cancelPendingTaps()
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: both-shifts gesture → toggle Enabled\n".utf8)) }
+            DispatchQueue.main.async { [weak self] in self?.handleBothShiftsToggle() }
+            return
+        }
+
+        if anyHeldNow && !anyHeldBefore {
+            // First shift of a new sequence going down.
             shiftCurrentlyHeld = true
             shiftUsedAsModifier = false
-        } else {
+            return
+        }
+
+        if !anyHeldNow && anyHeldBefore {
+            // Last shift just went up — possible end of a clean tap.
             shiftCurrentlyHeld = false
             defer { shiftUsedAsModifier = false }
             guard !shiftUsedAsModifier else {
@@ -221,6 +273,11 @@ final class EventTap {
             }
             registerCleanShiftTap()
         }
+    }
+
+    private func handleBothShiftsToggle() {
+        Settings.shared.enabled.toggle()
+        NotificationCenter.default.post(name: .langFlipEnabledChanged, object: nil)
     }
 
     // MARK: - Tap counting
