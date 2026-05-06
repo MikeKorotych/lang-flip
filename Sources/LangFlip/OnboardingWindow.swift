@@ -20,7 +20,7 @@ final class OnboardingWindowController {
             })
             let host = NSHostingController(rootView: view)
             let win = NSWindow(contentViewController: host)
-            win.title = "lang-flip"
+            win.title = "LangFlip"
             win.styleMask = [.titled, .closable]
             win.setContentSize(NSSize(width: 480, height: 400))
             win.isReleasedWhenClosed = false
@@ -61,7 +61,7 @@ private struct OnboardingView: View {
             }
 
             VStack(spacing: 6) {
-                Text("Welcome to lang-flip")
+                Text("Welcome to LangFlip")
                     .font(.system(size: 20, weight: .semibold))
                 Text("Fix typing in the wrong keyboard layout — automatically.")
                     .font(.body)

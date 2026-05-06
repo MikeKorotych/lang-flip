@@ -11,7 +11,7 @@ final class MenubarController: NSObject {
     private let enabledItem = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
     private let autoFlipItem = NSMenuItem(title: "Auto-flip on word boundary", action: #selector(toggleAutoFlip), keyEquivalent: "")
     private let prefsItem = NSMenuItem(title: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",")
-    private let quitItem = NSMenuItem(title: "Quit lang-flip", action: #selector(quit), keyEquivalent: "q")
+    private let quitItem = NSMenuItem(title: "Quit LangFlip", action: #selector(quit), keyEquivalent: "q")
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -19,7 +19,7 @@ final class MenubarController: NSObject {
 
         if let button = statusItem.button {
             button.title = "⌥"
-            button.toolTip = "lang-flip — keyboard layout converter"
+            button.toolTip = "LangFlip — keyboard layout converter"
         }
 
         enabledItem.target = self

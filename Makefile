@@ -1,15 +1,17 @@
 APP_NAME := LangFlip
-BUNDLE_NAME := lang-flip.app
+BUNDLE_NAME := LangFlip.app
 BUILD_DIR := .build/release
 APP_DIR := build/$(BUNDLE_NAME)
 EXEC := $(BUILD_DIR)/$(APP_NAME)
 # SPM-generated resource bundle — must sit next to the executable so
-# Bundle.module can find it.
+# Bundle.module can find it. The package name in Package.swift drives
+# this filename; SPM produces "lang-flip_LangFlip.bundle" because the
+# package is "lang-flip" and the target is "LangFlip".
 RES_BUNDLE := $(BUILD_DIR)/lang-flip_LangFlip.bundle
 
 # Read version from Info.plist so it's the single source of truth.
 VERSION := $(shell /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)
-DMG_NAME := lang-flip-$(VERSION).dmg
+DMG_NAME := LangFlip-$(VERSION).dmg
 DMG_PATH := build/$(DMG_NAME)
 
 # Codesigning identity. Override on the command line:
@@ -98,7 +100,7 @@ sign: app
 dmg: app
 	@rm -f $(DMG_PATH)
 	@create-dmg \
-		--volname "lang-flip" \
+		--volname "LangFlip" \
 		--window-size 500 320 \
 		--icon-size 96 \
 		--icon "$(BUNDLE_NAME)" 130 150 \

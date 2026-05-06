@@ -274,7 +274,7 @@ private struct AboutTab: View {
                     .resizable()
                     .frame(width: 96, height: 96)
             }
-            Text("lang-flip")
+            Text("LangFlip")
                 .font(.system(size: 24, weight: .semibold))
             Text("Version \(version)")
                 .font(.callout)

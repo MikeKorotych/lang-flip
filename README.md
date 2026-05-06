@@ -1,17 +1,21 @@
-# lang-flip
+# LangFlip
 
 Free, open-source keyboard layout corrector for macOS. Type a word in the wrong layout,
-`lang-flip` fixes it on the fly and switches the system input source. Inspired by
+**LangFlip** fixes it on the fly and switches the system input source. Inspired by
 [Caramba Switcher](https://caramba-switcher.com/).
 
 Supports **EN ↔ UK ↔ RU** out of the box.
 
+> Repo / package / build directory is named `lang-flip` (kebab-case);
+> the user-facing app is **LangFlip** (CamelCase). Bundle ID is
+> `com.antonpinkevych.lang-flip`.
+
 ## Install
 
-1. Download the latest **lang-flip-X.Y.Z.dmg** from
+1. Download the latest **LangFlip-X.Y.Z.dmg** from
    [Releases](https://github.com/MikeKorotych/lang-flip/releases).
-2. Open the DMG and drag **lang-flip** into your Applications folder.
-3. Open lang-flip from Applications. The first launch shows a small wizard that walks
+2. Open the DMG and drag **LangFlip** into your Applications folder.
+3. Open LangFlip from Applications. The first launch shows a small wizard that walks
    you through granting two macOS permissions:
    - **Accessibility** — needed to read keystrokes globally
    - **Input Monitoring** — needed on macOS 10.15+
@@ -27,7 +31,7 @@ That's it. After the wizard you'll see a small `⌥` icon in the menu bar.
 ## Features
 
 - **Auto-flip on the fly.** Type `руддщ` on a Ukrainian layout when you meant `hello`,
-  hit space → lang-flip rewrites it as `hello ` and switches you to ABC. The opposite
+  hit space → LangFlip rewrites it as `hello ` and switches you to ABC. The opposite
   direction (latin gibberish → cyrillic) works too.
 - **Selection mode.** Just realised a whole paragraph is in the wrong layout? Select it,
   double-tap Shift, done — Cmd+C / convert / Cmd+V under the hood, with your original
@@ -36,7 +40,7 @@ That's it. After the wizard you'll see a small `⌥` icon in the menu bar.
   - **⇧⇧** swap with the primary language
   - **⇧⇧⇧** swap with the secondary (if configured)
   - **Both ⇧ at once** — pause / resume the whole app
-- **Self-learning.** Got a flip you didn't want? Hit Backspace and lang-flip both undoes
+- **Self-learning.** Got a flip you didn't want? Hit Backspace and LangFlip both undoes
   it and remembers never to flip that exact word again. No exception list to manage by
   hand — one Backspace teaches it.
 - **Sticky-shift fix.** `WOrld` → `World`, `ПРивет` → `Привет`. Only fires when the
@@ -92,9 +96,9 @@ ROADMAP.md                  — future plans
 ## Build from source
 
 ```sh
-make app                  # → build/lang-flip.app (ad-hoc signed, Gatekeeper will warn)
+make app                  # → build/LangFlip.app (ad-hoc signed, Gatekeeper will warn)
 make run                  # build + open the .app
-make install              # copies build/lang-flip.app → /Applications/
+make install              # copies build/LangFlip.app → /Applications/
 make clean                # nuke .build and build/
 ```
 
@@ -145,7 +149,7 @@ After this you can ship a release with one command:
 
 ```sh
 make release                              # build + sign + dmg + notarize + staple
-gh release create v0.2.0 build/lang-flip-0.2.0.dmg
+gh release create v0.2.0 build/LangFlip-0.2.0.dmg
 ```
 
 ### Without a Developer Account

@@ -38,7 +38,7 @@ final class PreferencesWindowController {
     @objc private func handleWindowWillClose(_ note: Notification) {
         // Only drop back to accessory if our other windows aren't open.
         let onboardingVisible = NSApp.windows.contains {
-            $0.isVisible && $0.title == "lang-flip" && $0 !== window
+            $0.isVisible && $0.title == "LangFlip" && $0 !== window
         }
         if !onboardingVisible {
             NSApp.setActivationPolicy(.accessory)
