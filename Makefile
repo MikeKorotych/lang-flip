@@ -14,11 +14,10 @@ all: app
 dicts:
 	./Scripts/build-dicts.sh
 
-# Rebuild AppIcon.icns from the source iconset. Run after changing
-# any of the PNGs in Resources/AppIcon.iconset/.
+# Regenerate AppIcon.iconset and AppIcon.icns from the master PNG
+# at Resources/lang-flip-logo.png. Run after replacing the master.
 icon:
-	@iconutil --convert icns Resources/AppIcon.iconset --output Resources/AppIcon.icns
-	@echo "✓ Rebuilt Resources/AppIcon.icns"
+	./Scripts/build-icon.sh
 
 build:
 	swift build -c release
