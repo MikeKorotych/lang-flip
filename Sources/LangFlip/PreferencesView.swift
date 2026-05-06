@@ -9,15 +9,15 @@ struct PreferencesView: View {
     var body: some View {
         TabView {
             GeneralTab()
-                .tabItem { Label("General", systemImage: "gear") }
+                .tabItem { Text("General") }
             LanguagesTab()
-                .tabItem { Label("Languages", systemImage: "character.bubble") }
+                .tabItem { Text("Languages") }
             BehaviorTab()
-                .tabItem { Label("Behavior", systemImage: "wand.and.rays") }
+                .tabItem { Text("Behavior") }
             AppsTab()
-                .tabItem { Label("Apps", systemImage: "app.badge") }
+                .tabItem { Text("Apps") }
             AboutTab()
-                .tabItem { Label("About", systemImage: "info.circle") }
+                .tabItem { Text("About") }
         }
         .padding(20)
         .frame(width: 600, height: 440)
