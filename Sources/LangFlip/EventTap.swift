@@ -139,26 +139,50 @@ final class EventTap {
                 BackspaceLearner.shared.cancelPending()
 
                 let s = String(utf16CodeUnits: chars, count: len)
-                if let completed = buffer.feedReturningCompleted(s),
-                   Settings.shared.autoFlip {
-                    if let cause = AppContext.suppressionCause() {
-                        if debug {
-                            let reason: String
-                            switch cause {
-                            case .builtinApp(let id): reason = "built-in block (\(id))"
-                            case .userApp(let id):    reason = "user-blocked (\(id))"
-                            case .fullscreen:         reason = "fullscreen window"
+                if let completed = buffer.feedReturningCompleted(s) {
+                    let suppression = AppContext.suppressionCause()
+                    var word = completed
+
+                    // Sticky-shift correction first — its result feeds the
+                    // auto-flip stage so a flipped word gets corrected too.
+                    if Settings.shared.doubleCapsFix,
+                       suppression == nil,
+                       let fixed = DoubleCapsFix.correction(for: word) {
+                        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: double-caps fix '\(word)' → '\(fixed)'\n".utf8)) }
+                        rewriteCompletedWord(originalLength: word.count, replacement: fixed)
+                        word = fixed
+                    }
+
+                    if Settings.shared.autoFlip {
+                        if let cause = suppression {
+                            if debug {
+                                let reason: String
+                                switch cause {
+                                case .builtinApp(let id): reason = "built-in block (\(id))"
+                                case .userApp(let id):    reason = "user-blocked (\(id))"
+                                case .fullscreen:         reason = "fullscreen window"
+                                }
+                                FileHandle.standardError.write(Data("lang-flip[debug]: auto-flip suppressed: \(reason); word='\(word)'\n".utf8))
                             }
-                            FileHandle.standardError.write(Data("lang-flip[debug]: auto-flip suppressed: \(reason); word='\(completed)'\n".utf8))
+                        } else {
+                            autoFlipIfNeeded(completedWord: word)
                         }
-                    } else {
-                        autoFlipIfNeeded(completedWord: completed)
                     }
                 }
             }
         }
 
         return Unmanaged.passUnretained(event)
+    }
+
+    /// Replace the just-completed word in the focused app with `replacement`,
+    /// preserving the boundary char (assumed to be a space — same simplifying
+    /// assumption auto-flip uses). Used by the double-caps fix.
+    private func rewriteCompletedWord(originalLength: Int, replacement: String) {
+        let eraseCount = originalLength + 1
+        for _ in 0..<eraseCount { postKey(virtualKey: CGKeyCode(kVK_Delete)) }
+        for ch in replacement { postUnicode(String(ch)) }
+        postUnicode(" ")
     }
 
     /// Physically undo an auto-flip the user just rejected. We're called from

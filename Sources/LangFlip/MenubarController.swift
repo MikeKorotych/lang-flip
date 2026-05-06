@@ -7,6 +7,7 @@ final class MenubarController: NSObject {
     private let enabledItem = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
     private let autoFlipItem = NSMenuItem(title: "Auto-flip on word boundary", action: #selector(toggleAutoFlip), keyEquivalent: "")
     private let fullscreenItem = NSMenuItem(title: "Pause auto-flip in fullscreen apps", action: #selector(toggleFullscreenSuppression), keyEquivalent: "")
+    private let doubleCapsItem = NSMenuItem(title: "Fix sticky-shift typos (WOrld → World)", action: #selector(toggleDoubleCapsFix), keyEquivalent: "")
 
     private let primaryMenu = NSMenu()
     private let secondaryMenu = NSMenu()
@@ -30,10 +31,12 @@ final class MenubarController: NSObject {
         enabledItem.target = self
         autoFlipItem.target = self
         fullscreenItem.target = self
+        doubleCapsItem.target = self
 
         menu.addItem(enabledItem)
         menu.addItem(autoFlipItem)
         menu.addItem(fullscreenItem)
+        menu.addItem(doubleCapsItem)
         menu.addItem(.separator())
 
         // Primary language submenu (double-tap Shift target).
@@ -100,6 +103,7 @@ final class MenubarController: NSObject {
         enabledItem.state = Settings.shared.enabled ? .on : .off
         autoFlipItem.state = Settings.shared.autoFlip ? .on : .off
         fullscreenItem.state = Settings.shared.suppressInFullscreen ? .on : .off
+        doubleCapsItem.state = Settings.shared.doubleCapsFix ? .on : .off
         let count = BackspaceLearner.shared.exceptions.count
         exceptionsItem.title = "Learned exceptions: \(count)"
         clearExceptionsItem.isEnabled = count > 0
@@ -164,6 +168,11 @@ final class MenubarController: NSObject {
 
     @objc private func toggleFullscreenSuppression() {
         Settings.shared.suppressInFullscreen.toggle()
+        refresh()
+    }
+
+    @objc private func toggleDoubleCapsFix() {
+        Settings.shared.doubleCapsFix.toggle()
         refresh()
     }
 

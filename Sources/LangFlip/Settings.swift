@@ -13,6 +13,7 @@ final class Settings {
         static let secondary = "lf.secondaryLanguage"
         static let userBlacklist = "lf.userBlacklist"
         static let suppressInFullscreen = "lf.suppressInFullscreen"
+        static let doubleCapsFix = "lf.doubleCapsFix"
     }
 
     var enabled: Bool {
@@ -46,6 +47,14 @@ final class Settings {
                 secondaryLanguage = nil
             }
         }
+    }
+
+    /// Sticky-shift correction. On by default — matches Caramba's behaviour
+    /// and the cost of a false positive is low (DoubleCapsFix verifies the
+    /// correction is a real dictionary word before applying).
+    var doubleCapsFix: Bool {
+        get { defaults.object(forKey: Keys.doubleCapsFix) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.doubleCapsFix) }
     }
 
     /// When true, auto-flip stays silent while the focused window is in

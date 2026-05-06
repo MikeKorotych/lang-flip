@@ -81,6 +81,15 @@ final class AutoFlip {
         return layout
     }
 
+    /// True if `lowercased` is in any of our dictionaries. Used by
+    /// DoubleCapsFix to confirm a sticky-shift correction would land on a
+    /// real word rather than mangling an intentional acronym like "OAuth".
+    func isKnownWord(_ lowercased: String) -> Bool {
+        return enWords.contains(lowercased)
+            || ukCommon.contains(lowercased)
+            || ruCommon.contains(lowercased)
+    }
+
     /// 2 = in dictionary, 1 = plausibly word-shaped, 0 = noise.
     private func score(_ word: String, in layout: Layout) -> Int {
         switch layout {
