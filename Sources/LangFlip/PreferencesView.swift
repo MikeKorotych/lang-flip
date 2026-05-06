@@ -2,24 +2,53 @@ import SwiftUI
 import AppKit
 import ServiceManagement
 
-/// Top-level Preferences view: 5 tabs covering everything that used to
+/// Top-level Preferences view: 5 sections covering everything that used to
 /// live in the menubar. The menubar keeps only quick toggles + the
 /// "Preferences…" entry point.
+///
+/// Uses a segmented Picker rather than SwiftUI's `TabView` because the
+/// macOS TabView styling pads the selected tab's highlight more than the
+/// label requires, so labels and the blue selection rect don't visually
+/// line up (especially noticeable on short tab names like "General").
 struct PreferencesView: View {
+    private enum Section: String, CaseIterable, Identifiable {
+        case general = "General"
+        case languages = "Languages"
+        case behavior = "Behavior"
+        case apps = "Apps"
+        case about = "About"
+
+        var id: Self { self }
+    }
+
+    @State private var section: Section = .general
+
     var body: some View {
-        TabView {
-            GeneralTab()
-                .tabItem { Text("General") }
-            LanguagesTab()
-                .tabItem { Text("Languages") }
-            BehaviorTab()
-                .tabItem { Text("Behavior") }
-            AppsTab()
-                .tabItem { Text("Apps") }
-            AboutTab()
-                .tabItem { Text("About") }
+        VStack(spacing: 0) {
+            Picker("", selection: $section) {
+                ForEach(Section.allCases) { s in
+                    Text(s.rawValue).tag(s)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
+
+            Divider()
+
+            Group {
+                switch section {
+                case .general:   GeneralTab()
+                case .languages: LanguagesTab()
+                case .behavior:  BehaviorTab()
+                case .apps:      AppsTab()
+                case .about:     AboutTab()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(20)
         .frame(width: 600, height: 440)
     }
 }
