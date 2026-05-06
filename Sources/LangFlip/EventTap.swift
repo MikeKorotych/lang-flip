@@ -289,6 +289,7 @@ final class EventTap {
         let snapshot = PasteboardSnapshot.capture(pb)
         let countBefore = pb.changeCount
 
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: posting Cmd+C, pb.changeCount=\(countBefore)\n".utf8)) }
         postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_C))
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -297,19 +298,32 @@ final class EventTap {
             while Date() < deadline && pb.changeCount == countBefore {
                 Thread.sleep(forTimeInterval: Self.copyPollInterval)
             }
+            let pollDuration = Date().timeIntervalSince(deadline.addingTimeInterval(-Self.copyPollDeadline))
 
             DispatchQueue.main.async {
-                guard pb.changeCount > countBefore,
-                      let text = pb.string(forType: .string),
+                if self.debug {
+                    FileHandle.standardError.write(Data("lang-flip[debug]: selection: poll done in \(String(format: "%.0f", pollDuration * 1000))ms, changeCount: \(countBefore)→\(pb.changeCount)\n".utf8))
+                }
+
+                guard pb.changeCount > countBefore else {
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: no clipboard change → no selection (or app blocks Cmd+C)\n".utf8)) }
+                    snapshot.restore(to: pb)
+                    completion(false)
+                    return
+                }
+
+                guard let text = pb.string(forType: .string),
                       !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                       text.count >= 2
                 else {
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: clipboard updated but no usable string content\n".utf8)) }
                     snapshot.restore(to: pb)
                     completion(false)
                     return
                 }
 
                 guard let from = detectLayout(text) else {
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: detectLayout returned nil — no alphabetic chars in '\(text.prefix(40))'\n".utf8)) }
                     snapshot.restore(to: pb)
                     completion(false)
                     return
@@ -318,12 +332,17 @@ final class EventTap {
                 let converted = convert(text, from: from, to: to)
 
                 guard converted != text else {
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: converted == original (\(from)→\(to)); nothing to flip\n".utf8)) }
                     snapshot.restore(to: pb)
                     completion(false)
                     return
                 }
 
-                if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection \(from)→\(to), \(text.count) chars\n".utf8)) }
+                if self.debug {
+                    FileHandle.standardError.write(Data("lang-flip[debug]: selection \(from)→\(to), \(text.count) chars\n".utf8))
+                    FileHandle.standardError.write(Data("lang-flip[debug]:   in:  '\(text.prefix(80))\(text.count > 80 ? "…" : "")'\n".utf8))
+                    FileHandle.standardError.write(Data("lang-flip[debug]:   out: '\(converted.prefix(80))\(converted.count > 80 ? "…" : "")'\n".utf8))
+                }
 
                 pb.clearContents()
                 pb.setString(converted, forType: .string)
