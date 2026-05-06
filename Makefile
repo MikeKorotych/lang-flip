@@ -7,12 +7,18 @@ EXEC := $(BUILD_DIR)/$(APP_NAME)
 # Bundle.module can find it.
 RES_BUNDLE := $(BUILD_DIR)/lang-flip_LangFlip.bundle
 
-.PHONY: all build app clean run install dicts
+.PHONY: all build app clean run install dicts icon
 
 all: app
 
 dicts:
 	./Scripts/build-dicts.sh
+
+# Rebuild AppIcon.icns from the source iconset. Run after changing
+# any of the PNGs in Resources/AppIcon.iconset/.
+icon:
+	@iconutil --convert icns Resources/AppIcon.iconset --output Resources/AppIcon.icns
+	@echo "✓ Rebuilt Resources/AppIcon.icns"
 
 build:
 	swift build -c release
@@ -26,6 +32,9 @@ app: build
 		cp -R $(RES_BUNDLE) $(APP_DIR)/Contents/MacOS/; \
 	fi
 	@cp Resources/Info.plist $(APP_DIR)/Contents/Info.plist
+	@if [ -f Resources/AppIcon.icns ]; then \
+		cp Resources/AppIcon.icns $(APP_DIR)/Contents/Resources/AppIcon.icns; \
+	fi
 	@codesign --force --deep --sign - $(APP_DIR) 2>/dev/null || true
 	@echo "✓ Built $(APP_DIR)"
 
