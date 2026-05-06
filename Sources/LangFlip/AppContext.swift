@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 
 /// Reads the focused application and decides whether auto-flip should stay
 /// silent there. The manual double-/triple-Shift hotkey is *not* gated by
@@ -69,6 +70,57 @@ enum AppContext {
         return NSWorkspace.shared.frontmostApplication?.localizedName
     }
 
+    /// Frame of the focused window of the focused app, in screen coordinates,
+    /// via the Accessibility API. Returns nil if AX lookup fails — usually
+    /// because the app hasn't granted us Accessibility (which would also
+    /// make the rest of the app inert) or the focused app exposes no
+    /// AXFocusedWindow.
+    static func frontmostWindowFrame() -> CGRect? {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+
+        var windowRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &windowRef) == .success,
+              let window = windowRef
+        else { return nil }
+        let axWindow = window as! AXUIElement
+
+        var positionRef: CFTypeRef?
+        var sizeRef: CFTypeRef?
+        let posErr = AXUIElementCopyAttributeValue(axWindow, kAXPositionAttribute as CFString, &positionRef)
+        let sizeErr = AXUIElementCopyAttributeValue(axWindow, kAXSizeAttribute as CFString, &sizeRef)
+        guard posErr == .success, sizeErr == .success,
+              let posVal = positionRef, let sizeVal = sizeRef
+        else { return nil }
+
+        var position = CGPoint.zero
+        var size = CGSize.zero
+        AXValueGetValue(posVal as! AXValue, .cgPoint, &position)
+        AXValueGetValue(sizeVal as! AXValue, .cgSize, &size)
+
+        return CGRect(origin: position, size: size)
+    }
+
+    /// True if the focused window's dimensions match any connected screen's
+    /// — strong signal of a true fullscreen mode (game, video player, IDE
+    /// in fullscreen). We compare *sizes* rather than full rects because
+    /// AX uses top-left origin and NSScreen uses bottom-left, and matching
+    /// sizes alone is enough for the fullscreen signal.
+    ///
+    /// Excludes "maximized but not fullscreen" windows (where the menu bar
+    /// is still visible) — those have a slightly smaller height.
+    static func isFrontmostFullscreen() -> Bool {
+        guard let frame = frontmostWindowFrame() else { return false }
+        let tolerance: CGFloat = 1
+        for screen in NSScreen.screens {
+            let s = screen.frame.size
+            if abs(s.width - frame.size.width) < tolerance && abs(s.height - frame.size.height) < tolerance {
+                return true
+            }
+        }
+        return false
+    }
+
     /// Why a bundle ID is on the blocklist (if it is). nil means the app is
     /// allowed.
     enum BlockReason {
@@ -86,9 +138,29 @@ enum AppContext {
         return nil
     }
 
-    /// True when auto-flip should stay silent for the focused app.
+    /// Detailed suppression cause — useful for debug logging.
+    enum SuppressionCause {
+        case builtinApp(String)   // bundle ID
+        case userApp(String)      // bundle ID
+        case fullscreen           // window covers the whole screen
+    }
+
+    /// Returns the reason auto-flip should be suppressed for the focused
+    /// context, or nil if it should fire normally.
+    static func suppressionCause() -> SuppressionCause? {
+        if let bundleID = frontmostBundleID() {
+            switch blockReason(for: bundleID) {
+            case .builtin:    return .builtinApp(bundleID)
+            case .userBlocked: return .userApp(bundleID)
+            case .none:        break
+            }
+        }
+        if isFrontmostFullscreen() { return .fullscreen }
+        return nil
+    }
+
+    /// True when auto-flip should stay silent for the focused context.
     static func shouldSuppressAutoFlip() -> Bool {
-        guard let bundleID = frontmostBundleID() else { return false }
-        return blockReason(for: bundleID) != nil
+        return suppressionCause() != nil
     }
 }

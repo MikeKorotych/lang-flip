@@ -141,10 +141,15 @@ final class EventTap {
                 let s = String(utf16CodeUnits: chars, count: len)
                 if let completed = buffer.feedReturningCompleted(s),
                    Settings.shared.autoFlip {
-                    if AppContext.shouldSuppressAutoFlip() {
+                    if let cause = AppContext.suppressionCause() {
                         if debug {
-                            let app = AppContext.frontmostAppName() ?? "?"
-                            FileHandle.standardError.write(Data("lang-flip[debug]: auto-flip suppressed in '\(app)' for word '\(completed)'\n".utf8))
+                            let reason: String
+                            switch cause {
+                            case .builtinApp(let id): reason = "built-in block (\(id))"
+                            case .userApp(let id):    reason = "user-blocked (\(id))"
+                            case .fullscreen:         reason = "fullscreen window"
+                            }
+                            FileHandle.standardError.write(Data("lang-flip[debug]: auto-flip suppressed: \(reason); word='\(completed)'\n".utf8))
                         }
                     } else {
                         autoFlipIfNeeded(completedWord: completed)
