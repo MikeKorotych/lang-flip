@@ -3,10 +3,16 @@ BUNDLE_NAME := lang-flip.app
 BUILD_DIR := .build/release
 APP_DIR := build/$(BUNDLE_NAME)
 EXEC := $(BUILD_DIR)/$(APP_NAME)
+# SPM-generated resource bundle — must sit next to the executable so
+# Bundle.module can find it.
+RES_BUNDLE := $(BUILD_DIR)/lang-flip_LangFlip.bundle
 
-.PHONY: all build app clean run install
+.PHONY: all build app clean run install dicts
 
 all: app
+
+dicts:
+	./Scripts/build-dicts.sh
 
 build:
 	swift build -c release
@@ -16,6 +22,9 @@ app: build
 	@mkdir -p $(APP_DIR)/Contents/MacOS
 	@mkdir -p $(APP_DIR)/Contents/Resources
 	@cp $(EXEC) $(APP_DIR)/Contents/MacOS/$(APP_NAME)
+	@if [ -d $(RES_BUNDLE) ]; then \
+		cp -R $(RES_BUNDLE) $(APP_DIR)/Contents/MacOS/; \
+	fi
 	@cp Resources/Info.plist $(APP_DIR)/Contents/Info.plist
 	@codesign --force --deep --sign - $(APP_DIR) 2>/dev/null || true
 	@echo "✓ Built $(APP_DIR)"

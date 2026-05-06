@@ -27,8 +27,26 @@ final class AutoFlip {
             ))
             enWords = []
         }
-        ukCommon = Set(EmbeddedDicts.ukrainian)
-        ruCommon = Set(EmbeddedDicts.russian)
+
+        // UK / RU lists shipped as bundled resources (built by
+        // Scripts/build-dicts.sh). If a file is missing — e.g. running from
+        // outside the .app or from a fresh checkout where the script hasn't
+        // been run — fall back to the much smaller embedded list so the
+        // negative signal still works for the most common words.
+        ukCommon = Self.loadResource(name: "uk-words", fallback: EmbeddedDicts.ukrainian)
+        ruCommon = Self.loadResource(name: "ru-words", fallback: EmbeddedDicts.russian)
+    }
+
+    private static func loadResource(name: String, fallback: [String]) -> Set<String> {
+        if let url = Bundle.module.url(forResource: name, withExtension: "txt", subdirectory: "Dictionaries"),
+           let raw = try? String(contentsOf: url, encoding: .utf8) {
+            let words = raw.split(whereSeparator: { $0.isNewline })
+            return Set(words.map { String($0) })
+        }
+        FileHandle.standardError.write(Data(
+            "lang-flip: \(name).txt not bundled — using fallback (\(fallback.count) words). Run Scripts/build-dicts.sh to install the full list.\n".utf8
+        ))
+        return Set(fallback.map { $0.lowercased() })
     }
 
     /// Returns target layout if we should auto-flip; nil otherwise.

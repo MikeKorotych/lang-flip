@@ -7,7 +7,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "LangFlip",
-            path: "Sources/LangFlip"
+            path: "Sources/LangFlip",
+            resources: [
+                .copy("Dictionaries"),
+            ]
         )
     ]
 )
