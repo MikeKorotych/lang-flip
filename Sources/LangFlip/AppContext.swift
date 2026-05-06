@@ -155,7 +155,9 @@ enum AppContext {
             case .none:        break
             }
         }
-        if isFrontmostFullscreen() { return .fullscreen }
+        if Settings.shared.suppressInFullscreen, isFrontmostFullscreen() {
+            return .fullscreen
+        }
         return nil
     }
 

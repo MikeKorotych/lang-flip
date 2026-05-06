@@ -12,6 +12,7 @@ final class Settings {
         static let primary = "lf.primaryLanguage"
         static let secondary = "lf.secondaryLanguage"
         static let userBlacklist = "lf.userBlacklist"
+        static let suppressInFullscreen = "lf.suppressInFullscreen"
     }
 
     var enabled: Bool {
@@ -45,6 +46,14 @@ final class Settings {
                 secondaryLanguage = nil
             }
         }
+    }
+
+    /// When true, auto-flip stays silent while the focused window is in
+    /// true fullscreen mode (size matches a screen). Off by default —
+    /// users may want to flip inside a fullscreen browser, slack, etc.
+    var suppressInFullscreen: Bool {
+        get { defaults.object(forKey: Keys.suppressInFullscreen) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.suppressInFullscreen) }
     }
 
     /// Bundle IDs the user has explicitly opted out of auto-flip for. The

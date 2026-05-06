@@ -39,6 +39,9 @@ final class AutoFlip {
         if word.contains(where: { $0.isNumber }) { return nil }
         // Words the user previously rejected via Backspace — never auto-flip.
         if BackspaceLearner.shared.isExcluded(word) { return nil }
+        // High-entropy strings (passwords, tokens, hashes) — keep them as-is
+        // even if a layout flip would produce dictionary chars.
+        if looksLikePassword(word) { return nil }
 
         let lower = word.lowercased()
         let originalScore = score(lower, in: currentLayout)
@@ -117,6 +120,47 @@ final class AutoFlip {
         for i in 0..<(chars.count - 2) where chars[i] == chars[i+1] && chars[i+1] == chars[i+2] {
             return true
         }
+        return false
+    }
+
+    /// "This looks like a password / token / hash" heuristic.
+    /// We never want to flip these even if a converted form would land
+    /// in a dictionary by accident.
+    ///
+    /// Two cheap, high-precision rules — chosen so common prose words
+    /// ("Hello", "Привіт", "John") stay below the bar but obvious
+    /// credentials clear it:
+    ///
+    ///   1. Any "strong" special character (!@#$%^&*…) → password.
+    ///      Normal text words don't contain these; passwords routinely
+    ///      do. We deliberately exclude `.`, `,`, `'`, `-` because real
+    ///      words and proper nouns can include them.
+    ///
+    ///   2. Long string with mixed case AND no vowels — typical of
+    ///      randomly-generated tokens and hex hashes.
+    ///
+    /// Words containing digits are already short-circuited by the
+    /// caller, so digits don't appear in this function.
+    private func looksLikePassword(_ word: String) -> Bool {
+        guard word.count >= 6 else { return false }
+
+        let strongSpecials: Set<Character> = ["!", "@", "#", "$", "%", "^", "&", "*",
+                                              "(", ")", "_", "+", "=", "{", "}",
+                                              "[", "]", "\\", "|", ";", ":", "\"",
+                                              "<", ">", "?", "/", "~", "`"]
+        if word.contains(where: { strongSpecials.contains($0) }) { return true }
+
+        let hasUpper = word.contains { $0.isUppercase }
+        let hasLower = word.contains { $0.isLowercase }
+        let isMixedCase = hasUpper && hasLower
+
+        let vowels: Set<Character> = ["a", "e", "i", "o", "u", "y",
+                                      "а", "е", "и", "і", "ї", "о", "у", "ю", "я",
+                                      "ы", "э", "ё", "є"]
+        let hasVowel = word.lowercased().contains { vowels.contains($0) }
+
+        if word.count > 10 && isMixedCase && !hasVowel { return true }
+
         return false
     }
 }
