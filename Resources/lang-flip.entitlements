@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Hardened-runtime entitlements for Developer ID-signed lang-flip.
+      The app is intentionally NOT sandboxed — it has to read keystrokes
+      across all apps via CGEventTap, which the sandbox prohibits.
+      Distribution path is "outside the Mac App Store", which is fine
+      with hardened runtime + notarization.
+
+      We do NOT need any of the security.cs.* opt-outs (allow-jit,
+      allow-unsigned-executable-memory, etc.) — the binary is plain Swift
+      with no JIT or runtime code generation.
+    -->
+</dict>
+</plist>

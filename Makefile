@@ -7,9 +7,35 @@ EXEC := $(BUILD_DIR)/$(APP_NAME)
 # Bundle.module can find it.
 RES_BUNDLE := $(BUILD_DIR)/lang-flip_LangFlip.bundle
 
-.PHONY: all build app clean run install dicts icon
+# Read version from Info.plist so it's the single source of truth.
+VERSION := $(shell /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)
+DMG_NAME := lang-flip-$(VERSION).dmg
+DMG_PATH := build/$(DMG_NAME)
+
+# Codesigning identity. Override on the command line:
+#   make sign DEVELOPER_ID="Developer ID Application: Foo (TEAMID)"
+# Otherwise we autodetect the first Developer ID Application identity in
+# the user's Keychain.
+DEVELOPER_ID := $(shell security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+
+# Notarytool keychain profile — set up once with:
+#   xcrun notarytool store-credentials lang-flip-notarize \
+#       --apple-id you@example.com \
+#       --team-id  TEAMID \
+#       --password APP-SPECIFIC-PASSWORD
+NOTARY_PROFILE := lang-flip-notarize
+
+ENTITLEMENTS := Resources/lang-flip.entitlements
+
+.PHONY: all build app clean run install dicts icon \
+        sign dmg notarize staple release version
 
 all: app
+
+# ─── Helpers ──────────────────────────────────────────────────────
+
+version:
+	@echo "$(VERSION)"
 
 dicts:
 	./Scripts/build-dicts.sh
@@ -18,6 +44,8 @@ dicts:
 # at Resources/lang-flip-logo.png. Run after replacing the master.
 icon:
 	./Scripts/build-icon.sh
+
+# ─── Build ────────────────────────────────────────────────────────
 
 build:
 	swift build -c release
@@ -44,6 +72,65 @@ install: app
 	@rm -rf /Applications/$(BUNDLE_NAME)
 	@cp -R $(APP_DIR) /Applications/
 	@echo "✓ Installed to /Applications/$(BUNDLE_NAME)"
+
+# ─── Distribution: sign / dmg / notarize / release ────────────────
+
+# Re-sign the .app with a Developer ID Application identity and the
+# hardened runtime. Required for notarization.
+sign: app
+	@if [ -z "$(DEVELOPER_ID)" ]; then \
+		echo "✗ No 'Developer ID Application' certificate found in Keychain."; \
+		echo "  Get one at https://developer.apple.com/account/resources/certificates/add"; \
+		echo "  (pick 'Developer ID Application'), then re-run make sign."; \
+		exit 1; \
+	fi
+	@echo "→ Signing with: $(DEVELOPER_ID)"
+	@codesign --force --options runtime --timestamp \
+		--entitlements $(ENTITLEMENTS) \
+		--sign "$(DEVELOPER_ID)" \
+		$(APP_DIR)
+	@codesign --verify --deep --strict --verbose=2 $(APP_DIR) 2>&1 | tail -3
+	@echo "✓ Signed $(APP_DIR)"
+
+# Build a drag-to-Applications DMG. Works without a Developer ID, but
+# the .app inside should already be signed for an end user not to see
+# Gatekeeper warnings.
+dmg: app
+	@rm -f $(DMG_PATH)
+	@create-dmg \
+		--volname "lang-flip" \
+		--window-size 500 320 \
+		--icon-size 96 \
+		--icon "$(BUNDLE_NAME)" 130 150 \
+		--app-drop-link 370 150 \
+		--no-internet-enable \
+		"$(DMG_PATH)" \
+		"$(APP_DIR)" \
+		>/dev/null
+	@echo "✓ $(DMG_PATH) ($$(du -h $(DMG_PATH) | awk '{print $$1}'))"
+
+# Submit the DMG to Apple for notarization, wait for the result, then
+# staple the ticket so end users don't need internet on first launch.
+notarize: dmg
+	@echo "→ Submitting $(DMG_PATH) to Apple notarytool…"
+	@xcrun notarytool submit $(DMG_PATH) \
+		--keychain-profile $(NOTARY_PROFILE) \
+		--wait
+	@echo "→ Stapling ticket to $(DMG_PATH)…"
+	@xcrun stapler staple $(DMG_PATH)
+	@xcrun stapler validate $(DMG_PATH)
+	@echo "✓ Notarized: $(DMG_PATH)"
+
+staple:
+	@xcrun stapler staple $(DMG_PATH)
+	@xcrun stapler validate $(DMG_PATH)
+
+# One-shot: build → sign .app → make DMG → notarize → staple. The
+# resulting DMG is fit to publish on GitHub Releases.
+release: sign dmg notarize
+	@echo
+	@echo "✓ Release artifact ready: $(DMG_PATH)"
+	@echo "  Next: gh release create v$(VERSION) $(DMG_PATH)"
 
 clean:
 	@rm -rf .build build
