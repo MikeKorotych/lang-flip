@@ -37,6 +37,8 @@ final class AutoFlip {
         guard word.count >= 3 else { return nil }
         // Skip anything with digits or non-letter cruft.
         if word.contains(where: { $0.isNumber }) { return nil }
+        // Words the user previously rejected via Backspace — never auto-flip.
+        if BackspaceLearner.shared.isExcluded(word) { return nil }
 
         let lower = word.lowercased()
         let originalScore = score(lower, in: currentLayout)

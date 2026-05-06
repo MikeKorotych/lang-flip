@@ -9,6 +9,8 @@ final class MenubarController: NSObject {
 
     private let primaryMenu = NSMenu()
     private let secondaryMenu = NSMenu()
+    private let exceptionsItem = NSMenuItem(title: "Learned exceptions: 0", action: nil, keyEquivalent: "")
+    private let clearExceptionsItem = NSMenuItem(title: "Forget learned exceptions", action: #selector(clearExceptions), keyEquivalent: "")
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -55,6 +57,13 @@ final class MenubarController: NSObject {
 
         menu.addItem(.separator())
 
+        // Backspace-learned exceptions: read-only count + a manual reset.
+        exceptionsItem.isEnabled = false
+        clearExceptionsItem.target = self
+        menu.addItem(exceptionsItem)
+        menu.addItem(clearExceptionsItem)
+        menu.addItem(.separator())
+
         let hotkeyHint = NSMenuItem(title: "Hotkey: ⇧⇧ → primary, ⇧⇧⇧ → secondary (selection if any, else last word)", action: nil, keyEquivalent: "")
         hotkeyHint.isEnabled = false
         menu.addItem(hotkeyHint)
@@ -65,12 +74,20 @@ final class MenubarController: NSObject {
         menu.addItem(quit)
 
         statusItem.menu = menu
+
+        // Refresh the exception count whenever the user opens the menu —
+        // catches words just added by Backspace-learning.
+        menu.delegate = self
+
         refresh()
     }
 
     private func refresh() {
         enabledItem.state = Settings.shared.enabled ? .on : .off
         autoFlipItem.state = Settings.shared.autoFlip ? .on : .off
+        let count = BackspaceLearner.shared.exceptions.count
+        exceptionsItem.title = "Learned exceptions: \(count)"
+        clearExceptionsItem.isEnabled = count > 0
         if let button = statusItem.button {
             button.title = Settings.shared.enabled ? "⌥" : "⌥̶"
         }
@@ -122,7 +139,18 @@ final class MenubarController: NSObject {
         refresh()
     }
 
+    @objc private func clearExceptions() {
+        BackspaceLearner.shared.clearExceptions()
+        refresh()
+    }
+
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+}
+
+extension MenubarController: NSMenuDelegate {
+    func menuWillOpen(_ menu: NSMenu) {
+        refresh()
     }
 }

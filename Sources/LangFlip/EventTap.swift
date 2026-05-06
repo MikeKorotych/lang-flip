@@ -122,11 +122,22 @@ final class EventTap {
         // Track what the user types into the word buffer.
         if keyCode == CGKeyCode(kVK_Delete) {
             buffer.backspace()
+            // Backspace within the auto-flip watch window is a disagreement
+            // signal. The learner adds the word to the exception list on the
+            // first hit and asks for a physical rollback once the user has
+            // wiped the whole converted word + trailing space.
+            if let rollback = BackspaceLearner.shared.handleBackspace() {
+                performRollback(rollback)
+            }
         } else {
             var len = 0
             var chars = [UniChar](repeating: 0, count: 8)
             event.keyboardGetUnicodeString(maxStringLength: chars.count, actualStringLength: &len, unicodeString: &chars)
             if len > 0 {
+                // Any non-backspace keystroke after a flip means the user
+                // accepted it (or has moved on). Stop watching.
+                BackspaceLearner.shared.cancelPending()
+
                 let s = String(utf16CodeUnits: chars, count: len)
                 if let completed = buffer.feedReturningCompleted(s),
                    Settings.shared.autoFlip {
@@ -136,6 +147,20 @@ final class EventTap {
         }
 
         return Unmanaged.passUnretained(event)
+    }
+
+    /// Physically undo an auto-flip the user just rejected. We're called from
+    /// the event-tap callback (main thread); switching the input source and
+    /// posting events is fine here.
+    private func performRollback(_ req: BackspaceLearner.RollbackRequest) {
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: rollback to '\(req.originalWord)' (\(req.sourceLayout))\n".utf8)) }
+        InputSource.switchTo(req.sourceLayout)
+        for ch in req.originalWord { postUnicode(String(ch)) }
+        postUnicode(" ")
+        // Rebuild buffer to reflect the just-typed word so a subsequent
+        // boundary doesn't re-fire auto-flip on stale state.
+        buffer.reset()
+        buffer.feed(req.originalWord)
     }
 
     private func handleFlagsChanged(keyCode: CGKeyCode, flags: CGEventFlags) {
@@ -327,6 +352,15 @@ final class EventTap {
         InputSource.switchTo(target)
         for ch in converted { postUnicode(String(ch)) }
         postUnicode(" ")
+
+        // Open the disagreement-watch window so the user can backspace this
+        // away and have us learn from it.
+        BackspaceLearner.shared.recordFlip(
+            original: completedWord,
+            converted: converted,
+            source: current,
+            target: target
+        )
     }
 
     private func convertLastWord(targetNonEnglish: Layout) {
