@@ -5,9 +5,19 @@ import AppKit
 /// this — pressing it is an explicit user intent that should work everywhere.
 enum AppContext {
 
-    /// Bundle IDs where automatic flipping is more likely to break things
-    /// (terminals where synthesized events are flaky, IDEs where we'd
-    /// rewrite source code, password fields where we'd corrupt secrets).
+    /// Bundle IDs where automatic flipping is silenced by default.
+    ///
+    /// Conservative list — only apps where auto-flip would do real harm:
+    ///   - Terminals: synthesized events are flaky in PTYs, and Cmd+Backspace
+    ///     in shells does line-kill, not char-delete. Auto-flip can corrupt
+    ///     shell history.
+    ///   - Password managers: never touch credential fields.
+    ///
+    /// Code editors / IDEs are intentionally NOT here. Modern workflows mix
+    /// natural-language input (AI-extension chats, commit messages, comments,
+    /// markdown, docs) with code, and a blanket block makes the app useless
+    /// to anyone living in their editor. Users who want them silenced can
+    /// add them via the "Disable auto-flip in [App]" menu item.
     private static let builtinBlocklist: Set<String> = [
         // Terminals
         "com.apple.Terminal",
@@ -19,36 +29,6 @@ enum AppContext {
         "io.alacritty",
         "net.kovidgoyal.kitty",
         "com.tabby",
-
-        // IDEs and code editors
-        "com.apple.dt.Xcode",
-        "com.microsoft.VSCode",
-        "com.microsoft.VSCodeInsiders",
-        "com.visualstudio.code.oss",
-        "dev.zed.Zed",
-        "dev.zed.Zed-Preview",
-        "com.sublimetext.4",
-        "com.sublimetext.3",
-        "org.vim.MacVim",
-        "com.github.atom",
-        "com.todesktop.230313mzl4w4u92", // Cursor
-        "com.exafunction.windsurf",
-
-        // JetBrains family
-        "com.jetbrains.intellij",
-        "com.jetbrains.intellij.ce",
-        "com.jetbrains.pycharm",
-        "com.jetbrains.pycharm.ce",
-        "com.jetbrains.WebStorm",
-        "com.jetbrains.PhpStorm",
-        "com.jetbrains.RubyMine",
-        "com.jetbrains.GoLand",
-        "com.jetbrains.rider",
-        "com.jetbrains.AppCode",
-        "com.jetbrains.CLion",
-        "com.jetbrains.datagrip",
-        "com.jetbrains.AndroidStudio",
-        "com.google.android.studio",
 
         // Password managers (defence-in-depth — substring rules below also catch them)
         "com.1password.1password",

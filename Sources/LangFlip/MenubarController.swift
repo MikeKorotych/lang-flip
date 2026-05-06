@@ -100,27 +100,30 @@ final class MenubarController: NSObject {
         exceptionsItem.title = "Learned exceptions: \(count)"
         clearExceptionsItem.isEnabled = count > 0
 
-        // Per-app toggle.
+        // Per-app toggle. Fixed title "Auto-flip in <App>"; checkmark
+        // indicates state, mirroring how Apple's own menus toggle.
         let bundleID = capturedFrontmostBundleID ?? AppContext.frontmostBundleID()
         let appName = AppContext.frontmostAppName() ?? "current app"
         if let bid = bundleID {
-            switch AppContext.blockReason(for: bid) {
+            let reason = AppContext.blockReason(for: bid)
+            switch reason {
             case .builtin:
-                currentAppItem.title = "Auto-flip in \(appName): blocked (built-in)"
+                currentAppItem.title = "Auto-flip in \(appName)  (built-in block)"
                 currentAppItem.isEnabled = false
                 currentAppItem.state = .off
             case .userBlocked:
-                currentAppItem.title = "Re-enable auto-flip in \(appName)"
+                currentAppItem.title = "Auto-flip in \(appName)"
                 currentAppItem.isEnabled = true
                 currentAppItem.state = .off
             case .none:
-                currentAppItem.title = "Disable auto-flip in \(appName)"
+                currentAppItem.title = "Auto-flip in \(appName)"
                 currentAppItem.isEnabled = true
                 currentAppItem.state = .on
             }
         } else {
             currentAppItem.title = "Auto-flip in current app"
             currentAppItem.isEnabled = false
+            currentAppItem.state = .off
         }
         if let button = statusItem.button {
             button.title = Settings.shared.enabled ? "⌥" : "⌥̶"
