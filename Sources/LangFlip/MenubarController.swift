@@ -1,24 +1,17 @@
 import AppKit
 
+/// Slim status-bar menu — only the most-frequent toggles plus a one-click
+/// entry to the full Preferences window. Anything that's a one-time
+/// configuration choice (language pickers, exception lists, per-app
+/// blacklist) lives in PreferencesView.
 final class MenubarController: NSObject {
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
 
     private let enabledItem = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
     private let autoFlipItem = NSMenuItem(title: "Auto-flip on word boundary", action: #selector(toggleAutoFlip), keyEquivalent: "")
-    private let fullscreenItem = NSMenuItem(title: "Pause auto-flip in fullscreen apps", action: #selector(toggleFullscreenSuppression), keyEquivalent: "")
-    private let doubleCapsItem = NSMenuItem(title: "Fix sticky-shift typos (WOrld → World)", action: #selector(toggleDoubleCapsFix), keyEquivalent: "")
-    private let soundItem = NSMenuItem(title: "Play sound on flip", action: #selector(toggleSound), keyEquivalent: "")
-
-    private let primaryMenu = NSMenu()
-    private let secondaryMenu = NSMenu()
-    private let exceptionsItem = NSMenuItem(title: "Learned exceptions: 0", action: nil, keyEquivalent: "")
-    private let clearExceptionsItem = NSMenuItem(title: "Forget learned exceptions", action: #selector(clearExceptions), keyEquivalent: "")
-    private let currentAppItem = NSMenuItem(title: "Auto-flip in current app", action: #selector(toggleCurrentAppBlock), keyEquivalent: "")
-
-    /// Bundle ID captured the moment the menu opens, so the toggle below
-    /// targets the app the user was using — not the menubar process.
-    private var capturedFrontmostBundleID: String?
+    private let prefsItem = NSMenuItem(title: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",")
+    private let quitItem = NSMenuItem(title: "Quit lang-flip", action: #selector(quit), keyEquivalent: "q")
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -31,78 +24,20 @@ final class MenubarController: NSObject {
 
         enabledItem.target = self
         autoFlipItem.target = self
-        fullscreenItem.target = self
-        doubleCapsItem.target = self
-        soundItem.target = self
+        prefsItem.target = self
+        quitItem.target = self
 
         menu.addItem(enabledItem)
         menu.addItem(autoFlipItem)
-        menu.addItem(fullscreenItem)
-        menu.addItem(doubleCapsItem)
-        menu.addItem(soundItem)
         menu.addItem(.separator())
-
-        // Primary language submenu (double-tap Shift target).
-        let primaryItem = NSMenuItem(title: "Primary language (⇧⇧)", action: nil, keyEquivalent: "")
-        primaryItem.submenu = primaryMenu
-        for layout in Layout.nonEnglish {
-            let item = NSMenuItem(title: layout.displayName, action: #selector(setPrimary(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = layout.rawValue
-            primaryMenu.addItem(item)
-        }
-        menu.addItem(primaryItem)
-
-        // Secondary language submenu (triple-tap Shift target).
-        let secondaryItem = NSMenuItem(title: "Secondary language (⇧⇧⇧)", action: nil, keyEquivalent: "")
-        secondaryItem.submenu = secondaryMenu
-        let noneItem = NSMenuItem(title: "None", action: #selector(setSecondary(_:)), keyEquivalent: "")
-        noneItem.target = self
-        noneItem.representedObject = "" // empty = nil
-        secondaryMenu.addItem(noneItem)
-        secondaryMenu.addItem(.separator())
-        for layout in Layout.nonEnglish {
-            let item = NSMenuItem(title: layout.displayName, action: #selector(setSecondary(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = layout.rawValue
-            secondaryMenu.addItem(item)
-        }
-        menu.addItem(secondaryItem)
-
+        menu.addItem(prefsItem)
         menu.addItem(.separator())
-
-        // Backspace-learned exceptions: read-only count + a manual reset.
-        exceptionsItem.isEnabled = false
-        clearExceptionsItem.target = self
-        menu.addItem(exceptionsItem)
-        menu.addItem(clearExceptionsItem)
-        menu.addItem(.separator())
-
-        // Per-app auto-flip toggle (targets the app focused right before the
-        // menu opened — captured in menuWillOpen).
-        currentAppItem.target = self
-        menu.addItem(currentAppItem)
-        menu.addItem(.separator())
-
-        let hotkeyHint = NSMenuItem(title: "Hotkey: ⇧⇧ → primary, ⇧⇧⇧ → secondary (selection if any, else last word)", action: nil, keyEquivalent: "")
-        hotkeyHint.isEnabled = false
-        let pauseHint = NSMenuItem(title: "Pause / resume: press both ⇧ at once", action: nil, keyEquivalent: "")
-        pauseHint.isEnabled = false
-        menu.addItem(hotkeyHint)
-        menu.addItem(pauseHint)
-        menu.addItem(.separator())
-
-        let quit = NSMenuItem(title: "Quit lang-flip", action: #selector(quit), keyEquivalent: "q")
-        quit.target = self
-        menu.addItem(quit)
+        menu.addItem(quitItem)
 
         statusItem.menu = menu
-
-        // Refresh the exception count whenever the user opens the menu —
-        // catches words just added by Backspace-learning.
         menu.delegate = self
 
-        // Listen for external Enabled changes (both-Shifts gesture).
+        // Refresh on the both-Shifts toggle so the icon ⌥ ↔ ⌥̶ stays in sync.
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(externalEnabledChange),
@@ -120,58 +55,8 @@ final class MenubarController: NSObject {
     private func refresh() {
         enabledItem.state = Settings.shared.enabled ? .on : .off
         autoFlipItem.state = Settings.shared.autoFlip ? .on : .off
-        fullscreenItem.state = Settings.shared.suppressInFullscreen ? .on : .off
-        doubleCapsItem.state = Settings.shared.doubleCapsFix ? .on : .off
-        soundItem.state = Settings.shared.soundEnabled ? .on : .off
-        let count = BackspaceLearner.shared.exceptions.count
-        exceptionsItem.title = "Learned exceptions: \(count)"
-        clearExceptionsItem.isEnabled = count > 0
-
-        // Per-app toggle. Fixed title "Auto-flip in <App>"; checkmark
-        // indicates state, mirroring how Apple's own menus toggle.
-        let bundleID = capturedFrontmostBundleID ?? AppContext.frontmostBundleID()
-        let appName = AppContext.frontmostAppName() ?? "current app"
-        if let bid = bundleID {
-            let reason = AppContext.blockReason(for: bid)
-            switch reason {
-            case .builtin:
-                currentAppItem.title = "Auto-flip in \(appName)  (built-in block)"
-                currentAppItem.isEnabled = false
-                currentAppItem.state = .off
-            case .userBlocked:
-                currentAppItem.title = "Auto-flip in \(appName)"
-                currentAppItem.isEnabled = true
-                currentAppItem.state = .off
-            case .none:
-                currentAppItem.title = "Auto-flip in \(appName)"
-                currentAppItem.isEnabled = true
-                currentAppItem.state = .on
-            }
-        } else {
-            currentAppItem.title = "Auto-flip in current app"
-            currentAppItem.isEnabled = false
-            currentAppItem.state = .off
-        }
         if let button = statusItem.button {
             button.title = Settings.shared.enabled ? "⌥" : "⌥̶"
-        }
-
-        let primary = Settings.shared.primaryLanguage
-        for item in primaryMenu.items {
-            guard let raw = item.representedObject as? String else { continue }
-            item.state = (raw == primary.rawValue) ? .on : .off
-        }
-
-        let secondary = Settings.shared.secondaryLanguage
-        for item in secondaryMenu.items {
-            guard let raw = item.representedObject as? String else { continue }
-            if raw.isEmpty {
-                item.state = (secondary == nil) ? .on : .off
-            } else {
-                item.state = (raw == secondary?.rawValue) ? .on : .off
-            }
-            // Don't let the user pick the primary as the secondary.
-            item.isEnabled = (raw != primary.rawValue)
         }
     }
 
@@ -185,58 +70,8 @@ final class MenubarController: NSObject {
         refresh()
     }
 
-    @objc private func toggleFullscreenSuppression() {
-        Settings.shared.suppressInFullscreen.toggle()
-        refresh()
-    }
-
-    @objc private func toggleDoubleCapsFix() {
-        Settings.shared.doubleCapsFix.toggle()
-        refresh()
-    }
-
-    @objc private func toggleSound() {
-        Settings.shared.soundEnabled.toggle()
-        refresh()
-        if Settings.shared.soundEnabled {
-            // Quick preview so the user knows what they just enabled.
-            Sound.playFlip()
-        }
-    }
-
-    @objc private func setPrimary(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let layout = Layout(rawValue: raw)
-        else { return }
-        Settings.shared.primaryLanguage = layout
-        refresh()
-    }
-
-    @objc private func setSecondary(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String else { return }
-        if raw.isEmpty {
-            Settings.shared.secondaryLanguage = nil
-        } else if let layout = Layout(rawValue: raw) {
-            Settings.shared.secondaryLanguage = layout
-        }
-        refresh()
-    }
-
-    @objc private func clearExceptions() {
-        BackspaceLearner.shared.clearExceptions()
-        refresh()
-    }
-
-    @objc private func toggleCurrentAppBlock() {
-        guard let bid = capturedFrontmostBundleID ?? AppContext.frontmostBundleID() else { return }
-        var blacklist = Settings.shared.userBlacklist
-        if blacklist.contains(bid) {
-            blacklist.remove(bid)
-        } else {
-            blacklist.insert(bid)
-        }
-        Settings.shared.userBlacklist = blacklist
-        refresh()
+    @objc private func openPreferences() {
+        PreferencesWindowController.shared.show()
     }
 
     @objc private func quit() {
@@ -246,14 +81,8 @@ final class MenubarController: NSObject {
 
 extension MenubarController: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
-        // Capture the frontmost app *before* opening the menu changes any
-        // focus state, so the per-app toggle targets the app the user was
-        // actually using.
-        capturedFrontmostBundleID = AppContext.frontmostBundleID()
+        // Pull live state in case the both-Shifts gesture or the
+        // Preferences window changed something while the menu was closed.
         refresh()
-    }
-
-    func menuDidClose(_ menu: NSMenu) {
-        capturedFrontmostBundleID = nil
     }
 }

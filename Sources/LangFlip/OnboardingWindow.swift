@@ -5,7 +5,6 @@ import SwiftUI
 /// the app starts without both required permissions. Closed only when the
 /// user clicks Continue, which is gated on both permissions being granted —
 /// no Skip button by design (without permissions the app is inert).
-@MainActor
 final class OnboardingWindowController {
     static let shared = OnboardingWindowController()
 
