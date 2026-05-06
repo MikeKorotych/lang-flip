@@ -8,6 +8,7 @@ final class MenubarController: NSObject {
     private let autoFlipItem = NSMenuItem(title: "Auto-flip on word boundary", action: #selector(toggleAutoFlip), keyEquivalent: "")
     private let fullscreenItem = NSMenuItem(title: "Pause auto-flip in fullscreen apps", action: #selector(toggleFullscreenSuppression), keyEquivalent: "")
     private let doubleCapsItem = NSMenuItem(title: "Fix sticky-shift typos (WOrld → World)", action: #selector(toggleDoubleCapsFix), keyEquivalent: "")
+    private let soundItem = NSMenuItem(title: "Play sound on flip", action: #selector(toggleSound), keyEquivalent: "")
 
     private let primaryMenu = NSMenu()
     private let secondaryMenu = NSMenu()
@@ -32,11 +33,13 @@ final class MenubarController: NSObject {
         autoFlipItem.target = self
         fullscreenItem.target = self
         doubleCapsItem.target = self
+        soundItem.target = self
 
         menu.addItem(enabledItem)
         menu.addItem(autoFlipItem)
         menu.addItem(fullscreenItem)
         menu.addItem(doubleCapsItem)
+        menu.addItem(soundItem)
         menu.addItem(.separator())
 
         // Primary language submenu (double-tap Shift target).
@@ -119,6 +122,7 @@ final class MenubarController: NSObject {
         autoFlipItem.state = Settings.shared.autoFlip ? .on : .off
         fullscreenItem.state = Settings.shared.suppressInFullscreen ? .on : .off
         doubleCapsItem.state = Settings.shared.doubleCapsFix ? .on : .off
+        soundItem.state = Settings.shared.soundEnabled ? .on : .off
         let count = BackspaceLearner.shared.exceptions.count
         exceptionsItem.title = "Learned exceptions: \(count)"
         clearExceptionsItem.isEnabled = count > 0
@@ -189,6 +193,15 @@ final class MenubarController: NSObject {
     @objc private func toggleDoubleCapsFix() {
         Settings.shared.doubleCapsFix.toggle()
         refresh()
+    }
+
+    @objc private func toggleSound() {
+        Settings.shared.soundEnabled.toggle()
+        refresh()
+        if Settings.shared.soundEnabled {
+            // Quick preview so the user knows what they just enabled.
+            Sound.playFlip()
+        }
     }
 
     @objc private func setPrimary(_ sender: NSMenuItem) {

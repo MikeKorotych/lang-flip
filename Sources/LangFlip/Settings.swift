@@ -14,6 +14,7 @@ final class Settings {
         static let userBlacklist = "lf.userBlacklist"
         static let suppressInFullscreen = "lf.suppressInFullscreen"
         static let doubleCapsFix = "lf.doubleCapsFix"
+        static let soundEnabled = "lf.soundEnabled"
     }
 
     var enabled: Bool {
@@ -47,6 +48,14 @@ final class Settings {
                 secondaryLanguage = nil
             }
         }
+    }
+
+    /// Plays a short system tick on every text rewrite (auto-flip, manual
+    /// flip, sticky-shift fix, rollback). Off by default — sound feedback
+    /// is divisive; users who like it can opt in.
+    var soundEnabled: Bool {
+        get { defaults.object(forKey: Keys.soundEnabled) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.soundEnabled) }
     }
 
     /// Sticky-shift correction. On by default — matches Caramba's behaviour

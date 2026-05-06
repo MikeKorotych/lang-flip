@@ -193,6 +193,7 @@ final class EventTap {
         for _ in 0..<eraseCount { postKey(virtualKey: CGKeyCode(kVK_Delete)) }
         for ch in replacement { postUnicode(String(ch)) }
         postUnicode(" ")
+        Sound.playFlip()
     }
 
     /// Physically undo an auto-flip the user just rejected. We're called from
@@ -203,6 +204,7 @@ final class EventTap {
         InputSource.switchTo(req.sourceLayout)
         for ch in req.originalWord { postUnicode(String(ch)) }
         postUnicode(" ")
+        Sound.playFlip()
         // Rebuild buffer to reflect the just-typed word so a subsequent
         // boundary doesn't re-fire auto-flip on stale state.
         buffer.reset()
@@ -442,6 +444,7 @@ final class EventTap {
 
                 InputSource.switchTo(to)
                 self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+                Sound.playFlip()
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
                     snapshot.restore(to: pb)
@@ -464,6 +467,7 @@ final class EventTap {
         InputSource.switchTo(target)
         for ch in converted { postUnicode(String(ch)) }
         postUnicode(" ")
+        Sound.playFlip()
 
         // Open the disagreement-watch window so the user can backspace this
         // away and have us learn from it.
@@ -489,6 +493,7 @@ final class EventTap {
         for _ in 0..<word.count { postKey(virtualKey: CGKeyCode(kVK_Delete)) }
         InputSource.switchTo(to)
         for ch in converted { postUnicode(String(ch)) }
+        Sound.playFlip()
 
         buffer.reset()
         buffer.feed(converted)
