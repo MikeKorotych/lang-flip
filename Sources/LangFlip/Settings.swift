@@ -15,6 +15,7 @@ final class Settings {
         static let suppressInFullscreen = "lf.suppressInFullscreen"
         static let doubleCapsFix = "lf.doubleCapsFix"
         static let soundEnabled = "lf.soundEnabled"
+        static let onboardingDone = "lf.onboardingDone"
     }
 
     var enabled: Bool {
@@ -49,6 +50,16 @@ final class Settings {
                 secondaryLanguage = nil
             }
         }
+    }
+
+    /// Set to true once the user has completed the welcome / permissions
+    /// wizard. Fresh installs land here at false → wizard shows. We also
+    /// re-show the wizard on launch when permissions are missing,
+    /// regardless of this flag, so users who revoke a permission later
+    /// don't end up with a silently-broken app.
+    var onboardingDone: Bool {
+        get { defaults.object(forKey: Keys.onboardingDone) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.onboardingDone) }
     }
 
     /// Plays a short system tick on every text rewrite (auto-flip, manual

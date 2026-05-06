@@ -1,6 +1,5 @@
 import Foundation
 import AppKit
-import IOKit.hid
 
 private func log(_ s: String) {
     FileHandle.standardError.write(Data("lang-flip: \(s)\n".utf8))
@@ -13,35 +12,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         log("startup, pid=\(getpid())")
 
-        // 1. Accessibility (required for swallowing events / posting synthesized ones).
-        let trusted = AXIsProcessTrustedWithOptions(
-            [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
-        )
-        log("Accessibility permission: \(trusted ? "GRANTED" : "MISSING")")
-
-        // 2. Input Monitoring (required for reading keystrokes from other apps on 10.15+).
-        let inputMonitoring = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
-        let inputMonitoringStr: String
-        switch inputMonitoring {
-        case kIOHIDAccessTypeGranted: inputMonitoringStr = "GRANTED"
-        case kIOHIDAccessTypeDenied: inputMonitoringStr = "DENIED"
-        case kIOHIDAccessTypeUnknown: inputMonitoringStr = "NOT REQUESTED YET"
-        default: inputMonitoringStr = "UNKNOWN(\(inputMonitoring.rawValue))"
-        }
-        log("Input Monitoring permission: \(inputMonitoringStr)")
-        if inputMonitoring != kIOHIDAccessTypeGranted {
-            // Triggers the system prompt + adds us to the list.
-            _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
-            log("Requested Input Monitoring access. If denied, add lang-flip in System Settings → Privacy & Security → Input Monitoring and relaunch.")
+        // Read both permissions; the helper handles the prompt-on-first-run
+        // for Accessibility. Input Monitoring is queried separately and we
+        // also explicitly request it so first-run users get the system
+        // dialog instead of an apparent silent failure.
+        let perms = PermissionStatus.current(prompt: true)
+        log("Accessibility permission: \(perms.accessibility ? "GRANTED" : "MISSING")")
+        log("Input Monitoring permission: \(perms.inputMonitoring ? "GRANTED" : "MISSING / NOT YET REQUESTED")")
+        if !perms.inputMonitoring {
+            PermissionStatus.requestInputMonitoring()
         }
 
-        if !trusted || inputMonitoring != kIOHIDAccessTypeGranted {
-            log("Permissions incomplete — event tap will not see keystrokes. App will keep running so the menubar appears, but hotkey/auto-flip will be inert until you grant both and relaunch.")
+        // Show the welcome / permissions wizard on first launch, OR any
+        // launch where a previously-granted permission has been revoked.
+        if !Settings.shared.onboardingDone || !perms.allGranted {
+            log("showing onboarding window")
+            OnboardingWindowController.shared.show()
         }
 
+        // Menubar always comes up — even when permissions are incomplete,
+        // so users have a visible affordance to find the app.
         menubar = MenubarController()
         log("menubar ready (look for ⌥ icon in menu bar)")
 
+        // Event tap is best-effort. CGEvent.tapCreate returns nil without
+        // Accessibility; we throw and log rather than crash, so the
+        // onboarding window stays up.
         let tap = EventTap()
         do {
             try tap.start()
@@ -56,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
-// Accessory: status bar app, no Dock icon, no main menu.
+// Accessory: status-bar app, no Dock icon, no main menu. The onboarding
+// window flips this to .regular while it's visible.
 app.setActivationPolicy(.accessory)
 app.run()
