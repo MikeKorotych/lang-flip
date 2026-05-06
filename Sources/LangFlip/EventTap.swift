@@ -141,7 +141,14 @@ final class EventTap {
                 let s = String(utf16CodeUnits: chars, count: len)
                 if let completed = buffer.feedReturningCompleted(s),
                    Settings.shared.autoFlip {
-                    autoFlipIfNeeded(completedWord: completed)
+                    if AppContext.shouldSuppressAutoFlip() {
+                        if debug {
+                            let app = AppContext.frontmostAppName() ?? "?"
+                            FileHandle.standardError.write(Data("lang-flip[debug]: auto-flip suppressed in '\(app)' for word '\(completed)'\n".utf8))
+                        }
+                    } else {
+                        autoFlipIfNeeded(completedWord: completed)
+                    }
                 }
             }
         }

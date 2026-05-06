@@ -11,6 +11,7 @@ final class Settings {
         static let autoFlip = "lf.autoFlip"
         static let primary = "lf.primaryLanguage"
         static let secondary = "lf.secondaryLanguage"
+        static let userBlacklist = "lf.userBlacklist"
     }
 
     var enabled: Bool {
@@ -43,6 +44,20 @@ final class Settings {
             if secondaryLanguage == newValue {
                 secondaryLanguage = nil
             }
+        }
+    }
+
+    /// Bundle IDs the user has explicitly opted out of auto-flip for. The
+    /// hard-coded blocklist in AppContext is separate; this is the set
+    /// users grow themselves via the menubar's "Disable auto-flip in [App]"
+    /// item.
+    var userBlacklist: Set<String> {
+        get {
+            let arr = defaults.array(forKey: Keys.userBlacklist) as? [String] ?? []
+            return Set(arr)
+        }
+        set {
+            defaults.set(Array(newValue), forKey: Keys.userBlacklist)
         }
     }
 

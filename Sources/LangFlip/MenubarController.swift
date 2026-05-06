@@ -11,6 +11,11 @@ final class MenubarController: NSObject {
     private let secondaryMenu = NSMenu()
     private let exceptionsItem = NSMenuItem(title: "Learned exceptions: 0", action: nil, keyEquivalent: "")
     private let clearExceptionsItem = NSMenuItem(title: "Forget learned exceptions", action: #selector(clearExceptions), keyEquivalent: "")
+    private let currentAppItem = NSMenuItem(title: "Auto-flip in current app", action: #selector(toggleCurrentAppBlock), keyEquivalent: "")
+
+    /// Bundle ID captured the moment the menu opens, so the toggle below
+    /// targets the app the user was using — not the menubar process.
+    private var capturedFrontmostBundleID: String?
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -64,6 +69,12 @@ final class MenubarController: NSObject {
         menu.addItem(clearExceptionsItem)
         menu.addItem(.separator())
 
+        // Per-app auto-flip toggle (targets the app focused right before the
+        // menu opened — captured in menuWillOpen).
+        currentAppItem.target = self
+        menu.addItem(currentAppItem)
+        menu.addItem(.separator())
+
         let hotkeyHint = NSMenuItem(title: "Hotkey: ⇧⇧ → primary, ⇧⇧⇧ → secondary (selection if any, else last word)", action: nil, keyEquivalent: "")
         hotkeyHint.isEnabled = false
         menu.addItem(hotkeyHint)
@@ -88,6 +99,29 @@ final class MenubarController: NSObject {
         let count = BackspaceLearner.shared.exceptions.count
         exceptionsItem.title = "Learned exceptions: \(count)"
         clearExceptionsItem.isEnabled = count > 0
+
+        // Per-app toggle.
+        let bundleID = capturedFrontmostBundleID ?? AppContext.frontmostBundleID()
+        let appName = AppContext.frontmostAppName() ?? "current app"
+        if let bid = bundleID {
+            switch AppContext.blockReason(for: bid) {
+            case .builtin:
+                currentAppItem.title = "Auto-flip in \(appName): blocked (built-in)"
+                currentAppItem.isEnabled = false
+                currentAppItem.state = .off
+            case .userBlocked:
+                currentAppItem.title = "Re-enable auto-flip in \(appName)"
+                currentAppItem.isEnabled = true
+                currentAppItem.state = .off
+            case .none:
+                currentAppItem.title = "Disable auto-flip in \(appName)"
+                currentAppItem.isEnabled = true
+                currentAppItem.state = .on
+            }
+        } else {
+            currentAppItem.title = "Auto-flip in current app"
+            currentAppItem.isEnabled = false
+        }
         if let button = statusItem.button {
             button.title = Settings.shared.enabled ? "⌥" : "⌥̶"
         }
@@ -144,6 +178,18 @@ final class MenubarController: NSObject {
         refresh()
     }
 
+    @objc private func toggleCurrentAppBlock() {
+        guard let bid = capturedFrontmostBundleID ?? AppContext.frontmostBundleID() else { return }
+        var blacklist = Settings.shared.userBlacklist
+        if blacklist.contains(bid) {
+            blacklist.remove(bid)
+        } else {
+            blacklist.insert(bid)
+        }
+        Settings.shared.userBlacklist = blacklist
+        refresh()
+    }
+
     @objc private func quit() {
         NSApp.terminate(nil)
     }
@@ -151,6 +197,14 @@ final class MenubarController: NSObject {
 
 extension MenubarController: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
+        // Capture the frontmost app *before* opening the menu changes any
+        // focus state, so the per-app toggle targets the app the user was
+        // actually using.
+        capturedFrontmostBundleID = AppContext.frontmostBundleID()
         refresh()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        capturedFrontmostBundleID = nil
     }
 }
