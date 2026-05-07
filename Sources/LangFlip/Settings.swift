@@ -63,11 +63,11 @@ final class Settings {
         set { defaults.set(newValue, forKey: Keys.onboardingDone) }
     }
 
-    /// Floating HUD-style overlay that pops at the bottom of the screen
-    /// for ~1.5 s on every rewrite, showing "before → after". On by
-    /// default — silent feedback that builds trust on first use.
+    /// Bouncy app-icon flourish at the bottom of the screen on every
+    /// rewrite. Off by default — pure delight, can be distracting if
+    /// flipping happens often. Opt in via Preferences > Behavior.
     var showOverlay: Bool {
-        get { defaults.object(forKey: Keys.showOverlay) as? Bool ?? true }
+        get { defaults.object(forKey: Keys.showOverlay) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.showOverlay) }
     }
 

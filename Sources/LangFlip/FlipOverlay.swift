@@ -1,13 +1,14 @@
 import AppKit
-import Combine
 import SwiftUI
 
-/// HUD-style "we just changed your text" overlay. Pops up at the
-/// bottom-centre of the main screen for 1.5 s every time LangFlip
-/// rewrites a word, then fades out. Non-activating panel — doesn't
-/// steal focus.
+/// Cute, near-invisible visual confirmation that LangFlip just rewrote
+/// some text. The app icon pops up at the bottom-centre of the screen,
+/// bounces, and does a full 360° flip on the Y axis before fading out.
+/// Total wall-clock about 1 second.
 ///
-/// Off-switch: Settings.showOverlay (default on).
+/// Off by default — the icon-style overlay is more of a delight than a
+/// utility, and continuous flipping while typing in the wrong layout
+/// could be distracting. Opt in via Preferences > Behavior.
 final class FlipOverlay {
     static let shared = FlipOverlay()
 
@@ -15,51 +16,41 @@ final class FlipOverlay {
     private var window: NSPanel?
     private var hideTimer: Timer?
 
-    /// How long the overlay stays fully visible before fading out.
-    private static let visibleDuration: TimeInterval = 1.5
+    /// Wall-clock budget: spring intro ≈ 0.55 s, linger 0.25 s, fade 0.25 s.
+    private static let lingerAfterAnimation: TimeInterval = 0.5
+    private static let fadeOutDuration: TimeInterval = 0.25
 
     private init() {}
 
-    /// Show the overlay for a layout flip. `original` is what the user
-    /// typed; `converted` is what LangFlip wrote in its place.
-    func showFlip(original: String, converted: String) {
-        present(.init(original: original, converted: converted, mode: .flip))
-    }
-
-    /// Show the overlay for a sticky-shift correction (WOrld → World).
-    func showCapsFix(original: String, corrected: String) {
-        present(.init(original: original, converted: corrected, mode: .capsFix))
-    }
-
-    /// Show the overlay when a flip is rolled back via Backspace.
-    func showRollback(restored: String) {
-        present(.init(original: restored, converted: restored, mode: .rollback))
-    }
-
-    private func present(_ content: OverlayContent) {
+    /// Trigger the overlay. The animation kicks off automatically inside
+    /// the SwiftUI view as soon as the window appears, so callers don't
+    /// have to manage frames or timing.
+    func show() {
         guard Settings.shared.showOverlay else { return }
 
         DispatchQueue.main.async { [self] in
             ensureWindow()
-            state.content = content
-            window?.orderFront(nil)
             position(window)
-            hideTimer?.invalidate()
-            hideTimer = Timer.scheduledTimer(withTimeInterval: Self.visibleDuration, repeats: false) { [weak self] _ in
-                self?.hide()
-            }
+            state.bumpToken()
+            window?.orderFront(nil)
+            scheduleHide()
+        }
+    }
+
+    private func scheduleHide() {
+        hideTimer?.invalidate()
+        hideTimer = Timer.scheduledTimer(withTimeInterval: Self.lingerAfterAnimation, repeats: false) { [weak self] _ in
+            self?.hide()
         }
     }
 
     private func hide() {
         DispatchQueue.main.async { [self] in
-            // SwiftUI handles the opacity fade via .transition; the window
-            // stays open until the animation finishes (~250ms), then we
-            // fully order it out.
-            state.content = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                if self?.state.content == nil {
-                    self?.window?.orderOut(nil)
+            state.requestFadeOut()
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.fadeOutDuration + 0.05) { [weak self] in
+                guard let self else { return }
+                if self.state.shouldRemainHidden {
+                    self.window?.orderOut(nil)
                 }
             }
         }
@@ -69,7 +60,7 @@ final class FlipOverlay {
         guard window == nil else { return }
         let host = NSHostingController(rootView: FlipOverlayView(state: state))
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 70),
+            contentRect: NSRect(x: 0, y: 0, width: 96, height: 96),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -80,20 +71,19 @@ final class FlipOverlay {
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = false  // SwiftUI shadow draws inside the rounded card
+        panel.hasShadow = false
         panel.ignoresMouseEvents = true
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         window = panel
     }
 
-    /// Bottom-centre of the main screen, slightly above the Dock area.
     private func position(_ panel: NSPanel?) {
         guard let panel, let screen = NSScreen.main else { return }
         let visible = screen.visibleFrame
         let size = panel.frame.size
         let x = visible.midX - size.width / 2
-        let y = visible.minY + 80
+        let y = visible.minY + 100
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 }
@@ -101,15 +91,19 @@ final class FlipOverlay {
 // MARK: - State
 
 private final class FlipOverlayState: ObservableObject {
-    @Published var content: OverlayContent?
-}
+    /// Bumped every time we want to (re)play the animation. The view
+    /// observes this and resets its internal animation phase to "intro".
+    @Published var animationToken: Int = 0
+    @Published var shouldRemainHidden: Bool = true
 
-private struct OverlayContent: Equatable {
-    enum Mode { case flip, capsFix, rollback }
+    func bumpToken() {
+        shouldRemainHidden = false
+        animationToken &+= 1
+    }
 
-    let original: String
-    let converted: String
-    let mode: Mode
+    func requestFadeOut() {
+        shouldRemainHidden = true
+    }
 }
 
 // MARK: - View
@@ -117,57 +111,53 @@ private struct OverlayContent: Equatable {
 private struct FlipOverlayView: View {
     @ObservedObject var state: FlipOverlayState
 
+    @State private var scale: CGFloat = 0.4
+    @State private var rotation: Double = 0
+    @State private var yOffset: CGFloat = 12
+    @State private var opacity: Double = 0
+
     var body: some View {
-        ZStack {
-            if let content = state.content {
-                card(for: content)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+        Image(nsImage: appIcon)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: 80, height: 80)
+            .scaleEffect(scale)
+            .offset(y: yOffset)
+            .rotation3DEffect(.degrees(rotation), axis: (x: 0, y: 1, z: 0))
+            .opacity(opacity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onChange(of: state.animationToken) { _ in playIntro() }
+            .onChange(of: state.shouldRemainHidden) { hidden in
+                if hidden { playOutro() }
             }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.easeInOut(duration: 0.25), value: state.content)
+            .onAppear { playIntro() }
     }
 
-    @ViewBuilder
-    private func card(for content: OverlayContent) -> some View {
-        HStack(spacing: 10) {
-            switch content.mode {
-            case .flip:
-                Text(content.original)
-                    .strikethrough(color: .secondary)
-                    .foregroundColor(.secondary)
-                Image(systemName: "arrow.right")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                Text(content.converted)
-                    .fontWeight(.semibold)
-            case .capsFix:
-                Image(systemName: "textformat")
-                    .foregroundColor(.secondary)
-                Text(content.original)
-                    .strikethrough(color: .secondary)
-                    .foregroundColor(.secondary)
-                Image(systemName: "arrow.right")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                Text(content.converted)
-                    .fontWeight(.semibold)
-            case .rollback:
-                Image(systemName: "arrow.uturn.backward")
-                    .foregroundColor(.orange)
-                Text("Reverted")
-                    .foregroundColor(.secondary)
-                Text(content.converted)
-                    .fontWeight(.semibold)
-            }
+    private var appIcon: NSImage {
+        NSImage(named: "AppIcon") ?? NSApp.applicationIconImage ?? NSImage()
+    }
+
+    private func playIntro() {
+        // Reset to a slightly-low, small, mid-rotation start state.
+        scale = 0.4
+        rotation = 0
+        yOffset = 12
+        opacity = 0
+
+        // Spring up, full flip on Y.
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.6)) {
+            scale = 1.0
+            rotation = 360
+            yOffset = 0
+            opacity = 1
         }
-        .font(.system(size: 14, design: .monospaced))
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
-        )
+    }
+
+    private func playOutro() {
+        withAnimation(.easeOut(duration: 0.25)) {
+            opacity = 0
+            scale = 0.85
+            yOffset = 6
+        }
     }
 }

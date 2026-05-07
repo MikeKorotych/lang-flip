@@ -186,7 +186,7 @@ private struct BehaviorTab: View {
             }
             Section {
                 Toggle("Show flip overlay", isOn: $showOverlay)
-                helpText("A small HUD-style banner pops up at the bottom of the screen when LangFlip rewrites text, showing what changed. Disappears after ~1.5 s.")
+                helpText("A small confirmation flourish — the LangFlip icon bounces up at the bottom of the screen and does a 360° flip — every time the app rewrites text. Off by default; turn on if you want a visible cue every flip.")
             }
             Section {
                 Toggle("Pause auto-flip in fullscreen apps", isOn: $suppressInFullscreen)
