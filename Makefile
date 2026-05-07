@@ -8,6 +8,10 @@ EXEC := $(BUILD_DIR)/$(APP_NAME)
 # this filename; SPM produces "lang-flip_LangFlip.bundle" because the
 # package is "lang-flip" and the target is "LangFlip".
 RES_BUNDLE := $(BUILD_DIR)/lang-flip_LangFlip.bundle
+# Sparkle ships as a binary xcframework via SPM. The framework's slice
+# for the host arch ends up here after `swift build`. We copy the
+# framework into Contents/Frameworks/ at app-bundle assembly time.
+SPARKLE_FW := .build/arm64-apple-macosx/release/Sparkle.framework
 
 # Read version from Info.plist so it's the single source of truth.
 VERSION := $(shell /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)
@@ -30,7 +34,8 @@ NOTARY_PROFILE := lang-flip-notarize
 ENTITLEMENTS := Resources/lang-flip.entitlements
 
 .PHONY: all build app clean run install dicts icon \
-        sign dmg notarize-app notarize-dmg staple staple-app release version
+        sign dmg notarize-app notarize-dmg staple staple-app release version \
+        sign-update
 
 all: app
 
@@ -56,7 +61,17 @@ app: build
 	@rm -rf $(APP_DIR)
 	@mkdir -p $(APP_DIR)/Contents/MacOS
 	@mkdir -p $(APP_DIR)/Contents/Resources
+	@mkdir -p $(APP_DIR)/Contents/Frameworks
 	@cp $(EXEC) $(APP_DIR)/Contents/MacOS/$(APP_NAME)
+	# Sparkle ships as a binary xcframework. Copy the macOS slice into
+	# Contents/Frameworks and add the standard Apple-bundle rpath to the
+	# executable so dyld can find it at @executable_path/../Frameworks.
+	# (SPM-linked binaries default to @loader_path, which is MacOS/.)
+	@if [ -d $(SPARKLE_FW) ]; then \
+		cp -R $(SPARKLE_FW) $(APP_DIR)/Contents/Frameworks/; \
+		install_name_tool -add_rpath "@executable_path/../Frameworks" \
+			$(APP_DIR)/Contents/MacOS/$(APP_NAME) 2>/dev/null || true; \
+	fi
 	# Copy bundled dictionaries straight into Resources/Dictionaries
 	# rather than nesting them inside the SPM-generated
 	# lang-flip_LangFlip.bundle. That sub-bundle has no Info.plist
@@ -95,11 +110,32 @@ sign: app
 		exit 1; \
 	fi
 	@echo "→ Signing with: $(DEVELOPER_ID)"
+	# Sparkle ships .framework with its XPC services already signed by the
+	# Sparkle project (since 2.6). We only need to (re-)sign the framework
+	# wrapper itself before signing the host app — codesign refuses to
+	# embed an un-(re-)signed framework with our Developer ID.
+	@if [ -d $(APP_DIR)/Contents/Frameworks/Sparkle.framework ]; then \
+		codesign --force --options runtime --timestamp \
+			--sign "$(DEVELOPER_ID)" \
+			$(APP_DIR)/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc 2>/dev/null || true; \
+		codesign --force --options runtime --timestamp \
+			--sign "$(DEVELOPER_ID)" \
+			$(APP_DIR)/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc 2>/dev/null || true; \
+		codesign --force --options runtime --timestamp \
+			--sign "$(DEVELOPER_ID)" \
+			$(APP_DIR)/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate; \
+		codesign --force --options runtime --timestamp \
+			--sign "$(DEVELOPER_ID)" \
+			$(APP_DIR)/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app; \
+		codesign --force --options runtime --timestamp \
+			--sign "$(DEVELOPER_ID)" \
+			$(APP_DIR)/Contents/Frameworks/Sparkle.framework; \
+	fi
 	@codesign --force --options runtime --timestamp \
 		--entitlements $(ENTITLEMENTS) \
 		--sign "$(DEVELOPER_ID)" \
 		$(APP_DIR)
-	@codesign --verify --deep --strict --verbose=2 $(APP_DIR) 2>&1 | tail -3
+	@codesign --verify --strict --verbose=2 $(APP_DIR) 2>&1 | tail -3
 	@echo "✓ Signed $(APP_DIR)"
 
 # Build a drag-to-Applications DMG from whatever .app is currently in
@@ -160,6 +196,17 @@ notarize-dmg: dmg
 # Re-run if `make release` was interrupted while Apple was still processing
 # the notarization. Stapler can fetch the ticket from Apple any time after
 # notarization completes, even days later.
+# Print the sparkle:edSignature and length attributes for an existing
+# DMG so they can be pasted into docs/appcast.xml. Uses the EdDSA
+# private key in your login.keychain (created once with Sparkle's
+# generate_keys, paired with SUPublicEDKey in Info.plist).
+sign-update:
+	@if [ -z "$(DMG)" ]; then \
+		echo "Usage: make sign-update DMG=build/LangFlip-X.Y.Z.dmg"; \
+		exit 2; \
+	fi
+	./Scripts/sign-update.sh $(DMG)
+
 staple:
 	@xcrun stapler staple $(DMG_PATH)
 	@xcrun stapler validate $(DMG_PATH)

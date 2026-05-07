@@ -152,6 +152,58 @@ make release                              # build + sign + dmg + notarize + stap
 gh release create v0.2.0 build/LangFlip-0.2.0.dmg
 ```
 
+### Auto-update via Sparkle
+
+Released builds carry the Sparkle framework, so once a user has installed any
+v0.2.0+ they'll be offered new versions automatically. The maintainer flow per
+release:
+
+1. **One-time setup** — generate the EdDSA signing keypair (saved to your
+   login keychain):
+   ```sh
+   .build/artifacts/sparkle/Sparkle/bin/generate_keys
+   ```
+   The printed `SUPublicEDKey` is already in `Resources/Info.plist`. Generate
+   keys again only if you've lost the keychain entry — be aware that rotating
+   the public key invalidates *all* previously-shipped binaries' update path.
+
+2. **Enable GitHub Pages** for `main` branch, `/docs` folder
+   (Settings → Pages). The appcast then lives at
+   `https://mikekorotych.github.io/lang-flip/appcast.xml`, which is the
+   `SUFeedURL` baked into Info.plist.
+
+3. **Per release** — after `make release` produces a notarized DMG:
+   ```sh
+   make sign-update DMG=build/LangFlip-0.x.0.dmg
+   # Prints: sparkle:edSignature="…" length="…"
+   ```
+   Open `docs/appcast.xml` and prepend a new `<item>` (template at the bottom
+   of this section). Commit, push, then `gh release create` to publish the DMG.
+   GitHub Pages picks up the new appcast within a minute.
+
+4. **Verify** by mounting the DMG, copying `LangFlip.app` to `/Applications/`,
+   launching, and clicking **Check for Updates…** in the menubar. Sparkle
+   should report "you have the latest" if the appcast has no item newer than
+   the running version.
+
+`<item>` template (newest entry goes near the top of `<channel>`):
+
+```xml
+<item>
+  <title>v0.x.0</title>
+  <pubDate>Thu, 8 May 2026 12:00:00 +0000</pubDate>
+  <sparkle:version>0.x.0</sparkle:version>
+  <sparkle:shortVersionString>0.x.0</sparkle:shortVersionString>
+  <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+  <description><![CDATA[<h2>What's new</h2><ul><li>…</li></ul>]]></description>
+  <enclosure
+      url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.x.0/LangFlip-0.x.0.dmg"
+      length="…"
+      type="application/octet-stream"
+      sparkle:edSignature="…" />
+</item>
+```
+
 ### Without a Developer Account
 
 You can still ship something. Skip `sign` / `notarize`, run only:

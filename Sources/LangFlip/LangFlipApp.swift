@@ -24,6 +24,9 @@ struct LangFlipApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menubar: MenubarController?
     private var tap: EventTap?
+    /// Eager-init the updater so Sparkle starts its scheduled-check timer
+    /// immediately. Held by the delegate so it lives for the app's lifetime.
+    private let updater = Updater.shared
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Status-bar accessory: no Dock icon, no main menu.

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sparkle update feed for LangFlip.
+
+  Hosted by GitHub Pages from the /docs folder of the main branch:
+      https://mikekorotych.github.io/lang-flip/appcast.xml
+
+  Each release adds an <item> entry near the top of <channel>. Use
+      make sign-update DMG=build/LangFlip-X.Y.Z.dmg
+  to print the sparkle:edSignature + length values for the enclosure.
+
+  Sparkle in the running app verifies the signature against the
+  SUPublicEDKey baked into Info.plist. The matching private key lives
+  in the maintainer's login.keychain (created once via
+  Scripts/.../generate_keys).
+-->
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>LangFlip</title>
+    <link>https://github.com/MikeKorotych/lang-flip</link>
+    <description>LangFlip update feed</description>
+    <language>en</language>
+
+    <!-- Releases — newest first. Add a new <item> when shipping. -->
+  </channel>
+</rss>

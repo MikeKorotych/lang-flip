@@ -11,6 +11,7 @@ final class MenubarController: NSObject {
     private let enabledItem = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
     private let autoFlipItem = NSMenuItem(title: "Auto-flip on word boundary", action: #selector(toggleAutoFlip), keyEquivalent: "")
     private let prefsItem = NSMenuItem(title: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",")
+    private let updatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     private let quitItem = NSMenuItem(title: "Quit LangFlip", action: #selector(quit), keyEquivalent: "q")
 
     override init() {
@@ -25,12 +26,14 @@ final class MenubarController: NSObject {
         enabledItem.target = self
         autoFlipItem.target = self
         prefsItem.target = self
+        updatesItem.target = self
         quitItem.target = self
 
         menu.addItem(enabledItem)
         menu.addItem(autoFlipItem)
         menu.addItem(.separator())
         menu.addItem(prefsItem)
+        menu.addItem(updatesItem)
         menu.addItem(.separator())
         menu.addItem(quitItem)
 
@@ -72,6 +75,10 @@ final class MenubarController: NSObject {
 
     @objc private func openPreferences() {
         PreferencesWindowController.shared.show()
+    }
+
+    @objc private func checkForUpdates() {
+        Updater.shared.checkForUpdates()
     }
 
     @objc private func quit() {

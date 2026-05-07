@@ -27,5 +27,23 @@
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>Open source — MIT.</string>
+
+    <!-- Sparkle auto-update settings.
+         SUFeedURL: appcast.xml served from GitHub Pages (/docs folder
+         on main, enabled in repo Settings → Pages).
+         SUPublicEDKey: paired with the private signing key in our
+         Keychain login keychain (created by Sparkle's generate_keys).
+         Updates whose `sparkle:edSignature` doesn't match this key are
+         rejected even if their notarization is valid. -->
+    <key>SUFeedURL</key>
+    <string>https://mikekorotych.github.io/lang-flip/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>ztKlXAVsoeyWLxCX0oC8qklvfFb4ic/Vvo3aA6uBqGA=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
 </dict>
 </plist>
