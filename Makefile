@@ -102,10 +102,19 @@ sign: app
 	@codesign --verify --deep --strict --verbose=2 $(APP_DIR) 2>&1 | tail -3
 	@echo "✓ Signed $(APP_DIR)"
 
-# Build a drag-to-Applications DMG. Works without a Developer ID, but
-# the .app inside should already be signed for an end user not to see
-# Gatekeeper warnings.
-dmg: app
+# Build a drag-to-Applications DMG from whatever .app is currently in
+# build/. Deliberately NOT a target dep on `app` — the release pipeline
+# (sign → dmg → notarize) needs the Developer-ID-signed .app to survive
+# into the DMG, but `make app` ad-hoc-resigns the bundle and would
+# clobber the Developer ID signature.
+#
+# Standalone unsigned use: `make app dmg` (two targets).
+# Signed release use:       `make release` (sign first, then dmg).
+dmg:
+	@if [ ! -d $(APP_DIR) ]; then \
+		echo "✗ $(APP_DIR) does not exist. Run \`make app\` (unsigned) or \`make sign\` (signed) first."; \
+		exit 1; \
+	fi
 	@rm -f $(DMG_PATH)
 	@create-dmg \
 		--volname "LangFlip" \
