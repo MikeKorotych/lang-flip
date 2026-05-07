@@ -38,15 +38,30 @@ final class AutoFlip {
     }
 
     private static func loadResource(name: String, fallback: [String]) -> Set<String> {
+        // Production .app bundle: the Makefile drops the txt files into
+        // .app/Contents/Resources/Dictionaries/ so they don't need to live
+        // inside an SPM-generated .bundle wrapper (which has no Info.plist
+        // and therefore makes codesign refuse to sign the .app).
+        if let url = Bundle.main.url(forResource: name, withExtension: "txt", subdirectory: "Dictionaries"),
+           let words = readWordList(at: url) {
+            return words
+        }
+        // Dev runs (swift run / swift test): SPM resource bundle next to
+        // the executable. Bundle.module finds it.
         if let url = Bundle.module.url(forResource: name, withExtension: "txt", subdirectory: "Dictionaries"),
-           let raw = try? String(contentsOf: url, encoding: .utf8) {
-            let words = raw.split(whereSeparator: { $0.isNewline })
-            return Set(words.map { String($0) })
+           let words = readWordList(at: url) {
+            return words
         }
         FileHandle.standardError.write(Data(
             "lang-flip: \(name).txt not bundled — using fallback (\(fallback.count) words). Run Scripts/build-dicts.sh to install the full list.\n".utf8
         ))
         return Set(fallback.map { $0.lowercased() })
+    }
+
+    private static func readWordList(at url: URL) -> Set<String>? {
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        let words = raw.split(whereSeparator: { $0.isNewline })
+        return Set(words.map { String($0) })
     }
 
     /// Returns target layout if we should auto-flip; nil otherwise.

@@ -57,8 +57,16 @@ app: build
 	@mkdir -p $(APP_DIR)/Contents/MacOS
 	@mkdir -p $(APP_DIR)/Contents/Resources
 	@cp $(EXEC) $(APP_DIR)/Contents/MacOS/$(APP_NAME)
-	@if [ -d $(RES_BUNDLE) ]; then \
-		cp -R $(RES_BUNDLE) $(APP_DIR)/Contents/MacOS/; \
+	# Copy bundled dictionaries straight into Resources/Dictionaries
+	# rather than nesting them inside the SPM-generated
+	# lang-flip_LangFlip.bundle. That sub-bundle has no Info.plist
+	# (it's a plain data folder named with .bundle suffix), which
+	# makes codesign refuse to sign the .app for distribution.
+	# AutoFlip.loadResource looks here first, falls back to
+	# Bundle.module for dev runs from .build/release.
+	@if [ -d $(RES_BUNDLE)/Dictionaries ]; then \
+		mkdir -p $(APP_DIR)/Contents/Resources/Dictionaries; \
+		cp $(RES_BUNDLE)/Dictionaries/*.txt $(APP_DIR)/Contents/Resources/Dictionaries/; \
 	fi
 	@cp Resources/Info.plist $(APP_DIR)/Contents/Info.plist
 	@if [ -f Resources/AppIcon.icns ]; then \
@@ -123,9 +131,20 @@ notarize: dmg
 	@xcrun stapler validate $(DMG_PATH)
 	@echo "✓ Notarized: $(DMG_PATH)"
 
+# Re-run if `make release` was interrupted while Apple was still processing
+# the notarization. Stapler can fetch the ticket from Apple any time after
+# notarization completes, even days later.
 staple:
 	@xcrun stapler staple $(DMG_PATH)
 	@xcrun stapler validate $(DMG_PATH)
+	@echo "✓ Stapled: $(DMG_PATH)"
+
+# Useful for re-stapling the .app after a cached notarization succeeds, or
+# for verifying things end-to-end without rebuilding.
+staple-app: app
+	@xcrun stapler staple $(APP_DIR)
+	@xcrun stapler validate $(APP_DIR)
+	@echo "✓ Stapled: $(APP_DIR)"
 
 # One-shot: build → sign .app → make DMG → notarize → staple. The
 # resulting DMG is fit to publish on GitHub Releases.
