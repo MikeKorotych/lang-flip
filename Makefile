@@ -30,7 +30,7 @@ NOTARY_PROFILE := lang-flip-notarize
 ENTITLEMENTS := Resources/lang-flip.entitlements
 
 .PHONY: all build app clean run install dicts icon \
-        sign dmg notarize staple release version
+        sign dmg notarize-app notarize-dmg staple staple-app release version
 
 all: app
 
@@ -128,14 +128,31 @@ dmg:
 		>/dev/null
 	@echo "✓ $(DMG_PATH) ($$(du -h $(DMG_PATH) | awk '{print $$1}'))"
 
-# Submit the DMG to Apple for notarization, wait for the result, then
-# staple the ticket so end users don't need internet on first launch.
-notarize: dmg
+# Notarize the .app and embed the ticket directly into the bundle.
+# Stapling the .app (rather than only the DMG) means the ticket
+# travels with it: drag from DMG to /Applications offline and the
+# first launch still works without an internet round-trip.
+notarize-app: sign
+	@echo "→ Zipping $(APP_DIR) for notarytool…"
+	@ditto -c -k --keepParent $(APP_DIR) build/$(APP_NAME)-notarize.zip
+	@echo "→ Submitting to Apple notarytool (1–15 min)…"
+	@xcrun notarytool submit build/$(APP_NAME)-notarize.zip \
+		--keychain-profile $(NOTARY_PROFILE) \
+		--wait
+	@rm -f build/$(APP_NAME)-notarize.zip
+	@echo "→ Stapling ticket onto $(APP_DIR)…"
+	@xcrun stapler staple $(APP_DIR)
+	@xcrun stapler validate $(APP_DIR)
+	@echo "✓ Notarized: $(APP_DIR)"
+
+# Legacy alias kept for muscle memory: submits the DMG instead and
+# staples the DMG. End users dragging the .app *out* of the DMG won't
+# get a stapled .app this way — prefer notarize-app.
+notarize-dmg: dmg
 	@echo "→ Submitting $(DMG_PATH) to Apple notarytool…"
 	@xcrun notarytool submit $(DMG_PATH) \
 		--keychain-profile $(NOTARY_PROFILE) \
 		--wait
-	@echo "→ Stapling ticket to $(DMG_PATH)…"
 	@xcrun stapler staple $(DMG_PATH)
 	@xcrun stapler validate $(DMG_PATH)
 	@echo "✓ Notarized: $(DMG_PATH)"
@@ -155,9 +172,10 @@ staple-app: app
 	@xcrun stapler validate $(APP_DIR)
 	@echo "✓ Stapled: $(APP_DIR)"
 
-# One-shot: build → sign .app → make DMG → notarize → staple. The
-# resulting DMG is fit to publish on GitHub Releases.
-release: sign dmg notarize
+# One-shot: sign .app → notarize + staple .app → wrap into DMG.
+# The resulting DMG contains a stapled .app (offline first launch
+# works) and is fit to publish on GitHub Releases.
+release: notarize-app dmg
 	@echo
 	@echo "✓ Release artifact ready: $(DMG_PATH)"
 	@echo "  Next: gh release create v$(VERSION) $(DMG_PATH)"
