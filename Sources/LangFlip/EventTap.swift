@@ -160,6 +160,7 @@ final class EventTap {
                        let fixed = DoubleCapsFix.correction(for: word) {
                         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: double-caps fix '\(word)' → '\(fixed)'\n".utf8)) }
                         rewriteCompletedWord(originalLength: word.count, replacement: fixed)
+                        FlipOverlay.shared.showCapsFix(original: word, corrected: fixed)
                         word = fixed
                     }
 
@@ -205,6 +206,7 @@ final class EventTap {
         for ch in req.originalWord { postUnicode(String(ch)) }
         postUnicode(" ")
         Sound.playFlip()
+        FlipOverlay.shared.showRollback(restored: req.originalWord)
         // Rebuild buffer to reflect the just-typed word so a subsequent
         // boundary doesn't re-fire auto-flip on stale state.
         buffer.reset()
@@ -445,6 +447,7 @@ final class EventTap {
                 InputSource.switchTo(to)
                 self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
                 Sound.playFlip()
+                FlipOverlay.shared.showFlip(original: text, converted: converted)
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
                     snapshot.restore(to: pb)
@@ -468,6 +471,7 @@ final class EventTap {
         for ch in converted { postUnicode(String(ch)) }
         postUnicode(" ")
         Sound.playFlip()
+        FlipOverlay.shared.showFlip(original: completedWord, converted: converted)
 
         // Open the disagreement-watch window so the user can backspace this
         // away and have us learn from it.
@@ -494,6 +498,7 @@ final class EventTap {
         InputSource.switchTo(to)
         for ch in converted { postUnicode(String(ch)) }
         Sound.playFlip()
+        FlipOverlay.shared.showFlip(original: word, converted: converted)
 
         buffer.reset()
         buffer.feed(converted)

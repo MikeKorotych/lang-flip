@@ -172,6 +172,7 @@ private struct BehaviorTab: View {
     @AppStorage("lf.autoFlip") private var autoFlip = true
     @AppStorage("lf.doubleCapsFix") private var doubleCapsFix = true
     @AppStorage("lf.suppressInFullscreen") private var suppressInFullscreen = false
+    @AppStorage("lf.showOverlay") private var showOverlay = true
 
     var body: some View {
         Form {
@@ -182,6 +183,10 @@ private struct BehaviorTab: View {
             Section {
                 Toggle("Fix sticky-shift typos (WOrld → World)", isOn: $doubleCapsFix)
                 helpText("Catches the classic two-uppercase mistake. Only applied when the corrected form is a real dictionary word, so acronyms like OAuth aren't mangled.")
+            }
+            Section {
+                Toggle("Show flip overlay", isOn: $showOverlay)
+                helpText("A small HUD-style banner pops up at the bottom of the screen when LangFlip rewrites text, showing what changed. Disappears after ~1.5 s.")
             }
             Section {
                 Toggle("Pause auto-flip in fullscreen apps", isOn: $suppressInFullscreen)

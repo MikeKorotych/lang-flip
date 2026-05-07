@@ -16,6 +16,7 @@ final class Settings {
         static let doubleCapsFix = "lf.doubleCapsFix"
         static let soundEnabled = "lf.soundEnabled"
         static let onboardingDone = "lf.onboardingDone"
+        static let showOverlay = "lf.showOverlay"
     }
 
     var enabled: Bool {
@@ -60,6 +61,14 @@ final class Settings {
     var onboardingDone: Bool {
         get { defaults.object(forKey: Keys.onboardingDone) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.onboardingDone) }
+    }
+
+    /// Floating HUD-style overlay that pops at the bottom of the screen
+    /// for ~1.5 s on every rewrite, showing "before → after". On by
+    /// default — silent feedback that builds trust on first use.
+    var showOverlay: Bool {
+        get { defaults.object(forKey: Keys.showOverlay) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.showOverlay) }
     }
 
     /// Plays a short system tick on every text rewrite (auto-flip, manual
