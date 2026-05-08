@@ -631,6 +631,13 @@ final class EventTap {
     /// fixed result back in. Falls back to the mechanical flip path on
     /// any AI failure / unchanged / unsupported result so the user's
     /// gesture is never wasted.
+    ///
+    /// `targetNonEnglish` is **only** consumed by the mechanical-flip
+    /// fallback — the AI itself does not use it. The AI is given the
+    /// user's currently-active layout as a soft language hint instead
+    /// (see `AIFixRequest.activeLayout`); the configured non-English
+    /// target wouldn't make sense for a "fix everything" pass that may
+    /// produce text in any of EN / UK / RU.
     private func applyAIFixToSelection(
         text: String,
         snapshot: PasteboardSnapshot,
