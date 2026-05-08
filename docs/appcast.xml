@@ -24,5 +24,34 @@
     <language>en</language>
 
     <!-- Releases — newest first. Add a new <item> when shipping. -->
+
+    <item>
+      <title>v0.2.0</title>
+      <pubDate>Fri, 8 May 2026 18:00:00 +0000</pubDate>
+      <sparkle:version>0.2.0</sparkle:version>
+      <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>First public release</h2>
+        <p>
+          Auto-flip on the fly between EN ↔ UK ↔ RU. Manual hotkey via
+          double-tap Shift (configurable in Preferences). Selection mode
+          for fixing whole sentences. Self-learning Backspace.
+          Cross-layout letter fixes (ы↔і, э↔є). Sticky-shift correction.
+          Per-app blacklist + built-in silence in terminals and password
+          managers. Bouncy icon-flip overlay. Launch at login. Bundled
+          ~45 k UK and ~48 k RU dictionaries.
+        </p>
+        <p>
+          Signed with a Developer ID and notarized by Apple. Auto-update
+          via Sparkle from this point forward.
+        </p>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.0/LangFlip-0.2.0.dmg"
+        length="3794550"
+        type="application/octet-stream"
+        sparkle:edSignature="J1LW9gfgwn6XX+abcNDY+U0i4F1ZPi9nmFHGZVB1Z5mdcRdtwMt8iN2ErkZOx/4JU/9BLWt/X0XOWqOM0ip2BA==" />
+    </item>
   </channel>
 </rss>
