@@ -52,6 +52,28 @@ enum CrossLayoutFix {
         guard !word.isEmpty else { return nil }
         guard word.allSatisfy({ $0.isLetter || $0 == "'" || $0 == "-" }) else { return nil }
 
+        // Standalone-letter shortcut: a single "ы" or "э" between word
+        // boundaries is almost certainly a typo for "і" or "є" — neither
+        // ы nor э is a Russian word on its own, and the wrong-key pattern
+        // is overwhelming. We skip the dict check here because our
+        // bundled UK dictionary filters out 1-letter tokens during build,
+        // so isKnownWord("і") would falsely return false.
+        //
+        // The reverse — standalone "і" / "є" — is intentionally NOT
+        // shortcut-corrected, because both are real Ukrainian function
+        // words ("і" = and, "є" = is). Touching them would produce
+        // false positives.
+        if word.count == 1, let only = word.first {
+            let lowerOnly = Character(String(only).lowercased())
+            if let pair = pairs.first(where: { $0.ru == lowerOnly }) {
+                let mapped = only.isUppercase
+                    ? Character(String(pair.uk).uppercased())
+                    : pair.uk
+                return Correction(corrected: String(mapped), target: .uk)
+            }
+            return nil
+        }
+
         let lower = word.lowercased()
         let chars = Array(lower)
 
