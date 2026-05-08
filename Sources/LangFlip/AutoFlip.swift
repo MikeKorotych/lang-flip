@@ -123,6 +123,18 @@ final class AutoFlip {
             || ruCommon.contains(lowercased)
     }
 
+    /// Per-language lookups, used by CrossLayoutFix to disambiguate
+    /// words like "новій" that are real Ukrainian *and* whose RU
+    /// substitution ("новый") is real Russian. The bare isKnownWord
+    /// can't tell them apart.
+    func isKnownInUk(_ lowercased: String) -> Bool {
+        return ukCommon.contains(lowercased)
+    }
+
+    func isKnownInRu(_ lowercased: String) -> Bool {
+        return ruCommon.contains(lowercased)
+    }
+
     /// 2 = in dictionary, 1 = plausibly word-shaped, 0 = noise.
     private func score(_ word: String, in layout: Layout) -> Int {
         switch layout {

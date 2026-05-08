@@ -196,7 +196,7 @@ final class EventTap {
                     if Settings.shared.crossLayoutFix,
                        suppression == nil,
                        !BackspaceLearner.shared.isExcluded(word),
-                       let cross = CrossLayoutFix.correction(for: word) {
+                       let cross = CrossLayoutFix.correction(for: word, recentContext: buffer.recentHistory) {
                         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: cross-layout fix '\(word)' → '\(cross.corrected)' (\(cross.target))\n".utf8)) }
                         applyCrossLayoutFix(original: word, fix: cross)
                         word = cross.corrected

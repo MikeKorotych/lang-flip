@@ -48,7 +48,15 @@ enum CrossLayoutFix {
     /// Returns the corrected word and target layout, or nil if no swap
     /// applies. Caller is responsible for posting the rewrite + layout
     /// switch to the focused app.
-    static func correction(for word: String, autoFlip: AutoFlip = .shared) -> Correction? {
+    ///
+    /// `recentContext` is the buffer's recent-words history (most recent
+    /// last). Used to disambiguate words that are real in *both*
+    /// languages — see the cases at the bottom of this method.
+    static func correction(
+        for word: String,
+        recentContext: [String] = [],
+        autoFlip: AutoFlip = .shared
+    ) -> Correction? {
         guard !word.isEmpty else { return nil }
         guard word.allSatisfy({ $0.isLetter || $0 == "'" || $0 == "-" }) else { return nil }
 
@@ -77,16 +85,6 @@ enum CrossLayoutFix {
         let lower = word.lowercased()
         let chars = Array(lower)
 
-        // If the typed word is already a real word in any of our
-        // dictionaries, leave it alone. This is what blocks the
-        // oscillation case: "стороны" is a valid Russian word AND its
-        // UK substitution "сторони" is a valid Ukrainian word — without
-        // this check we'd flip "стороны → сторони → стороны → …" every
-        // time the user retypes either form.
-        if autoFlip.isKnownWord(lower) {
-            return nil
-        }
-
         // Decide direction by which side's exclusive letters appear. If
         // both sides' exclusive letters are present, the word is
         // genuinely mixed and we don't touch it.
@@ -94,25 +92,100 @@ enum CrossLayoutFix {
         let hasUkExclusive = chars.contains { ukOnlyLetters.contains($0) }
         guard hasRuExclusive != hasUkExclusive else { return nil }
 
+        // For each direction we ask three questions:
+        //   1. Is the candidate substitution a real word in the OTHER
+        //      language? If no → skip (substitution would be gibberish).
+        //   2. Is the original a real word in its OWN language? If no →
+        //      flip (typo for the other language's word).
+        //   3. Both are real → AMBIGUOUS. Inspect the recent buffer for
+        //      a clear language signal:
+        //         - context unmistakably Russian → flip toward Russian
+        //         - context unmistakably Ukrainian → flip toward Ukrainian
+        //         - context mixed / unknown → keep as-is (conservative)
+        //
+        // This is the path that lets "новій" become "новый" inside an
+        // otherwise-Russian sentence ("Это новій iPhone") while leaving
+        // it alone inside an otherwise-Ukrainian sentence ("у новій
+        // книзі").
         if hasRuExclusive {
-            // Word reads as Russian but might be a Ukrainian word with
-            // one ы / э slip. Substitute toward UK.
             guard let candidate = substitute(word, mode: .ruToUk) else { return nil }
-            // After substitution every char must be a valid UK letter.
             guard candidate.lowercased().allSatisfy({ ukAlphabet.contains($0) }) else { return nil }
-            // Don't bother proposing a fix when the substitution is a no-op.
             guard candidate != word else { return nil }
-            // Only accept if the result is a real Ukrainian word.
-            guard autoFlip.isKnownWord(candidate.lowercased()) else { return nil }
-            return Correction(corrected: candidate, target: .uk)
+            let candidateLower = candidate.lowercased()
+            guard autoFlip.isKnownInUk(candidateLower) else { return nil }
+
+            let originalIsRussian = autoFlip.isKnownInRu(lower)
+            if !originalIsRussian {
+                return Correction(corrected: candidate, target: .uk)
+            }
+            // Ambiguous: original is real RU, candidate is real UK.
+            switch contextBias(recentContext: recentContext, autoFlip: autoFlip) {
+            case .ukrainian: return Correction(corrected: candidate, target: .uk)
+            case .russian, .neutral: return nil
+            }
         } else {
-            // Mirror: UK-exclusive letters → try Russian dictionary.
             guard let candidate = substitute(word, mode: .ukToRu) else { return nil }
             guard candidate.lowercased().allSatisfy({ ruAlphabet.contains($0) }) else { return nil }
             guard candidate != word else { return nil }
-            guard autoFlip.isKnownWord(candidate.lowercased()) else { return nil }
-            return Correction(corrected: candidate, target: .ru)
+            let candidateLower = candidate.lowercased()
+            guard autoFlip.isKnownInRu(candidateLower) else { return nil }
+
+            let originalIsUkrainian = autoFlip.isKnownInUk(lower)
+            if !originalIsUkrainian {
+                return Correction(corrected: candidate, target: .ru)
+            }
+            // Ambiguous: original is real UK, candidate is real RU.
+            switch contextBias(recentContext: recentContext, autoFlip: autoFlip) {
+            case .russian: return Correction(corrected: candidate, target: .ru)
+            case .ukrainian, .neutral: return nil
+            }
         }
+    }
+
+    private enum ContextBias { case russian, ukrainian, neutral }
+
+    /// Inspect the recent buffer history for a single-language bias.
+    /// Counts words that are exclusively in the UK or RU dictionary
+    /// (not shared cognates, not unknown) — this gives a strong
+    /// "the user is writing language X" signal even for words that
+    /// don't have any layout-exclusive letters.
+    ///
+    /// Two layers:
+    ///   1. Dict-based: count words that are exclusively in one
+    ///      language's bundled dictionary.
+    ///   2. Letter-based fallback: count language-exclusive letters
+    ///      (ы / э / ё / ъ for RU, і / є / ї / ґ for UK) across the
+    ///      context. The OpenSubtitles UK dict is contaminated with
+    ///      Russian forms, so a dict-only check often misses obvious
+    ///      Russian context like "Я хотел купить …". Letter signal
+    ///      catches it whenever ANY word has an unambiguous letter.
+    ///
+    /// Either signal is enough to bias — but only when it's
+    /// uncontested by a same-strength signal in the other direction.
+    /// "Uncontested" is what keeps genuinely-mixed paragraphs neutral.
+    private static func contextBias(recentContext: [String], autoFlip: AutoFlip) -> ContextBias {
+        var ruDictOnly = 0
+        var ukDictOnly = 0
+        var ruLetters = 0
+        var ukLetters = 0
+        for word in recentContext {
+            let lower = word.lowercased()
+            let inUk = autoFlip.isKnownInUk(lower)
+            let inRu = autoFlip.isKnownInRu(lower)
+            if inUk && !inRu { ukDictOnly += 1 }
+            else if !inUk && inRu { ruDictOnly += 1 }
+            for ch in lower {
+                if ruOnlyLetters.contains(ch) { ruLetters += 1 }
+                else if ukOnlyLetters.contains(ch) { ukLetters += 1 }
+            }
+        }
+        // Strong signal: dictionary exclusivity.
+        if ruDictOnly >= 1 && ukDictOnly == 0 { return .russian }
+        if ukDictOnly >= 1 && ruDictOnly == 0 { return .ukrainian }
+        // Fallback: language-exclusive letters in any neighbouring word.
+        if ruLetters >= 1 && ukLetters == 0 { return .russian }
+        if ukLetters >= 1 && ruLetters == 0 { return .ukrainian }
+        return .neutral
     }
 
     /// Per-character pair substitution. Preserves the case of the
