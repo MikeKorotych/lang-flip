@@ -15,6 +15,7 @@ struct PreferencesView: View {
         case general = "General"
         case languages = "Languages"
         case behavior = "Behavior"
+        case models = "AI"
         case apps = "Apps"
         case about = "About"
 
@@ -43,6 +44,7 @@ struct PreferencesView: View {
                 case .general:   GeneralTab()
                 case .languages: LanguagesTab()
                 case .behavior:  BehaviorTab()
+                case .models:    ModelsTab()
                 case .apps:      AppsTab()
                 case .about:     AboutTab()
                 }
@@ -222,6 +224,69 @@ private struct BehaviorTab: View {
             Section {
                 Toggle("Pause auto-flip in fullscreen apps", isOn: $suppressInFullscreen)
                 helpText("Useful for games and video players. Off by default — many users want flipping to keep working in a fullscreen browser or note app.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    @ViewBuilder
+    private func helpText(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+// MARK: - Models (AI)
+
+private struct ModelsTab: View {
+    @AppStorage("lf.aiMode") private var aiMode = AIMode.off.rawValue
+    @AppStorage("lf.activeModelID") private var activeModelID = ""
+
+    var body: some View {
+        Form {
+            Section("Mode") {
+                Picker("AI assistant", selection: $aiMode) {
+                    ForEach(AIMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+                helpText("AI is opt-in. When enabled, the rules engine asks an on-device model for a second opinion before auto-flipping. Apple Intelligence requires macOS 26 or later; on older systems it falls back to off until you pick a downloadable model.")
+            }
+
+            if AIMode(rawValue: aiMode) == .bundledModel {
+                Section("Downloadable models") {
+                    ForEach(ModelCatalog.all) { model in
+                        HStack(alignment: .firstTextBaseline) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(model.displayName).font(.body)
+                                Text(model.summary)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Text(activeModelID == model.id ? "Active" : "Available")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Button(activeModelID == model.id ? "Active" : "Download") {
+                                // Sprint D will wire this to ModelDownloader.
+                                activeModelID = model.id
+                            }
+                            .controlSize(.small)
+                            .disabled(activeModelID == model.id)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    helpText("Models live in ~/Library/Application Support/LangFlip/Models/. Download is verified against an EdDSA signature before installation. (Downloader lands in Sprint D — for now this is UI scaffolding only.)")
+                }
+            }
+
+            Section("Privacy") {
+                Text("Everything runs on your Mac. No text is ever sent to a server, with or without AI. Disable any time by switching the mode above to Off.")
+                    .font(.callout)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .formStyle(.grouped)

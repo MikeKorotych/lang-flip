@@ -61,6 +61,8 @@ final class Settings {
         static let showOverlay = "lf.showOverlay"
         static let crossLayoutFix = "lf.crossLayoutFix"
         static let hotkeyPreset = "lf.hotkeyPreset"
+        static let aiMode = "lf.aiMode"
+        static let activeModelID = "lf.activeModelID"
     }
 
     var enabled: Bool {
@@ -121,6 +123,27 @@ final class Settings {
     var soundEnabled: Bool {
         get { defaults.object(forKey: Keys.soundEnabled) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.soundEnabled) }
+    }
+
+    /// Optional AI assistant mode. `.off` keeps the app entirely rules-
+    /// based (default and minimum-surprise behaviour); `.appleFoundation`
+    /// uses the macOS-26 system model; `.bundledModel` runs a downloaded
+    /// MLX model whose identifier is in `activeModelID`.
+    var aiMode: AIMode {
+        get {
+            guard let raw = defaults.string(forKey: Keys.aiMode),
+                  let value = AIMode(rawValue: raw)
+            else { return .off }
+            return value
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.aiMode) }
+    }
+
+    /// When `aiMode == .bundledModel`, identifies which catalog entry to
+    /// load. nil before the first download. See `ModelCatalog`.
+    var activeModelID: String? {
+        get { defaults.string(forKey: Keys.activeModelID) }
+        set { defaults.set(newValue, forKey: Keys.activeModelID) }
     }
 
     /// Which gesture should trigger a flip. Default `.doubleShift` keeps
