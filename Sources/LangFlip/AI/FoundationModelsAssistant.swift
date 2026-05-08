@@ -62,6 +62,29 @@ final class FoundationModelsAssistant: AIAssistant {
         }
     }
 
+    func fixSelection(_ input: AIFixRequest, completion: @escaping (AIFixResult) -> Void) {
+        guard isReady else {
+            completion(.unsupported)
+            return
+        }
+        let prompt = Self.buildFixSelectionPrompt(input: input)
+        runInference(prompt: prompt) { result in
+            switch result {
+            case .none:
+                completion(.failed(reason: "model unavailable"))
+            case .some(let text):
+                let trimmed = Self.unwrapModelOutput(text)
+                if trimmed.isEmpty {
+                    completion(.failed(reason: "empty response"))
+                } else if trimmed == input.text {
+                    completion(.unchanged)
+                } else {
+                    completion(.fixed(trimmed))
+                }
+            }
+        }
+    }
+
     // MARK: - Inference
 
     /// Run a single one-shot prompt with timeout. Calls completion with
@@ -118,6 +141,54 @@ final class FoundationModelsAssistant: AIAssistant {
         Text:
         \(input.text)
         """
+    }
+
+    private static func buildFixSelectionPrompt(input: AIFixRequest) -> String {
+        let lang = input.activeLayout.map { $0.displayName } ?? "the user's intended language"
+        return """
+        You are a Mac text-fixing utility. The user selected a chunk of text that may contain a mix of issues:
+          • typos and grammar mistakes
+          • text accidentally typed in the wrong keyboard layout (e.g. Cyrillic typed on a Latin keyboard or vice-versa, producing apparent gibberish)
+          • mid-sentence layout flips that left a word or two in the wrong script
+          • inconsistent punctuation or spacing
+
+        Fix everything you can while preserving the user's meaning, tone, and the language they were trying to write in. If the entire text is gibberish from a wrong-layout typing session, reflow it to what the keystrokes would have produced on \(lang). If only a few words are wrong-layout, repair them in place.
+
+        Output ONLY the corrected text. No explanation, no quotes, no preamble, no trailing commentary.
+
+        Selected text:
+        \(input.text)
+        """
+    }
+
+    /// Strip common LM artefacts: leading/trailing whitespace, accidental
+    /// surrounding quotes ("…", '…', “…”), markdown code fences. Models
+    /// occasionally wrap answers despite "no quotes" instructions.
+    private static func unwrapModelOutput(_ raw: String) -> String {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Strip code fences ```…```
+        if s.hasPrefix("```") {
+            if let end = s.range(of: "```", range: s.index(s.startIndex, offsetBy: 3)..<s.endIndex) {
+                s = String(s[s.index(s.startIndex, offsetBy: 3)..<end.lowerBound])
+                // First line might be a language tag like "text" or "en".
+                if let nl = s.firstIndex(of: "\n"), s[..<nl].count <= 12 {
+                    s = String(s[s.index(after: nl)...])
+                }
+            }
+            s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // Strip surrounding quotes if both ends match.
+        let quotePairs: [(Character, Character)] = [
+            ("\"", "\""), ("'", "'"), ("\u{201C}", "\u{201D}"), ("\u{00AB}", "\u{00BB}")
+        ]
+        for (l, r) in quotePairs {
+            if s.count >= 2, s.first == l, s.last == r {
+                s = String(s.dropFirst().dropLast())
+                s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                break
+            }
+        }
+        return s
     }
 
     // MARK: - Response parsing

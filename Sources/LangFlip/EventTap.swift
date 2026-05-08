@@ -547,6 +547,24 @@ final class EventTap {
                     return
                 }
 
+                // Sprint F: smart selection fix. If AI is on AND the
+                // toggle is enabled AND the assistant is ready, route
+                // the selection through a "fix everything" pass instead
+                // of the mechanical layout flip. On AI failure or
+                // .unsupported, fall through to the mechanical path so
+                // the user always gets *some* result from the gesture.
+                if Settings.shared.smartSelectionFix,
+                   Settings.shared.aiMode != .off,
+                   AIAssistantManager.shared.isReady {
+                    self.applyAIFixToSelection(
+                        text: text,
+                        snapshot: snapshot,
+                        targetNonEnglish: targetNonEnglish,
+                        completion: completion
+                    )
+                    return
+                }
+
                 guard let from = detectLayout(text) else {
                     if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: detectLayout returned nil — no alphabetic chars in '\(text.prefix(40))'\n".utf8)) }
                     snapshot.restore(to: pb)
@@ -583,6 +601,93 @@ final class EventTap {
                 completion(true)
             }
         }
+    }
+
+    /// Sprint F: send the captured selection to the AI and paste the
+    /// fixed result back in. Falls back to the mechanical flip path on
+    /// any AI failure / unchanged / unsupported result so the user's
+    /// gesture is never wasted.
+    private func applyAIFixToSelection(
+        text: String,
+        snapshot: PasteboardSnapshot,
+        targetNonEnglish: Layout,
+        completion: @escaping (Bool) -> Void
+    ) {
+        let pb = NSPasteboard.general
+        if debug {
+            FileHandle.standardError.write(Data("lang-flip[debug]: selection: AI fix-everything pass starting (\(text.count) chars)\n".utf8))
+        }
+        let activeLayout = InputSource.currentLayout()
+        let request = AIFixRequest(text: text, activeLayout: activeLayout)
+        AIAssistantManager.shared.current.fixSelection(request) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .fixed(let corrected):
+                    if self.debug {
+                        FileHandle.standardError.write(Data("lang-flip[debug]: selection AI fix \(text.count)→\(corrected.count) chars\n".utf8))
+                        FileHandle.standardError.write(Data("lang-flip[debug]:   in:  '\(text.prefix(80))\(text.count > 80 ? "…" : "")'\n".utf8))
+                        FileHandle.standardError.write(Data("lang-flip[debug]:   out: '\(corrected.prefix(80))\(corrected.count > 80 ? "…" : "")'\n".utf8))
+                    }
+                    pb.clearContents()
+                    pb.setString(corrected, forType: .string)
+                    self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+                    Sound.playFlip()
+                    FlipOverlay.shared.show()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
+                        snapshot.restore(to: pb)
+                    }
+                    completion(true)
+
+                case .unchanged:
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: AI returned unchanged → mechanical fallback\n".utf8)) }
+                    self.fallBackToMechanicalFlip(text: text, snapshot: snapshot, targetNonEnglish: targetNonEnglish, completion: completion)
+
+                case .unsupported:
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: assistant doesn't support fix → mechanical fallback\n".utf8)) }
+                    self.fallBackToMechanicalFlip(text: text, snapshot: snapshot, targetNonEnglish: targetNonEnglish, completion: completion)
+
+                case .failed(let reason):
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: AI failed (\(reason)) → mechanical fallback\n".utf8)) }
+                    self.fallBackToMechanicalFlip(text: text, snapshot: snapshot, targetNonEnglish: targetNonEnglish, completion: completion)
+                }
+            }
+        }
+    }
+
+    /// Mechanical-flip fallback used by `applyAIFixToSelection` when the
+    /// model declines or fails. Mirrors the inline mechanical path but
+    /// reuses the already-captured selection text — saves the second
+    /// Cmd+C round-trip.
+    private func fallBackToMechanicalFlip(
+        text: String,
+        snapshot: PasteboardSnapshot,
+        targetNonEnglish: Layout,
+        completion: @escaping (Bool) -> Void
+    ) {
+        let pb = NSPasteboard.general
+        guard let from = detectLayout(text) else {
+            snapshot.restore(to: pb)
+            completion(false)
+            return
+        }
+        let to = resolveTarget(source: from, configured: targetNonEnglish)
+        let converted = convert(text, from: from, to: to)
+        guard converted != text else {
+            snapshot.restore(to: pb)
+            completion(false)
+            return
+        }
+        pb.clearContents()
+        pb.setString(converted, forType: .string)
+        InputSource.switchTo(to)
+        postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+        Sound.playFlip()
+        FlipOverlay.shared.show()
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
+            snapshot.restore(to: pb)
+        }
+        completion(true)
     }
 
     // MARK: - Word-buffer flip (manual hotkey when no selection)

@@ -37,10 +37,20 @@ protocol AIAssistant: AnyObject {
     /// `.unsupported` so assistants that don't ship sentence rewrite
     /// (e.g. a tiny intent classifier) can opt out.
     func rewriteSentence(_ input: AIRewriteRequest, completion: @escaping (AIRewriteResult) -> Void)
+
+    /// "Fix everything" pass on a chunk of selected text — typos, grammar,
+    /// wrong-keyboard-layout gibberish, mixed scripts. Larger contract
+    /// than `rewriteSentence`: the model is allowed (encouraged) to make
+    /// substantive corrections, not just polish. Used by Sprint F's
+    /// smart-selection-flip feature.
+    func fixSelection(_ input: AIFixRequest, completion: @escaping (AIFixResult) -> Void)
 }
 
 extension AIAssistant {
     func rewriteSentence(_ input: AIRewriteRequest, completion: @escaping (AIRewriteResult) -> Void) {
+        completion(.unsupported)
+    }
+    func fixSelection(_ input: AIFixRequest, completion: @escaping (AIFixResult) -> Void) {
         completion(.unsupported)
     }
 }
@@ -75,6 +85,24 @@ struct AIRewriteRequest {
 
 enum AIRewriteResult {
     case rewritten(String)   // applied as-is
+    case unchanged           // model thought the input was fine
+    case unsupported         // assistant doesn't implement this
+    case failed(reason: String)
+}
+
+// MARK: - Selection fix-everything
+
+struct AIFixRequest {
+    /// The full selected text. Length-bounded by the caller — typically
+    /// up to a few thousand characters.
+    let text: String
+    /// Optional hint of the layout the user has currently active. Used
+    /// in the system prompt as a soft preference for the output language.
+    let activeLayout: Layout?
+}
+
+enum AIFixResult {
+    case fixed(String)       // applied as-is, replaces selection
     case unchanged           // model thought the input was fine
     case unsupported         // assistant doesn't implement this
     case failed(reason: String)

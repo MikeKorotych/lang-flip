@@ -245,6 +245,7 @@ private struct ModelsTab: View {
     @AppStorage("lf.activeModelID") private var activeModelID = ""
     @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = false
     @AppStorage("lf.grammarCheckOnSentenceEnd") private var grammarOnSentenceEnd = false
+    @AppStorage("lf.smartSelectionFix") private var smartSelectionFix = false
 
     var body: some View {
         Form {
@@ -263,6 +264,9 @@ private struct ModelsTab: View {
 
                 Toggle("Auto-fix sentences when you type . ! or ?", isOn: $grammarOnSentenceEnd)
                 helpText("Each time you finish a sentence with a period, exclamation mark, or question mark, the AI rewrites it in place to fix typos and grammar. The fix lands silently a moment later. If you keep typing past the next sentence boundary while the model is thinking, the fix is dropped to avoid disrupting fast typing. Off by default — silent rewrites are powerful and you should opt in only when you trust the model.")
+
+                Toggle("Smart selection fix (AI fixes everything)", isOn: $smartSelectionFix)
+                helpText("Select any text, then double-tap Shift. With this on, the AI rewrites the selection to fix typos, grammar, wrong-keyboard-layout gibberish, and mid-sentence script flips — anything it can repair while preserving meaning. Without this toggle, the same gesture only does a mechanical layout flip. Falls back to the mechanical flip if the AI is unavailable or declines.")
             }
 
             if AIMode(rawValue: aiMode) == .bundledModel {

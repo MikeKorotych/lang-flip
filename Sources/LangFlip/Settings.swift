@@ -65,6 +65,7 @@ final class Settings {
         static let activeModelID = "lf.activeModelID"
         static let grammarCheckOnSingleShift = "lf.grammarCheckOnSingleShift"
         static let grammarCheckOnSentenceEnd = "lf.grammarCheckOnSentenceEnd"
+        static let smartSelectionFix = "lf.smartSelectionFix"
     }
 
     var enabled: Bool {
@@ -162,6 +163,18 @@ final class Settings {
     var grammarCheckOnSentenceEnd: Bool {
         get { defaults.object(forKey: Keys.grammarCheckOnSentenceEnd) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.grammarCheckOnSentenceEnd) }
+    }
+
+    /// When true AND AI is enabled AND the user has text selected, the
+    /// configured hotkey routes the selection through an AI "fix
+    /// everything" pass instead of the mechanical layout flip — repairs
+    /// typos, grammar, mixed-layout chunks, mid-sentence script
+    /// switches. Falls back to the mechanical flip on AI failure or
+    /// when the AI declines to rewrite. Off by default — same caution
+    /// as the other auto-rewrite features.
+    var smartSelectionFix: Bool {
+        get { defaults.object(forKey: Keys.smartSelectionFix) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.smartSelectionFix) }
     }
 
     /// When `aiMode == .bundledModel`, identifies which catalog entry to
