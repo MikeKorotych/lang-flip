@@ -30,6 +30,15 @@ final class FoundationModelsAssistant: AIAssistant {
         }
     }
 
+    /// Human-readable description of why the model isn't ready (or
+    /// confirmation that it is). Used at startup so users / devs can
+    /// see at a glance whether Apple Intelligence is wired up. The
+    /// availability enum changes shape between SDK versions, so we
+    /// stringify reflectively rather than switching every case.
+    var availabilityDescription: String {
+        return "\(model.availability)"
+    }
+
     func review(candidateFlip: AICandidate, completion: @escaping (AIDecision) -> Void) {
         guard isReady else {
             completion(.unknown)

@@ -62,5 +62,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // submenu can dispatch into it.
         menubar = MenubarController(eventTap: tap)
         log("menubar ready (look for ⌥ icon in menu bar)")
+
+        // Diagnostic: surface the AI assistant's readiness at launch
+        // so users can tell why grammar / fix / translate features stay
+        // silent. Foundation Models reports `.unavailable(reason)` for
+        // states like Apple Intelligence-disabled, model-not-downloaded,
+        // unsupported-region — easier to read here than to chase via
+        // feature-trigger debug logs.
+        let assistant = AIAssistantManager.shared.current
+        log("AI mode = \(Settings.shared.aiMode.rawValue), isReady = \(assistant.isReady)")
+        if #available(macOS 26.0, *), Settings.shared.aiMode == .appleFoundation {
+            if let fm = assistant as? FoundationModelsAssistant {
+                log("Foundation Models availability: \(fm.availabilityDescription)")
+            }
+        }
     }
 }
