@@ -143,17 +143,21 @@ final class EventTap {
             FileHandle.standardError.write(Data("lang-flip[debug]: keyDown keyCode=\(keyCode) flags=\(String(masked.rawValue, radix: 16))\n".utf8))
         }
 
-        // Sprint G: translate-selection hotkey ⌃⌥T. Consume the event so
-        // no other app sees it. Only active when AI is on AND the user
-        // has opted in via Settings.translationHotkeyEnabled.
+        // Sprint G: translate-selection hotkey ⇧Space. Consume the event
+        // so the underlying app never sees the rogue space. Only active
+        // when AI is on AND the user has opted in via
+        // Settings.translationHotkeyEnabled. Shift+Space is a near-zero-
+        // collision combo in normal typing — Shift is released between
+        // capital letter and the trailing space — so hijacking it is
+        // safe even with the toggle defaulting OFF.
         if Settings.shared.translationHotkeyEnabled,
            Settings.shared.aiMode != .off,
-           keyCode == CGKeyCode(kVK_ANSI_T),
-           flags.contains(.maskControl),
-           flags.contains(.maskAlternate),
+           keyCode == CGKeyCode(kVK_Space),
+           flags.contains(.maskShift),
            !flags.contains(.maskCommand),
-           !flags.contains(.maskShift) {
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate hotkey ⌃⌥T fired\n".utf8)) }
+           !flags.contains(.maskAlternate),
+           !flags.contains(.maskControl) {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate hotkey ⇧Space fired\n".utf8)) }
             let target = Settings.shared.translationTarget
             DispatchQueue.main.async { [weak self] in
                 self?.translateSelectionWithAI(target: target)
@@ -207,11 +211,17 @@ final class EventTap {
                 // (Enter) because in chat apps the message has already
                 // been sent, and a delayed in-place fix would land in the
                 // wrong place.
-                if Settings.shared.grammarCheckOnSentenceEnd,
-                   Settings.shared.aiMode != .off,
-                   s.contains(where: { $0 == "." || $0 == "!" || $0 == "?" }),
-                   suppression == nil {
-                    maybeStartSentenceEndGrammar()
+                let endersInBatch = s.contains(where: { $0 == "." || $0 == "!" || $0 == "?" })
+                if endersInBatch {
+                    if !Settings.shared.grammarCheckOnSentenceEnd {
+                        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end seen but feature off (grammarCheckOnSentenceEnd)\n".utf8)) }
+                    } else if Settings.shared.aiMode == .off {
+                        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end seen but aiMode = off\n".utf8)) }
+                    } else if suppression != nil {
+                        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end seen but suppressed: \(suppression!)\n".utf8)) }
+                    } else {
+                        maybeStartSentenceEndGrammar()
+                    }
                 }
 
                 if let completed = buffer.feedReturningCompleted(s) {
@@ -1021,9 +1031,19 @@ final class EventTap {
         let prev = sentenceBuffer.previous
         let trimmed = prev.trimmingCharacters(in: .whitespacesAndNewlines)
         let words = trimmed.split(whereSeparator: { $0.isWhitespace })
-        guard words.count >= 4 else {
+        // Two-word minimum keeps "Yes." / "Ok!" out of the round-trip
+        // while still firing for "Привіт як справи?" (3) and most
+        // real-world sentences. Earlier 4-word threshold was too tight
+        // — typical 2-3 word phrases never triggered.
+        guard words.count >= 2 else {
             if debug {
-                FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar skip: only \(words.count) words\n".utf8))
+                FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar skip: only \(words.count) words in '\(trimmed.prefix(40))'\n".utf8))
+            }
+            return
+        }
+        if !AIAssistantManager.shared.isReady {
+            if debug {
+                FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar skip: AI not ready\n".utf8))
             }
             return
         }
@@ -1037,14 +1057,14 @@ final class EventTap {
             DispatchQueue.main.async {
                 guard let self else { return }
                 guard self.grammarToken == token else {
-                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar discarded (stale token)\n".utf8)) }
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar discarded (stale token=\(token), current=\(self.grammarToken))\n".utf8)) }
                     return
                 }
                 self.applySentenceEndGrammar(originalSentence: prev, result: result)
             }
         }
         if debug {
-            FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar started (token=\(token), len=\(prev.count))\n".utf8))
+            FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar started (token=\(token), \(words.count) words, \(prev.count) chars): '\(prev.prefix(60))'\n".utf8))
         }
     }
 
@@ -1059,10 +1079,17 @@ final class EventTap {
         switch result {
         case .rewritten(let corrected):
             guard sentenceBuffer.previous == originalSentence else {
-                if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar dropped (buffer rolled over)\n".utf8)) }
+                if debug {
+                    FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar dropped (buffer rolled over)\n".utf8))
+                    FileHandle.standardError.write(Data("lang-flip[debug]:   expected: '\(originalSentence.prefix(60))'\n".utf8))
+                    FileHandle.standardError.write(Data("lang-flip[debug]:   got:      '\(sentenceBuffer.previous.prefix(60))'\n".utf8))
+                }
                 return
             }
-            guard corrected != originalSentence else { return }
+            guard corrected != originalSentence else {
+                if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar — corrected == original, no-op\n".utf8)) }
+                return
+            }
             let typedSince = sentenceBuffer.current
             if debug {
                 let oPrefix = String(originalSentence.prefix(60))

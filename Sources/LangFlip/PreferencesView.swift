@@ -279,8 +279,8 @@ private struct ModelsTab: View {
                 }
                 helpText("Used by the menubar's Translate submenu (highlights this entry) and the ⌃⌥T hotkey below.")
 
-                Toggle("Enable ⌃⌥T hotkey to translate selection", isOn: $translationHotkeyEnabled)
-                helpText("When this is on AND AI is on, pressing Control + Option + T translates the current text selection into the default target above. The menubar's Translate selection → submenu always works regardless of this toggle.")
+                Toggle("Enable ⇧Space hotkey to translate selection", isOn: $translationHotkeyEnabled)
+                helpText("When this is on AND AI is on, pressing Shift + Space translates the current text selection into the default target above. Shift+Space is rare in normal typing (you release Shift before the trailing space), so hijacking it is generally safe — but disable here if you find a conflict. The menubar's Translate selection → submenu always works regardless of this toggle.")
             }
 
             if AIMode(rawValue: aiMode) == .bundledModel {

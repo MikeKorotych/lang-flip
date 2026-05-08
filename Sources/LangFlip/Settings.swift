@@ -179,7 +179,7 @@ final class Settings {
         set { defaults.set(newValue, forKey: Keys.smartSelectionFix) }
     }
 
-    /// When true, ⌃⌥T (Control+Option+T) translates the current text
+    /// When true, ⇧Space (Shift+Space) translates the current text
     /// selection into `translationTarget`. Off by default — the
     /// menubar's "Translate selection →" submenu is always available
     /// when AI is on, so users only need the hotkey when they want
