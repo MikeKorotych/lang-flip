@@ -220,6 +220,67 @@ lf.activeModelID      String  (which downloaded model to load)
 
 ---
 
+## Single-Shift grammar check — design notes
+
+This is the headline AI feature. Single clean Shift tap (no other key
+during press, no second tap within 350 ms) triggers an AI grammar /
+typo pass on the last sentence and silently applies the fix.
+
+### UX rules
+- **No overlay for grammar fixes.** The flip overlay is for layout
+  changes — the user wants visual confirmation the layout flipped.
+  Grammar fixes are silent: they just happen, the user sees the
+  diff in the text where they were already typing. An overlay would
+  be noisy because grammar fixes can fire often.
+- **No sound either** by default. Same rationale.
+- **Default OFF** for the toggle. Single Shift is too low-friction
+  to ship enabled — would surprise users.
+
+### Speculative inference (latency hiding)
+Naive flow:
+```
+Shift up → wait 350 ms → AI call (~200 ms) → apply
+                                                ▲
+                                          550 ms felt
+```
+
+Better flow — kick off the AI call as soon as Shift goes up; the
+first 350 ms of the window are spent waiting for either a second
+tap OR the inference result, whichever comes first:
+```
+Shift up + start AI ──┐
+                      │ ── 350 ms tap window ──┐
+                      │                        │
+              AI returns (~200 ms)             │
+                                               │
+                      [no second tap]          ▼
+                                          ~350 ms felt
+```
+
+If a second tap arrives within the window, we **cancel the
+in-flight inference** (or let it complete and discard the result —
+cheaper than retrying a second time later). Trade-off: a small
+amount of wasted compute on every double-tap. With ~200 ms model
+inference on M-series, the waste is negligible.
+
+### "Last sentence" definition
+Operate on the most recent sentence in the focused app's text:
+- Walk back from the cursor through the WordBuffer (or, in
+  selection-mode, the selected text).
+- A sentence ends at `.`, `!`, `?`, newline, or the start of the
+  buffer — whichever comes first.
+- Cap at ~50 words. Beyond that we'd risk a slow / large AI call
+  for diminishing benefit.
+
+### Failure modes
+- AI unreachable (download failed, model not yet warm) → silently
+  skip, don't show any error. Grammar correction is best-effort.
+- AI returns identical text → don't rewrite, don't show overlay.
+- AI returns drastically different text (length differs by >2x or
+  the diff covers >50% of the words) → reject, suspect bad output.
+- Apple's Foundation Model unavailable on this OS → fall back to
+  bundled MLX model if installed; otherwise toggle is hidden.
+
 ## Roadmap proposal
 
 If we go for it, my suggested phases:
