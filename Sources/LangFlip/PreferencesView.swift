@@ -243,6 +243,7 @@ private struct BehaviorTab: View {
 private struct ModelsTab: View {
     @AppStorage("lf.aiMode") private var aiMode = AIMode.off.rawValue
     @AppStorage("lf.activeModelID") private var activeModelID = ""
+    @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = false
 
     var body: some View {
         Form {
@@ -253,6 +254,11 @@ private struct ModelsTab: View {
                     }
                 }
                 helpText("AI is opt-in. When enabled, the rules engine asks an on-device model for a second opinion before auto-flipping. Apple Intelligence requires macOS 26 or later; on older systems it falls back to off until you pick a downloadable model.")
+            }
+
+            Section("Features") {
+                Toggle("Grammar fix on single Shift tap", isOn: $grammarOnSingleShift)
+                helpText("When the AI is on, a single clean tap of Shift (no other key in between, no second tap within ~350 ms) rewrites the most recent sentence to fix typos and grammar. Off by default — single Shift is a low-friction gesture and accidental fixes would be annoying. Only fires when the assistant is ready, so safe to leave on if you have Apple Intelligence enabled. The rewrite is silent: no overlay, no sound, just the diff in your text.")
             }
 
             if AIMode(rawValue: aiMode) == .bundledModel {

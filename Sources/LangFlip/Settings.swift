@@ -63,6 +63,7 @@ final class Settings {
         static let hotkeyPreset = "lf.hotkeyPreset"
         static let aiMode = "lf.aiMode"
         static let activeModelID = "lf.activeModelID"
+        static let grammarCheckOnSingleShift = "lf.grammarCheckOnSingleShift"
     }
 
     var enabled: Bool {
@@ -137,6 +138,17 @@ final class Settings {
             return value
         }
         set { defaults.set(newValue.rawValue, forKey: Keys.aiMode) }
+    }
+
+    /// When true, a single clean Shift tap (no other key in between, no
+    /// second tap within the window) fires an AI grammar / typo pass on
+    /// the last sentence and silently applies the result. Speculative
+    /// inference starts at the moment Shift is released so the felt
+    /// latency is just the tap window. Default OFF — single Shift is
+    /// too low-friction to ship enabled out of the box.
+    var grammarCheckOnSingleShift: Bool {
+        get { defaults.object(forKey: Keys.grammarCheckOnSingleShift) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.grammarCheckOnSingleShift) }
     }
 
     /// When `aiMode == .bundledModel`, identifies which catalog entry to

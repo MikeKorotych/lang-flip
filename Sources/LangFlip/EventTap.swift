@@ -5,6 +5,7 @@ import Carbon.HIToolbox
 
 final class EventTap {
     private let buffer = WordBuffer()
+    private let sentenceBuffer = SentenceBuffer()
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
@@ -48,6 +49,17 @@ final class EventTap {
     private var tapCount = 0
     private var lastShiftReleaseTime: Date?
     private var pendingFire: DispatchWorkItem?
+
+    // MARK: - Single-Shift grammar (Sprint C)
+
+    /// Latest grammar request token. Bumped every time a new speculative
+    /// inference starts; lets us discard results from cancelled requests
+    /// when they eventually return (Task cancellation can't always reach
+    /// the Foundation Models call once it's in flight).
+    private var grammarToken: Int = 0
+    /// Result of the most recent speculative inference, ready for the
+    /// fire timer to apply. nil means the model hasn't returned yet.
+    private var grammarResult: AIRewriteResult?
 
     /// Set true on any non-watched keyDown event while a watched modifier
     /// is held — means the user used the modifier as a real shortcut
@@ -143,6 +155,7 @@ final class EventTap {
         // Track what the user types into the word buffer.
         if keyCode == CGKeyCode(kVK_Delete) {
             buffer.backspace()
+            sentenceBuffer.backspace()
             // Backspace within the auto-flip watch window is a disagreement
             // signal. The learner adds the word to the exception list on the
             // first hit and asks for a physical rollback once the user has
@@ -160,6 +173,7 @@ final class EventTap {
                 BackspaceLearner.shared.cancelPending()
 
                 let s = String(utf16CodeUnits: chars, count: len)
+                sentenceBuffer.feed(s)
                 if let completed = buffer.feedReturningCompleted(s) {
                     let suppression = AppContext.suppressionCause()
                     var word = completed
@@ -378,6 +392,12 @@ final class EventTap {
         }
 
         if tapCount == 2 {
+            // A second tap arrived within the window — any speculative
+            // grammar inference we kicked off on the first tap is no
+            // longer wanted. Cancel it before falling through to the
+            // double-tap-as-layout-flip path.
+            cancelSpeculativeGrammar()
+
             // If no secondary configured, no need to wait for triple — fire now.
             if Settings.shared.secondaryLanguage == nil {
                 let count = tapCount
@@ -396,8 +416,32 @@ final class EventTap {
             }
             pendingFire = work
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.tripleGrace, execute: work)
+            return
         }
-        // tapCount == 1: do nothing, wait for second tap (or timeout).
+
+        // tapCount == 1.
+        // If grammar-on-single-Shift is enabled and an AI is ready, kick
+        // off speculative inference NOW (so it has the whole tap window
+        // to complete) and schedule the apply for after the window. If
+        // a second tap arrives meanwhile we cancel above.
+        if Settings.shared.grammarCheckOnSingleShift,
+           AIAssistantManager.shared.isReady,
+           AppContext.suppressionCause() == nil,
+           let sentence = sentenceBuffer.mostRecentSentence,
+           sentence.trimmingCharacters(in: .whitespaces).count >= 2 {
+            startSpeculativeGrammar(sentence: sentence)
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.tapCount = 0
+                self.lastShiftReleaseTime = nil
+                self.fireGrammarFix(originalSentence: sentence)
+            }
+            pendingFire = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.tapWindow, execute: work)
+        }
+        // Else: leave tapCount==1 dangling; if a second tap comes the
+        // double-tap path takes over, otherwise it harmlessly resets on
+        // the next non-shift keypress / timeout.
     }
 
     private func cancelPendingTaps() {
@@ -405,6 +449,7 @@ final class EventTap {
         pendingFire = nil
         tapCount = 0
         lastShiftReleaseTime = nil
+        cancelSpeculativeGrammar()
     }
 
     private func fire(taps: Int) {
@@ -639,6 +684,89 @@ final class EventTap {
 
         buffer.reset()
         buffer.feed(converted)
+    }
+
+    // MARK: - Single-Shift grammar fix (Sprint C)
+
+    /// Kick off an AI sentence rewrite the moment the user releases Shift
+    /// for the first time. The result lands in `grammarResult` if it
+    /// arrives before the tap window closes; the fire timer then picks
+    /// it up. Token-based cancellation makes stale results from
+    /// superseded requests safe to drop.
+    private func startSpeculativeGrammar(sentence: String) {
+        grammarToken &+= 1
+        let token = grammarToken
+        grammarResult = nil
+
+        let request = AIRewriteRequest(
+            text: sentence,
+            preferredLayout: InputSource.currentLayout()
+        )
+        AIAssistantManager.shared.current.rewriteSentence(request) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard self.grammarToken == token else {
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: grammar result discarded (stale token)\n".utf8)) }
+                    return
+                }
+                self.grammarResult = result
+            }
+        }
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: grammar speculative inference started (token=\(token), len=\(sentence.count))\n".utf8)) }
+    }
+
+    /// Cancel an in-flight speculative grammar request. The actual
+    /// inference task may still complete asynchronously; the bumped
+    /// token discards its result on arrival.
+    private func cancelSpeculativeGrammar() {
+        grammarToken &+= 1
+        grammarResult = nil
+    }
+
+    /// Tap window expired without a second tap arriving — the user did
+    /// in fact want grammar correction. Apply whatever speculative
+    /// result we have (or nothing, if the model is still thinking or
+    /// declined to rewrite).
+    private func fireGrammarFix(originalSentence: String) {
+        defer { grammarResult = nil }
+        guard let result = grammarResult else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: grammar fire — no result yet, skipping\n".utf8)) }
+            return
+        }
+        switch result {
+        case .rewritten(let corrected):
+            applyGrammarFix(original: originalSentence, corrected: corrected)
+        case .unchanged:
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: grammar — model returned unchanged\n".utf8)) }
+        case .unsupported:
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: grammar — assistant doesn't support rewrite\n".utf8)) }
+        case .failed(let reason):
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: grammar — failed: \(reason)\n".utf8)) }
+        }
+    }
+
+    /// Replace the just-typed sentence with the AI-corrected one.
+    /// Backspaces over the original (in the focused app), retypes the
+    /// new text, leaves layout / sound / overlay alone — grammar fixes
+    /// are intentionally silent so users see only the diff in the text.
+    private func applyGrammarFix(original: String, corrected: String) {
+        guard original != corrected else { return }
+        if debug {
+            let oPrefix = String(original.prefix(60))
+            let cPrefix = String(corrected.prefix(60))
+            FileHandle.standardError.write(Data("lang-flip[debug]: grammar fix '\(oPrefix)' → '\(cPrefix)'\n".utf8))
+        }
+        for _ in 0..<original.count {
+            postKey(virtualKey: CGKeyCode(kVK_Delete))
+        }
+        for ch in corrected { postUnicode(String(ch)) }
+        // Update both buffers so subsequent typing / boundaries reflect
+        // the corrected text.
+        sentenceBuffer.replaceCurrent(with: corrected)
+        buffer.reset()
+        // Don't play sound or overlay — rewrites should be a quiet
+        // background fix, not a celebration. Different surface from
+        // layout flips.
     }
 
     // MARK: - Posting synthesized events
