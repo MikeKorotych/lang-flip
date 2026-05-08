@@ -26,6 +26,31 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.2.1</title>
+      <pubDate>Fri, 8 May 2026 22:00:00 +0000</pubDate>
+      <sparkle:version>0.2.1</sparkle:version>
+      <sparkle:shortVersionString>0.2.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Polish + AI scaffold</h2>
+        <ul>
+          <li>Cross-layout fixes no longer oscillate on real words ("стороны" / "сторони").</li>
+          <li>Standalone "ы" / "э" now correct to "і" / "є" without needing a dictionary lookup.</li>
+          <li>Configurable hotkey: double-tap Shift / right Cmd / right Option.</li>
+          <li>Menu-bar icon replaces the "⌥" placeholder; dims when paused.</li>
+          <li>Refined overlay animation (180° flip, split-spring timing) + Preview button.</li>
+          <li>AI scaffold ready for Apple Intelligence integration (opt-in, dormant by default).</li>
+          <li>README ships with screenshots and animation GIFs.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.1/LangFlip-0.2.1.dmg"
+        length="3858334"
+        type="application/octet-stream"
+        sparkle:edSignature="3ixr7TBhjEQ5csDFPnfdb8IDXYwMbpbYr6aN+zYYXEwgCqkO+jUZM9qM7LitiZDTGvKsKfWMoQmwKv43oELlBA==" />
+    </item>
+
+    <item>
       <title>v0.2.0</title>
       <pubDate>Fri, 8 May 2026 18:00:00 +0000</pubDate>
       <sparkle:version>0.2.0</sparkle:version>
