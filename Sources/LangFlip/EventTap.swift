@@ -777,6 +777,91 @@ final class EventTap {
         }
     }
 
+    // MARK: - Screen-region OCR (multimodal)
+
+    /// Run macOS's built-in interactive area-select screenshot, send
+    /// the resulting PNG to the AI assistant for OCR, drop the
+    /// recognized text on the user's clipboard. Cancellation (user
+    /// hits Esc in the screenshot UI) is silent.
+    ///
+    /// Public so the menubar's "Capture text from screen…" item can
+    /// invoke it. Requires a multimodal AI backend — currently only
+    /// Ollama with a vision-capable model (Gemma 4, Qwen 2.5-VL,
+    /// LLaVA). Apple Foundation Models is text-only and will return
+    /// `.unsupported`.
+    func captureScreenTextWithAI() {
+        guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: AI not ready\n".utf8)) }
+            Notifications.show(title: "LangFlip", body: "AI is off or not ready — enable Ollama (or another vision-capable backend) in Preferences.")
+            return
+        }
+
+        // Tmp PNG path. Unique per pid so simultaneous captures across
+        // app restarts don't collide.
+        let tmpDir = FileManager.default.temporaryDirectory
+        let pngURL = tmpDir.appendingPathComponent("langflip-ocr-\(getpid())-\(Int(Date().timeIntervalSince1970)).png")
+
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: launching screencapture -i → \(pngURL.path)\n".utf8)) }
+
+        // /usr/sbin/screencapture is system-managed. The -i flag puts
+        // the user into interactive area-select mode (same crosshair
+        // they get from ⇧⌘4); -t png forces PNG; -o disables shadow.
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        task.arguments = ["-i", "-t", "png", "-o", pngURL.path]
+
+        task.terminationHandler = { [weak self] proc in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard proc.terminationStatus == 0,
+                      FileManager.default.fileExists(atPath: pngURL.path),
+                      let imageData = try? Data(contentsOf: pngURL),
+                      !imageData.isEmpty
+                else {
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: screenshot cancelled or empty\n".utf8)) }
+                    try? FileManager.default.removeItem(at: pngURL)
+                    return
+                }
+                let b64 = imageData.base64EncodedString()
+                if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: sending \(imageData.count) bytes (b64=\(b64.count) chars) to AI\n".utf8)) }
+                Notifications.show(title: "LangFlip", body: "Reading text from screenshot…")
+
+                let request = AIOcrRequest(imageBase64: b64)
+                AIAssistantManager.shared.current.extractTextFromImage(request) { [weak self] result in
+                    DispatchQueue.main.async {
+                        defer { try? FileManager.default.removeItem(at: pngURL) }
+                        guard let self else { return }
+                        switch result {
+                        case .extracted(let text):
+                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: extracted \(text.count) chars\n".utf8)) }
+                            let pb = NSPasteboard.general
+                            pb.clearContents()
+                            pb.setString(text, forType: .string)
+                            Sound.playFlip()
+                            FlipOverlay.shared.show()
+                            let preview = String(text.prefix(60)).replacingOccurrences(of: "\n", with: " ")
+                            Notifications.show(title: "Text copied", body: text.count > 60 ? "\(preview)…" : preview)
+                        case .unsupported:
+                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: assistant doesn't support OCR\n".utf8)) }
+                            Notifications.show(title: "LangFlip", body: "OCR needs a vision-capable model. Switch to Ollama with gemma4 / qwen2.5-vl / llava in Preferences.")
+                        case .failed(let reason):
+                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: failed: \(reason)\n".utf8)) }
+                            Notifications.show(title: "OCR failed", body: reason)
+                        }
+                    }
+                }
+            }
+        }
+
+        do {
+            try task.run()
+        } catch {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: failed to spawn screencapture: \(error)\n".utf8)) }
+            Notifications.show(title: "LangFlip", body: "Couldn't launch screen capture: \(error.localizedDescription)")
+            try? FileManager.default.removeItem(at: pngURL)
+        }
+    }
+
     /// Mechanical-flip fallback used by `applyAIFixToSelection` when the
     /// model declines or fails. Mirrors the inline mechanical path but
     /// reuses the already-captured selection text — saves the second

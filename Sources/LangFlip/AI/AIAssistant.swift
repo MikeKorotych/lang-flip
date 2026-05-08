@@ -49,6 +49,12 @@ protocol AIAssistant: AnyObject {
     /// auto-detect the source language. Used by Sprint G's translate-
     /// selection feature.
     func translateSelection(_ input: AITranslateRequest, completion: @escaping (AITranslateResult) -> Void)
+
+    /// Extract text from an image (OCR). Only meaningful for backends
+    /// that support multimodal input — Foundation Models is text-only,
+    /// so this returns `.unsupported` there. Ollama with a multimodal
+    /// model (Gemma 3+, Qwen 2.5-VL, LLaVA) does the real work.
+    func extractTextFromImage(_ input: AIOcrRequest, completion: @escaping (AIOcrResult) -> Void)
 }
 
 extension AIAssistant {
@@ -59,6 +65,9 @@ extension AIAssistant {
         completion(.unsupported)
     }
     func translateSelection(_ input: AITranslateRequest, completion: @escaping (AITranslateResult) -> Void) {
+        completion(.unsupported)
+    }
+    func extractTextFromImage(_ input: AIOcrRequest, completion: @escaping (AIOcrResult) -> Void) {
         completion(.unsupported)
     }
 }
@@ -129,6 +138,21 @@ struct AITranslateRequest {
 enum AITranslateResult {
     case translated(String)
     case unsupported
+    case failed(reason: String)
+}
+
+// MARK: - OCR (multimodal)
+
+struct AIOcrRequest {
+    /// Base64-encoded image bytes. PNG / JPEG both work for Ollama
+    /// multimodal models. Caller is responsible for keeping image
+    /// size reasonable — typically a screenshot region under 4 MB.
+    let imageBase64: String
+}
+
+enum AIOcrResult {
+    case extracted(String)   // text exactly as it appears in the image
+    case unsupported         // backend / model doesn't do vision
     case failed(reason: String)
 }
 

@@ -17,10 +17,12 @@ import Foundation
 /// short reason string so the EventTap can fall back gracefully.
 final class OllamaAssistant: AIAssistant {
 
-    /// Hard wall-clock timeout per inference. Longer than Foundation
-    /// Models because Ollama models cold-load on first call (loading a
-    /// 4 GB GGUF from disk takes a few seconds), then run hot.
-    private static let inferenceTimeout: TimeInterval = 8.0
+    /// Hard wall-clock timeout per inference. Tuned for Gemma-class
+    /// open-weight models on Apple Silicon: cold-start can hit 20 s
+    /// (load + prompt encode), hot calls are 1-5 s. We give 30 s of
+    /// headroom because a one-time delay on the first AI call is much
+    /// less annoying than silent failures.
+    private static let inferenceTimeout: TimeInterval = 30.0
 
     /// Daemon endpoint. Hardcoded to localhost for security (the
     /// pipeline assumes everything stays on the user's machine — no
@@ -152,6 +154,29 @@ final class OllamaAssistant: AIAssistant {
         }
     }
 
+    func extractTextFromImage(_ input: AIOcrRequest, completion: @escaping (AIOcrResult) -> Void) {
+        let prompt = """
+        Extract every piece of visible text from this image. Output ONLY the raw text exactly as it appears, preserving line breaks and reading order. No description, no commentary, no headings, no quotes, no markdown. If the image contains no text at all, output an empty string.
+        """
+        runInference(
+            prompt: prompt,
+            options: ["temperature": 0],
+            images: [input.imageBase64]
+        ) { result in
+            switch result {
+            case .success(let raw):
+                let cleaned = Self.unwrapModelOutput(raw)
+                if cleaned.isEmpty {
+                    completion(.failed(reason: "model returned no text — image may have none, or model isn't multimodal"))
+                } else {
+                    completion(.extracted(cleaned))
+                }
+            case .failure(let reason):
+                completion(.failed(reason: reason))
+            }
+        }
+    }
+
     func translateSelection(_ input: AITranslateRequest, completion: @escaping (AITranslateResult) -> Void) {
         let target = input.target.displayName
         let prompt = """
@@ -186,7 +211,14 @@ final class OllamaAssistant: AIAssistant {
     /// One-shot Ollama call with hard timeout. `options` are passed
     /// through to the daemon (temperature, num_predict, …) — see
     /// https://github.com/ollama/ollama/blob/main/docs/api.md#parameters.
-    private func runInference(prompt: String, options: [String: Any], completion: @escaping (InferenceResult) -> Void) {
+    /// `images` is an array of base64-encoded image bytes for
+    /// multimodal models.
+    private func runInference(
+        prompt: String,
+        options: [String: Any],
+        images: [String] = [],
+        completion: @escaping (InferenceResult) -> Void
+    ) {
         var body: [String: Any] = [
             "model":  model,
             "prompt": prompt,
@@ -194,6 +226,9 @@ final class OllamaAssistant: AIAssistant {
         ]
         if !options.isEmpty {
             body["options"] = options
+        }
+        if !images.isEmpty {
+            body["images"] = images
         }
 
         var req = URLRequest(url: Self.endpoint)

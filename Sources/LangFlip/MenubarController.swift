@@ -15,6 +15,7 @@ final class MenubarController: NSObject {
     private let enabledItem = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
     private let autoFlipItem = NSMenuItem(title: "Auto-flip on word boundary", action: #selector(toggleAutoFlip), keyEquivalent: "")
     private let translateMenuItem = NSMenuItem(title: "Translate selection", action: nil, keyEquivalent: "")
+    private let ocrMenuItem = NSMenuItem(title: "Capture text from screen…", action: #selector(captureScreenText), keyEquivalent: "")
     private let prefsItem = NSMenuItem(title: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",")
     private let updatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     private let quitItem = NSMenuItem(title: "Quit LangFlip", action: #selector(quit), keyEquivalent: "q")
@@ -76,6 +77,9 @@ final class MenubarController: NSObject {
         menu.addItem(.separator())
         menu.addItem(translateMenuItem)
 
+        ocrMenuItem.target = self
+        menu.addItem(ocrMenuItem)
+
         menu.addItem(.separator())
         menu.addItem(prefsItem)
         menu.addItem(updatesItem)
@@ -108,6 +112,10 @@ final class MenubarController: NSObject {
         // wouldn't do anything useful and risks confusing users who
         // haven't opted into AI yet.
         translateMenuItem.isHidden = (Settings.shared.aiMode == .off)
+        // OCR needs a multimodal backend; only Ollama qualifies today.
+        // Foundation Models is text-only, so we hide the entry there
+        // to avoid a "press button → unsupported toast" UX pothole.
+        ocrMenuItem.isHidden = (Settings.shared.aiMode != .ollama)
         // Bullet the configured default target so users know which
         // entry the ⌃⌥T hotkey maps to.
         if let sub = translateMenuItem.submenu {
@@ -138,6 +146,14 @@ final class MenubarController: NSObject {
     @objc private func toggleAutoFlip() {
         Settings.shared.autoFlip.toggle()
         refresh()
+    }
+
+    @objc private func captureScreenText() {
+        // Same dispatch reasoning as translateSelectionMenuFired —
+        // the menu has just closed, focus is back on the previously
+        // active app, screencapture's interactive UI takes over the
+        // whole screen anyway.
+        eventTap?.captureScreenTextWithAI()
     }
 
     @objc private func translateSelectionMenuFired(_ sender: NSMenuItem) {
