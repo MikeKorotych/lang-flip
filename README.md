@@ -6,6 +6,10 @@ Free, open-source keyboard layout corrector for macOS. Type a word in the wrong 
 
 Supports **EN ↔ UK ↔ RU** out of the box.
 
+<p align="center">
+  <img src="docs/media/hero-autoflip.gif" alt="LangFlip auto-flip in action" width="720" />
+</p>
+
 > Repo / package / build directory is named `lang-flip` (kebab-case);
 > the user-facing app is **LangFlip** (CamelCase). Bundle ID is
 > `com.antonpinkevych.lang-flip`.
@@ -36,6 +40,9 @@ That's it. After the wizard you'll see a small `⌥` icon in the menu bar.
 - **Selection mode.** Just realised a whole paragraph is in the wrong layout? Select it,
   double-tap Shift, done — Cmd+C / convert / Cmd+V under the hood, with your original
   clipboard restored.
+
+  <p align="center"><img src="docs/media/selection-flip.gif" alt="Selection-mode flip" width="640" /></p>
+
 - **Smart hotkeys** (à la Caramba):
   - **⇧⇧** swap with the primary language
   - **⇧⇧⇧** swap with the secondary (if configured)
@@ -43,6 +50,9 @@ That's it. After the wizard you'll see a small `⌥` icon in the menu bar.
 - **Self-learning.** Got a flip you didn't want? Hit Backspace and LangFlip both undoes
   it and remembers never to flip that exact word again. No exception list to manage by
   hand — one Backspace teaches it.
+
+  <p align="center"><img src="docs/media/backspace-learner.gif" alt="Backspace teaches an exception" width="640" /></p>
+
 - **Sticky-shift fix.** `WOrld` → `World`, `ПРивет` → `Привет`. Only fires when the
   corrected form is a real dictionary word, so acronyms like `OAuth` stay intact.
 - **Context-aware.** Auto-flip stays silent in terminals (Terminal, iTerm2, Warp,
@@ -55,6 +65,34 @@ That's it. After the wizard you'll see a small `⌥` icon in the menu bar.
 - **Bundled UK / RU dictionaries.** ~45 k words each, frequency-ordered (from the
   OpenSubtitles 2018 corpus). The English dictionary is the system one at
   `/usr/share/dict/words`.
+
+## Screens
+
+The app is a menubar utility with a separate Preferences window and a small
+onboarding wizard on first launch.
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/media/menubar.png" alt="Menubar dropdown" width="280" /><br/>
+      <sub>Menubar — quick toggles + entry to Preferences</sub>
+    </td>
+    <td align="center">
+      <img src="docs/media/preferences-general.png" alt="Preferences > General" width="380" /><br/>
+      <sub>Preferences — General</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="docs/media/preferences-behavior.png" alt="Preferences > Behavior" width="380" /><br/>
+      <sub>Preferences — Behavior (toggles + hotkey picker)</sub>
+    </td>
+    <td align="center">
+      <img src="docs/media/onboarding-step1.png" alt="Onboarding wizard" width="380" /><br/>
+      <sub>First-launch wizard — one permission at a time</sub>
+    </td>
+  </tr>
+</table>
 
 ## Project layout
 
