@@ -138,18 +138,26 @@ private struct FlipOverlayView: View {
     }
 
     private func playIntro() {
-        // Reset to a slightly-low, small, mid-rotation start state.
-        scale = 0.4
+        // Reset to a low, small, un-rotated, transparent start state. The
+        // animation runs in two overlapping passes so it doesn't feel like
+        // everything happens at once.
+        scale = 0.5
         rotation = 0
-        yOffset = 12
+        yOffset = 14
         opacity = 0
 
-        // Spring up, full flip on Y.
-        withAnimation(.spring(response: 0.55, dampingFraction: 0.6)) {
+        // Pass 1 — fade in + bounce up. Snappy interpolating-spring so the
+        // icon feels physical (slight overshoot, then settles). 0..~0.45 s.
+        withAnimation(.interpolatingSpring(stiffness: 240, damping: 14, initialVelocity: 4)) {
             scale = 1.0
-            rotation = 360
             yOffset = 0
             opacity = 1
+        }
+
+        // Pass 2 — Y-axis spin starts a beat after the bounce begins, runs
+        // a touch slower for a more deliberate "flip" feel. ~0.1..~0.7 s.
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.75).delay(0.08)) {
+            rotation = 360
         }
     }
 

@@ -185,7 +185,24 @@ private struct BehaviorTab: View {
                 helpText("Catches the classic two-uppercase mistake. Only applied when the corrected form is a real dictionary word, so acronyms like OAuth aren't mangled.")
             }
             Section {
-                Toggle("Show flip overlay", isOn: $showOverlay)
+                HStack {
+                    Toggle("Show flip overlay", isOn: $showOverlay)
+                    Spacer()
+                    Button("Preview") {
+                        // Force the overlay to play even when the user has
+                        // it toggled off, so they can see what they'd be
+                        // opting into before flipping the switch.
+                        let wasOn = Settings.shared.showOverlay
+                        Settings.shared.showOverlay = true
+                        FlipOverlay.shared.show()
+                        if !wasOn {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                Settings.shared.showOverlay = false
+                            }
+                        }
+                    }
+                    .controlSize(.small)
+                }
                 helpText("A small confirmation flourish — the LangFlip icon bounces up at the bottom of the screen and does a 360° flip — every time the app rewrites text. Off by default; turn on if you want a visible cue every flip.")
             }
             Section {
