@@ -13,37 +13,76 @@
 #   - keep only words made of language-specific letters (no digits / punct)
 #   - keep words 3 chars or longer
 #   - dedupe (preserves frequency ordering of the first occurrence)
+#   - cross-language contamination filter: OpenSubtitles UK transcripts
+#     contain a lot of Russian content (mistagged or dubbed-over media),
+#     so a word like "хотел" appears in both lists. We exclude any word
+#     whose frequency in the OTHER language is >= CROSS_RATIO times its
+#     own — that scrubs heavy contamination ("хотел" 73× more common in
+#     RU) while leaving real cognates intact ("так" 21×, "люди" 30×,
+#     "день" 32×).
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUT_DIR="$ROOT_DIR/Sources/LangFlip/Dictionaries"
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 mkdir -p "$OUT_DIR"
 
 UK_URL="https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/uk/uk_50k.txt"
 RU_URL="https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/ru/ru_50k.txt"
 
-echo "→ Fetching Ukrainian word list…"
-curl -fsSL "$UK_URL" \
-  | awk '{print $1}' \
-  | tr '[:upper:]' '[:lower:]' \
-  | grep -E '^[абвгґдеєжзиіїйклмнопрстуфхцчшщьюя]{3,}$' \
-  | awk '!seen[$0]++' \
-  > "$OUT_DIR/uk-words.txt"
-UK_COUNT=$(wc -l < "$OUT_DIR/uk-words.txt" | tr -d ' ')
-echo "  ✓ uk-words.txt — $UK_COUNT words"
+# Words where the OTHER language is >= this many times more frequent are
+# treated as contamination and dropped. Tuned empirically on the 2018
+# OpenSubtitles lists — see header comment.
+CROSS_RATIO=50
 
-echo "→ Fetching Russian word list…"
-curl -fsSL "$RU_URL" \
-  | awk '{print $1}' \
-  | tr '[:upper:]' '[:lower:]' \
-  | grep -E '^[абвгдеёжзийклмнопрстуфхцчшщъыьэюя]{3,}$' \
-  | awk '!seen[$0]++' \
-  > "$OUT_DIR/ru-words.txt"
-RU_COUNT=$(wc -l < "$OUT_DIR/ru-words.txt" | tr -d ' ')
-echo "  ✓ ru-words.txt — $RU_COUNT words"
+echo "→ Fetching raw frequency lists…"
+curl -fsSL "$UK_URL" -o "$TMP_DIR/uk_raw.txt"
+curl -fsSL "$RU_URL" -o "$TMP_DIR/ru_raw.txt"
+
+# Build keyed maps: word -> freq, lowercased.
+awk '{print tolower($1) "\t" $2}' "$TMP_DIR/uk_raw.txt" > "$TMP_DIR/uk_freq.tsv"
+awk '{print tolower($1) "\t" $2}' "$TMP_DIR/ru_raw.txt" > "$TMP_DIR/ru_freq.tsv"
+
+clean_dict () {
+  # $1 = own freq tsv, $2 = other freq tsv, $3 = allowed-letter regex,
+  # $4 = output file, $5 = label
+  local own="$1" other="$2" regex="$3" out="$4" label="$5"
+  awk -v other="$other" -v ratio="$CROSS_RATIO" -v regex="$regex" '
+    BEGIN {
+      while ((getline line < other) > 0) {
+        n = split(line, f, "\t")
+        if (n >= 2) other_freq[f[1]] = f[2] + 0
+      }
+      close(other)
+    }
+    {
+      word = $1
+      own_f = $2 + 0
+      if (length(word) < 3) next
+      if (word !~ regex) next
+      o = (word in other_freq) ? other_freq[word] : 0
+      if (own_f > 0 && o >= own_f * ratio) next  # contamination
+      if (!seen[word]++) print word
+    }
+  ' "$own" > "$out"
+  local count
+  count=$(wc -l < "$out" | tr -d ' ')
+  echo "  ✓ $(basename "$out") — $count words ($label)"
+}
+
+echo "→ Building Ukrainian list…"
+clean_dict "$TMP_DIR/uk_freq.tsv" "$TMP_DIR/ru_freq.tsv" \
+  '^[абвгґдеєжзиіїйклмнопрстуфхцчшщьюя]+$' \
+  "$OUT_DIR/uk-words.txt" "uk"
+
+echo "→ Building Russian list…"
+clean_dict "$TMP_DIR/ru_freq.tsv" "$TMP_DIR/uk_freq.tsv" \
+  '^[абвгдеёжзийклмнопрстуфхцчшщъыьэюя]+$' \
+  "$OUT_DIR/ru-words.txt" "ru"
 
 echo
 echo "Done. Re-run \`make app\` to bundle the new dictionaries into the .app."
