@@ -16,6 +16,9 @@ final class AIAssistantManager {
     static let shared = AIAssistantManager()
 
     private var cachedMode: AIMode?
+    /// For Ollama we also key the cache on the model name so swapping
+    /// "gemma3" → "qwen2.5" rebuilds the assistant.
+    private var cachedOllamaModel: String?
     private var cachedAssistant: AIAssistant = NoopAssistant()
     private let lock = NSLock()
 
@@ -26,9 +29,13 @@ final class AIAssistantManager {
         lock.lock()
         defer { lock.unlock() }
         let mode = Settings.shared.aiMode
-        if mode != cachedMode {
-            cachedAssistant = Self.makeAssistant(for: mode)
+        let ollamaModel = Settings.shared.ollamaModel
+        let modeChanged   = mode != cachedMode
+        let modelChanged  = (mode == .ollama) && (ollamaModel != cachedOllamaModel)
+        if modeChanged || modelChanged {
+            cachedAssistant = Self.makeAssistant(for: mode, ollamaModel: ollamaModel)
             cachedMode = mode
+            cachedOllamaModel = ollamaModel
         }
         return cachedAssistant
     }
@@ -37,7 +44,7 @@ final class AIAssistantManager {
     /// EventTap consults this before bothering to assemble a prompt.
     var isReady: Bool { current.isReady }
 
-    private static func makeAssistant(for mode: AIMode) -> AIAssistant {
+    private static func makeAssistant(for mode: AIMode, ollamaModel: String) -> AIAssistant {
         switch mode {
         case .off:
             return NoopAssistant()
@@ -50,6 +57,8 @@ final class AIAssistantManager {
         case .bundledModel:
             // Sprint D will wire MLXAssistant here.
             return NoopAssistant()
+        case .ollama:
+            return OllamaAssistant(model: ollamaModel)
         }
     }
 }

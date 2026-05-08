@@ -248,6 +248,7 @@ private struct ModelsTab: View {
     @AppStorage("lf.smartSelectionFix") private var smartSelectionFix = false
     @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
     @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
+    @AppStorage("lf.ollamaModel") private var ollamaModel = "gemma3"
 
     var body: some View {
         Form {
@@ -281,6 +282,14 @@ private struct ModelsTab: View {
 
                 Toggle("Enable ⇧Space hotkey to translate selection", isOn: $translationHotkeyEnabled)
                 helpText("When this is on AND AI is on, pressing Shift + Space translates the current text selection into the default target above. Shift+Space is rare in normal typing (you release Shift before the trailing space), so hijacking it is generally safe — but disable here if you find a conflict. The menubar's Translate selection → submenu always works regardless of this toggle.")
+            }
+
+            if AIMode(rawValue: aiMode) == .ollama {
+                Section("Ollama") {
+                    TextField("Model name", text: $ollamaModel)
+                        .textFieldStyle(.roundedBorder)
+                    helpText("Type the model tag you've already pulled with `ollama pull`. Examples: `gemma3`, `qwen2.5:1.5b`, `llama3.2`. LangFlip talks to Ollama on http://localhost:11434 — make sure the daemon is running (it auto-starts after `brew install ollama` or installing the .app from ollama.com). Smaller models (1-2 GB) feel responsive; bigger ones add cold-load delay on the first inference.")
+                }
             }
 
             if AIMode(rawValue: aiMode) == .bundledModel {

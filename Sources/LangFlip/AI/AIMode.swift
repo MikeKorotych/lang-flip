@@ -19,13 +19,21 @@ enum AIMode: String, CaseIterable, Identifiable {
     /// switch between e.g. Qwen 2.5 1.5B, Gemma 3 1B, Phi-3.5 Mini.
     case bundledModel
 
+    /// A model served by a locally-running Ollama daemon
+    /// (https://ollama.com). Zero in-app integration cost — the user
+    /// installs Ollama separately and `ollama pull <model>`s whatever
+    /// they want; LangFlip just hits localhost:11434/api/generate. The
+    /// model name lives in Settings.shared.ollamaModel.
+    case ollama
+
     var id: Self { self }
 
     var displayName: String {
         switch self {
         case .off:              return "Off"
         case .appleFoundation:  return "Apple Intelligence (macOS 26+)"
-        case .bundledModel:     return "Downloaded model"
+        case .bundledModel:     return "Downloaded model (MLX)"
+        case .ollama:           return "Ollama (local)"
         }
     }
 }

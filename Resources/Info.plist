@@ -45,5 +45,16 @@
     <integer>86400</integer>
     <key>SUAutomaticallyUpdate</key>
     <false/>
+
+    <!-- App Transport Security: allow plaintext HTTP only to localhost
+         so we can reach the Ollama daemon at http://localhost:11434
+         (Sprint G+ AI backend choice). All non-localhost traffic still
+         requires HTTPS. NSAllowsLocalNetworking is the narrow opt-in
+         Apple recommends for local-only services. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
 </dict>
 </plist>

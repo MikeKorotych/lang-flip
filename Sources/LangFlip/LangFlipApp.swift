@@ -76,5 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 log("Foundation Models availability: \(fm.availabilityDescription)")
             }
         }
+        if Settings.shared.aiMode == .ollama {
+            log("Ollama model: '\(Settings.shared.ollamaModel)' (daemon expected at http://localhost:11434)")
+        }
     }
 }
