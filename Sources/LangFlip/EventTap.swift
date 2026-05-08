@@ -143,6 +143,24 @@ final class EventTap {
             FileHandle.standardError.write(Data("lang-flip[debug]: keyDown keyCode=\(keyCode) flags=\(String(masked.rawValue, radix: 16))\n".utf8))
         }
 
+        // Sprint G: translate-selection hotkey ⌃⌥T. Consume the event so
+        // no other app sees it. Only active when AI is on AND the user
+        // has opted in via Settings.translationHotkeyEnabled.
+        if Settings.shared.translationHotkeyEnabled,
+           Settings.shared.aiMode != .off,
+           keyCode == CGKeyCode(kVK_ANSI_T),
+           flags.contains(.maskControl),
+           flags.contains(.maskAlternate),
+           !flags.contains(.maskCommand),
+           !flags.contains(.maskShift) {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate hotkey ⌃⌥T fired\n".utf8)) }
+            let target = Settings.shared.translationTarget
+            DispatchQueue.main.async { [weak self] in
+                self?.translateSelectionWithAI(target: target)
+            }
+            return nil
+        }
+
         // Any keypress while a hotkey-watched modifier is held means the
         // user pressed it as a real shortcut modifier, not as a hotkey
         // tap — disqualify the current sequence.
@@ -650,6 +668,87 @@ final class EventTap {
                 case .failed(let reason):
                     if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: AI failed (\(reason)) → mechanical fallback\n".utf8)) }
                     self.fallBackToMechanicalFlip(text: text, snapshot: snapshot, targetNonEnglish: targetNonEnglish, completion: completion)
+                }
+            }
+        }
+    }
+
+    // MARK: - Translate selection (Sprint G)
+
+    /// Capture the current text selection (Cmd+C round-trip), send it
+    /// to the AI for translation into `target`, paste the result back.
+    /// Public so the menubar's "Translate selection →" submenu can call
+    /// it with an explicit target. The hotkey path uses
+    /// `Settings.shared.translationTarget`.
+    ///
+    /// On any failure (no selection, AI unavailable, model unsupported,
+    /// transient inference error) we restore the clipboard and bail
+    /// silently. There's no mechanical fallback for translation — it
+    /// simply requires AI.
+    func translateSelectionWithAI(target: Layout) {
+        let pb = NSPasteboard.general
+        let snapshot = PasteboardSnapshot.capture(pb)
+        let countBefore = pb.changeCount
+
+        guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: AI not ready\n".utf8)) }
+            return
+        }
+
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: posting Cmd+C, target=\(target)\n".utf8)) }
+        postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_C))
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
+            while Date() < deadline && pb.changeCount == countBefore {
+                Thread.sleep(forTimeInterval: Self.copyPollInterval)
+            }
+
+            DispatchQueue.main.async {
+                guard pb.changeCount > countBefore else {
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: no clipboard change → no selection\n".utf8)) }
+                    snapshot.restore(to: pb)
+                    return
+                }
+                guard let text = pb.string(forType: .string),
+                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      text.count >= 2 else {
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: clipboard updated but no usable string\n".utf8)) }
+                    snapshot.restore(to: pb)
+                    return
+                }
+
+                let request = AITranslateRequest(text: text, target: target)
+                AIAssistantManager.shared.current.translateSelection(request) { [weak self] result in
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        switch result {
+                        case .translated(let translated):
+                            if self.debug {
+                                FileHandle.standardError.write(Data("lang-flip[debug]: translate \(text.count)→\(translated.count) chars\n".utf8))
+                                FileHandle.standardError.write(Data("lang-flip[debug]:   in:  '\(text.prefix(80))\(text.count > 80 ? "…" : "")'\n".utf8))
+                                FileHandle.standardError.write(Data("lang-flip[debug]:   out: '\(translated.prefix(80))\(translated.count > 80 ? "…" : "")'\n".utf8))
+                            }
+                            pb.clearContents()
+                            pb.setString(translated, forType: .string)
+                            // Hop the input source to the target so further
+                            // typing matches the new language. Cheap UX win.
+                            InputSource.switchTo(target)
+                            self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+                            Sound.playFlip()
+                            FlipOverlay.shared.show()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
+                                snapshot.restore(to: pb)
+                            }
+                        case .unsupported:
+                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: assistant unsupported\n".utf8)) }
+                            snapshot.restore(to: pb)
+                        case .failed(let reason):
+                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: failed (\(reason))\n".utf8)) }
+                            snapshot.restore(to: pb)
+                        }
+                    }
                 }
             }
         }

@@ -246,6 +246,8 @@ private struct ModelsTab: View {
     @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = false
     @AppStorage("lf.grammarCheckOnSentenceEnd") private var grammarOnSentenceEnd = false
     @AppStorage("lf.smartSelectionFix") private var smartSelectionFix = false
+    @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
+    @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
 
     var body: some View {
         Form {
@@ -267,6 +269,18 @@ private struct ModelsTab: View {
 
                 Toggle("Smart selection fix (AI fixes everything)", isOn: $smartSelectionFix)
                 helpText("Select any text, then double-tap Shift. With this on, the AI rewrites the selection to fix typos, grammar, wrong-keyboard-layout gibberish, and mid-sentence script flips — anything it can repair while preserving meaning. Without this toggle, the same gesture only does a mechanical layout flip. Falls back to the mechanical flip if the AI is unavailable or declines.")
+            }
+
+            Section("Translate selection") {
+                Picker("Default target", selection: $translationTarget) {
+                    ForEach(Layout.allCases, id: \.self) { layout in
+                        Text(layout.displayName).tag(layout.rawValue)
+                    }
+                }
+                helpText("Used by the menubar's Translate submenu (highlights this entry) and the ⌃⌥T hotkey below.")
+
+                Toggle("Enable ⌃⌥T hotkey to translate selection", isOn: $translationHotkeyEnabled)
+                helpText("When this is on AND AI is on, pressing Control + Option + T translates the current text selection into the default target above. The menubar's Translate selection → submenu always works regardless of this toggle.")
             }
 
             if AIMode(rawValue: aiMode) == .bundledModel {

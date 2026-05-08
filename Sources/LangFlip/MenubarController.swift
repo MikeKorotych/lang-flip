@@ -7,9 +7,14 @@ import AppKit
 final class MenubarController: NSObject {
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
+    /// Weak ref so the menubar can dispatch selection-mode AI features
+    /// (Sprint G translate-selection) into the running event tap. Held
+    /// weakly because EventTap's lifetime is owned by AppDelegate.
+    private weak var eventTap: EventTap?
 
     private let enabledItem = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
     private let autoFlipItem = NSMenuItem(title: "Auto-flip on word boundary", action: #selector(toggleAutoFlip), keyEquivalent: "")
+    private let translateMenuItem = NSMenuItem(title: "Translate selection", action: nil, keyEquivalent: "")
     private let prefsItem = NSMenuItem(title: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",")
     private let updatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     private let quitItem = NSMenuItem(title: "Quit LangFlip", action: #selector(quit), keyEquivalent: "q")
@@ -29,8 +34,9 @@ final class MenubarController: NSObject {
         return resized
     }()
 
-    override init() {
+    init(eventTap: EventTap? = nil) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        self.eventTap = eventTap
         super.init()
 
         if let button = statusItem.button {
@@ -52,6 +58,24 @@ final class MenubarController: NSObject {
 
         menu.addItem(enabledItem)
         menu.addItem(autoFlipItem)
+
+        // Translate-selection submenu — built once, shown/hidden in
+        // refresh() based on whether AI is active.
+        let translateSub = NSMenu()
+        for layout in [Layout.en, .uk, .ru] {
+            let item = NSMenuItem(
+                title: "To \(layout.displayName)",
+                action: #selector(translateSelectionMenuFired(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = layout.rawValue
+            translateSub.addItem(item)
+        }
+        translateMenuItem.submenu = translateSub
+        menu.addItem(.separator())
+        menu.addItem(translateMenuItem)
+
         menu.addItem(.separator())
         menu.addItem(prefsItem)
         menu.addItem(updatesItem)
@@ -80,6 +104,21 @@ final class MenubarController: NSObject {
     private func refresh() {
         enabledItem.state = Settings.shared.enabled ? .on : .off
         autoFlipItem.state = Settings.shared.autoFlip ? .on : .off
+        // Hide the Translate submenu entirely when AI is off — it
+        // wouldn't do anything useful and risks confusing users who
+        // haven't opted into AI yet.
+        translateMenuItem.isHidden = (Settings.shared.aiMode == .off)
+        // Bullet the configured default target so users know which
+        // entry the ⌃⌥T hotkey maps to.
+        if let sub = translateMenuItem.submenu {
+            let defaultTarget = Settings.shared.translationTarget
+            for item in sub.items {
+                if let raw = item.representedObject as? String,
+                   let layout = Layout(rawValue: raw) {
+                    item.state = (layout == defaultTarget) ? .on : .off
+                }
+            }
+        }
         if let button = statusItem.button {
             // When the icon is bundled, dim it to communicate "paused";
             // when we're on the text fallback, swap glyph as before.
@@ -99,6 +138,16 @@ final class MenubarController: NSObject {
     @objc private func toggleAutoFlip() {
         Settings.shared.autoFlip.toggle()
         refresh()
+    }
+
+    @objc private func translateSelectionMenuFired(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let target = Layout(rawValue: raw) else { return }
+        // Status menu actions fire on the main thread after the menu
+        // closes — focus has already returned to the previously-active
+        // app, so a Cmd+C round-trip from inside translateSelectionWithAI
+        // lands in the right window.
+        eventTap?.translateSelectionWithAI(target: target)
     }
 
     @objc private func openPreferences() {

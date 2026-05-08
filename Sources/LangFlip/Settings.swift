@@ -66,6 +66,8 @@ final class Settings {
         static let grammarCheckOnSingleShift = "lf.grammarCheckOnSingleShift"
         static let grammarCheckOnSentenceEnd = "lf.grammarCheckOnSentenceEnd"
         static let smartSelectionFix = "lf.smartSelectionFix"
+        static let translationHotkeyEnabled = "lf.translationHotkeyEnabled"
+        static let translationTarget = "lf.translationTarget"
     }
 
     var enabled: Bool {
@@ -175,6 +177,30 @@ final class Settings {
     var smartSelectionFix: Bool {
         get { defaults.object(forKey: Keys.smartSelectionFix) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.smartSelectionFix) }
+    }
+
+    /// When true, ⌃⌥T (Control+Option+T) translates the current text
+    /// selection into `translationTarget`. Off by default — the
+    /// menubar's "Translate selection →" submenu is always available
+    /// when AI is on, so users only need the hotkey when they want
+    /// muscle-memory speed.
+    var translationHotkeyEnabled: Bool {
+        get { defaults.object(forKey: Keys.translationHotkeyEnabled) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.translationHotkeyEnabled) }
+    }
+
+    /// Default target language for the translate-selection feature.
+    /// Used both by the hotkey and as the highlighted entry in the
+    /// menubar submenu. Defaults to English — most non-English users
+    /// most often translate INTO English for shared communication.
+    var translationTarget: Layout {
+        get {
+            guard let raw = defaults.string(forKey: Keys.translationTarget),
+                  let layout = Layout(rawValue: raw)
+            else { return .en }
+            return layout
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.translationTarget) }
     }
 
     /// When `aiMode == .bundledModel`, identifies which catalog entry to

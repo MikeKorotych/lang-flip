@@ -49,9 +49,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             OnboardingWindowController.shared.show()
         }
 
-        menubar = MenubarController()
-        log("menubar ready (look for ⌥ icon in menu bar)")
-
         let tap = EventTap()
         do {
             try tap.start()
@@ -60,5 +57,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             log("event tap FAILED: \(error.localizedDescription)")
         }
+
+        // Menubar gets a reference to the tap so its "Translate selection"
+        // submenu can dispatch into it.
+        menubar = MenubarController(eventTap: tap)
+        log("menubar ready (look for ⌥ icon in menu bar)")
     }
 }

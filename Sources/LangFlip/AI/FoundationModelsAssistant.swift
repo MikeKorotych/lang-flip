@@ -85,6 +85,27 @@ final class FoundationModelsAssistant: AIAssistant {
         }
     }
 
+    func translateSelection(_ input: AITranslateRequest, completion: @escaping (AITranslateResult) -> Void) {
+        guard isReady else {
+            completion(.unsupported)
+            return
+        }
+        let prompt = Self.buildTranslatePrompt(input: input)
+        runInference(prompt: prompt) { result in
+            switch result {
+            case .none:
+                completion(.failed(reason: "model unavailable"))
+            case .some(let text):
+                let trimmed = Self.unwrapModelOutput(text)
+                if trimmed.isEmpty {
+                    completion(.failed(reason: "empty response"))
+                } else {
+                    completion(.translated(trimmed))
+                }
+            }
+        }
+    }
+
     // MARK: - Inference
 
     /// Run a single one-shot prompt with timeout. Calls completion with
@@ -139,6 +160,17 @@ final class FoundationModelsAssistant: AIAssistant {
 
         Language hint: \(lang).
         Text:
+        \(input.text)
+        """
+    }
+
+    private static func buildTranslatePrompt(input: AITranslateRequest) -> String {
+        """
+        Translate the following text into \(input.target.displayName). Auto-detect the source language. Produce an idiomatic, natural translation that a native \(input.target.displayName) speaker would write — not a literal word-for-word rendering. Preserve the original meaning, tone, and any formatting (line breaks, lists). If the source already appears to be in \(input.target.displayName), still produce the most natural \(input.target.displayName) version (lightly polished if needed).
+
+        Output ONLY the translation. No explanation, no quotes, no preamble, no source-language echo.
+
+        Text to translate:
         \(input.text)
         """
     }

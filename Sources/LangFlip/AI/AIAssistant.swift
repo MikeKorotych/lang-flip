@@ -44,6 +44,11 @@ protocol AIAssistant: AnyObject {
     /// substantive corrections, not just polish. Used by Sprint F's
     /// smart-selection-flip feature.
     func fixSelection(_ input: AIFixRequest, completion: @escaping (AIFixResult) -> Void)
+
+    /// Translate the given text into `target`. The model is expected to
+    /// auto-detect the source language. Used by Sprint G's translate-
+    /// selection feature.
+    func translateSelection(_ input: AITranslateRequest, completion: @escaping (AITranslateResult) -> Void)
 }
 
 extension AIAssistant {
@@ -51,6 +56,9 @@ extension AIAssistant {
         completion(.unsupported)
     }
     func fixSelection(_ input: AIFixRequest, completion: @escaping (AIFixResult) -> Void) {
+        completion(.unsupported)
+    }
+    func translateSelection(_ input: AITranslateRequest, completion: @escaping (AITranslateResult) -> Void) {
         completion(.unsupported)
     }
 }
@@ -105,6 +113,22 @@ enum AIFixResult {
     case fixed(String)       // applied as-is, replaces selection
     case unchanged           // model thought the input was fine
     case unsupported         // assistant doesn't implement this
+    case failed(reason: String)
+}
+
+// MARK: - Translation
+
+struct AITranslateRequest {
+    /// Source text — language is auto-detected by the model.
+    let text: String
+    /// Target language. The model is asked to produce idiomatic
+    /// translation in this language and nothing else.
+    let target: Layout
+}
+
+enum AITranslateResult {
+    case translated(String)
+    case unsupported
     case failed(reason: String)
 }
 
