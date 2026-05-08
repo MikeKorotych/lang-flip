@@ -196,16 +196,23 @@ final class FoundationModelsAssistant: AIAssistant {
     /// Strip common LM artefacts: leading/trailing whitespace, accidental
     /// surrounding quotes ("…", '…', “…”), markdown code fences. Models
     /// occasionally wrap answers despite "no quotes" instructions.
+    ///
+    /// Code-fence handling is forgiving: if the model emits an opening
+    /// ``` but the response is truncated before the closing fence, we
+    /// still strip the prefix (and the optional language tag) rather
+    /// than leaving the literal backticks in the user's text. Matching
+    /// fences strip the whole wrapper as expected.
     private static func unwrapModelOutput(_ raw: String) -> String {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Strip code fences ```…```
+        // Strip code fences ```…``` (or just an unterminated ```…)
         if s.hasPrefix("```") {
-            if let end = s.range(of: "```", range: s.index(s.startIndex, offsetBy: 3)..<s.endIndex) {
-                s = String(s[s.index(s.startIndex, offsetBy: 3)..<end.lowerBound])
-                // First line might be a language tag like "text" or "en".
-                if let nl = s.firstIndex(of: "\n"), s[..<nl].count <= 12 {
-                    s = String(s[s.index(after: nl)...])
-                }
+            s = String(s.dropFirst(3))
+            if let end = s.range(of: "```") {
+                s = String(s[..<end.lowerBound])
+            }
+            // First line might be a language tag like "text" or "en".
+            if let nl = s.firstIndex(of: "\n"), s[..<nl].count <= 12 {
+                s = String(s[s.index(after: nl)...])
             }
             s = s.trimmingCharacters(in: .whitespacesAndNewlines)
         }
