@@ -1,6 +1,33 @@
 import Foundation
 import Carbon.HIToolbox
 
+/// What the triple-tap-Shift gesture should do. Repurposing this slot
+/// is useful for users who don't have a secondary language configured —
+/// the gesture would otherwise be a no-op. Default `.secondaryLanguage`
+/// preserves historical behaviour for users who DO have a secondary
+/// configured.
+enum TripleShiftAction: String, CaseIterable, Identifiable {
+    /// Switch the system input source to `secondaryLanguage` (or
+    /// English if the current layout is already secondary). Original
+    /// behaviour. No-op when `secondaryLanguage` is nil.
+    case secondaryLanguage
+    /// Send the current text selection through an AI "fix everything"
+    /// pass — typos, grammar, wrong-keyboard-layout gibberish.
+    /// Identical pipeline to the smart-selection-fix toggle on
+    /// double-Shift, just bound to a different gesture so users can
+    /// keep double-Shift purely mechanical.
+    case aiSelectionFix
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .secondaryLanguage: return "Switch to secondary language"
+        case .aiSelectionFix:    return "AI fix on selection"
+        }
+    }
+}
+
 /// User-selectable hotkey gestures. We deliberately keep the list short
 /// and limited to "safe" keys — any modifier that's heavily used in
 /// system shortcuts (left Cmd, plain Option) would false-fire on rapid
@@ -69,6 +96,7 @@ final class Settings {
         static let translationHotkeyEnabled = "lf.translationHotkeyEnabled"
         static let translationTarget = "lf.translationTarget"
         static let ollamaModel = "lf.ollamaModel"
+        static let tripleShiftAction = "lf.tripleShiftAction"
     }
 
     var enabled: Bool {
@@ -201,6 +229,21 @@ final class Settings {
     /// window. The E4B (~9.6 GB) "edge" variant runs comfortably on
     /// Apple Silicon. Users who pull a different one just type its
     /// name here and it picks up immediately.
+    /// What triple-tap Shift does. Default keeps the historical
+    /// "switch to secondary language" behaviour; users who don't have
+    /// a secondary configured can flip this to .aiSelectionFix to
+    /// repurpose the gesture as a non-conflicting AI smart-fix
+    /// trigger.
+    var tripleShiftAction: TripleShiftAction {
+        get {
+            guard let raw = defaults.string(forKey: Keys.tripleShiftAction),
+                  let value = TripleShiftAction(rawValue: raw)
+            else { return .secondaryLanguage }
+            return value
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.tripleShiftAction) }
+    }
+
     var ollamaModel: String {
         get {
             let raw = defaults.string(forKey: Keys.ollamaModel)?.trimmingCharacters(in: .whitespaces)

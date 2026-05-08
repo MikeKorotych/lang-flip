@@ -447,8 +447,13 @@ final class EventTap {
             // double-tap-as-layout-flip path.
             cancelSpeculativeGrammar()
 
-            // If no secondary configured, no need to wait for triple — fire now.
-            if Settings.shared.secondaryLanguage == nil {
+            // We only wait the tripleGrace window if a triple-tap could
+            // actually do something — either the user has a secondary
+            // language to switch to, OR they've bound triple-tap to the
+            // AI selection fix. Otherwise no point delaying double-tap.
+            let tripleHasMeaning = Settings.shared.secondaryLanguage != nil ||
+                                   Settings.shared.tripleShiftAction == .aiSelectionFix
+            if !tripleHasMeaning {
                 let count = tapCount
                 tapCount = 0
                 lastShiftReleaseTime = nil
@@ -502,6 +507,17 @@ final class EventTap {
     }
 
     private func fire(taps: Int) {
+        // Triple-tap can route to AI selection fix instead of a layout
+        // flip, depending on Settings.tripleShiftAction. The AI path
+        // doesn't go through chooseTarget / handleHotkey because it
+        // skips the input-source switch entirely.
+        if taps == 3, Settings.shared.tripleShiftAction == .aiSelectionFix {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: firing triple-tap → AI fix on selection\n".utf8)) }
+            DispatchQueue.main.async { [weak self] in
+                self?.aiFixSelectionGesture()
+            }
+            return
+        }
         guard let target = chooseTarget(forTapCount: taps) else {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: tap count \(taps) — no target configured\n".utf8)) }
             return
@@ -509,6 +525,74 @@ final class EventTap {
         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: firing \(taps)-tap → target=\(target)\n".utf8)) }
         DispatchQueue.main.async { [weak self] in
             self?.handleHotkey(targetNonEnglish: target)
+        }
+    }
+
+    /// Triple-tap-Shift gesture entry point when the user has
+    /// configured `tripleShiftAction = .aiSelectionFix`. Captures the
+    /// current selection via Cmd+C, sends it to the AI for a "fix
+    /// everything" pass, pastes the result. No mechanical fallback —
+    /// the user explicitly wired this gesture to AI, so falling back
+    /// to a layout flip would be surprising. On AI failure we just
+    /// restore the clipboard and bail with a debug log.
+    private func aiFixSelectionGesture() {
+        guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix: AI not ready\n".utf8)) }
+            return
+        }
+        let pb = NSPasteboard.general
+        let snapshot = PasteboardSnapshot.capture(pb)
+        let countBefore = pb.changeCount
+
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix: posting Cmd+C\n".utf8)) }
+        postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_C))
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
+            while Date() < deadline && pb.changeCount == countBefore {
+                Thread.sleep(forTimeInterval: Self.copyPollInterval)
+            }
+            DispatchQueue.main.async {
+                guard pb.changeCount > countBefore else {
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix: no selection\n".utf8)) }
+                    snapshot.restore(to: pb)
+                    return
+                }
+                guard let text = pb.string(forType: .string),
+                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      text.count >= 2 else {
+                    snapshot.restore(to: pb)
+                    return
+                }
+                let request = AIFixRequest(text: text, activeLayout: InputSource.currentLayout())
+                AIAssistantManager.shared.current.fixSelection(request) { [weak self] result in
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        switch result {
+                        case .fixed(let corrected):
+                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix \(text.count)→\(corrected.count) chars\n".utf8)) }
+                            pb.clearContents()
+                            pb.setString(corrected, forType: .string)
+                            self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+                            Sound.playFlip()
+                            FlipOverlay.shared.show()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
+                                snapshot.restore(to: pb)
+                            }
+                        case .unchanged:
+                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix: model returned unchanged\n".utf8)) }
+                            snapshot.restore(to: pb)
+                        case .unsupported:
+                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix: assistant unsupported\n".utf8)) }
+                            snapshot.restore(to: pb)
+                        case .failed(let reason):
+                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix: failed (\(reason))\n".utf8)) }
+                            snapshot.restore(to: pb)
+                        }
+                    }
+                }
+            }
         }
     }
 

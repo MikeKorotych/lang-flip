@@ -91,7 +91,7 @@ final class OllamaAssistant: AIAssistant {
         Context: \(candidateFlip.context.isEmpty ? "(none)" : candidateFlip.context)
         Reply with exactly one word: FLIP, KEEP, or UNKNOWN.
         """
-        runInference(prompt: prompt, options: ["temperature": 0, "num_predict": 8]) { result in
+        runInference(prompt: prompt, options: ["temperature": 0, "num_predict": 8, "num_ctx": 1024]) { result in
             switch result {
             case .success(let text):
                 let upper = text.uppercased()
@@ -105,15 +105,15 @@ final class OllamaAssistant: AIAssistant {
     }
 
     func rewriteSentence(_ input: AIRewriteRequest, completion: @escaping (AIRewriteResult) -> Void) {
-        let lang = input.preferredLayout?.displayName ?? "the input language"
-        let prompt = """
-        Rewrite the following text to fix typos, grammar, and obvious mistakes. Preserve tone and meaning. Output ONLY the corrected text — no explanation, no quotes.
-
-        Language hint: \(lang).
-        Text:
-        \(input.text)
-        """
-        runInference(prompt: prompt, options: ["temperature": 0.1]) { result in
+        let lang = input.preferredLayout?.displayName ?? "input language"
+        // Lean prompt: every token of overhead costs ~75 ms of
+        // prompt-eval on Gemma-class models. Old verbose version added
+        // ~3 s of latency per keystroke for no quality win.
+        let prompt = "Fix typos and grammar. Output ONLY the corrected text. Language: \(lang).\n\(input.text)"
+        runInference(
+            prompt: prompt,
+            options: ["temperature": 0.1, "num_ctx": 2048, "num_predict": 256]
+        ) { result in
             switch result {
             case .success(let raw):
                 let cleaned = Self.unwrapModelOutput(raw)
@@ -129,15 +129,12 @@ final class OllamaAssistant: AIAssistant {
     }
 
     func fixSelection(_ input: AIFixRequest, completion: @escaping (AIFixResult) -> Void) {
-        let lang = input.activeLayout?.displayName ?? "the user's intended language"
-        let prompt = """
-        Mac text-fixing utility. The selected text may contain typos, grammar mistakes, wrong-keyboard-layout gibberish, or mid-sentence script flips. Repair everything you can while preserving meaning. Active layout hint: \(lang).
-        Output ONLY the corrected text. No explanation, no quotes, no preamble.
-
-        Selected text:
-        \(input.text)
-        """
-        runInference(prompt: prompt, options: ["temperature": 0.2]) { result in
+        let lang = input.activeLayout?.displayName ?? "user's language"
+        let prompt = "Fix typos, grammar, and wrong-keyboard-layout gibberish. Preserve meaning. Output ONLY the corrected text. Language: \(lang).\n\(input.text)"
+        runInference(
+            prompt: prompt,
+            options: ["temperature": 0.2, "num_ctx": 4096, "num_predict": 1024]
+        ) { result in
             switch result {
             case .success(let raw):
                 let cleaned = Self.unwrapModelOutput(raw)
@@ -155,12 +152,10 @@ final class OllamaAssistant: AIAssistant {
     }
 
     func extractTextFromImage(_ input: AIOcrRequest, completion: @escaping (AIOcrResult) -> Void) {
-        let prompt = """
-        Extract every piece of visible text from this image. Output ONLY the raw text exactly as it appears, preserving line breaks and reading order. No description, no commentary, no headings, no quotes, no markdown. If the image contains no text at all, output an empty string.
-        """
+        let prompt = "Extract every piece of visible text. Output ONLY the raw text exactly as it appears, preserving line breaks. No commentary."
         runInference(
             prompt: prompt,
-            options: ["temperature": 0],
+            options: ["temperature": 0, "num_ctx": 4096, "num_predict": 2048],
             images: [input.imageBase64]
         ) { result in
             switch result {
@@ -179,14 +174,11 @@ final class OllamaAssistant: AIAssistant {
 
     func translateSelection(_ input: AITranslateRequest, completion: @escaping (AITranslateResult) -> Void) {
         let target = input.target.displayName
-        let prompt = """
-        Translate the following text into \(target). Auto-detect the source. Produce idiomatic, natural \(target) — not a literal word-for-word rendering. Preserve meaning, tone, and formatting.
-        Output ONLY the translation. No explanation, no quotes, no preamble, no source-language echo.
-
-        Text:
-        \(input.text)
-        """
-        runInference(prompt: prompt, options: ["temperature": 0.2]) { result in
+        let prompt = "Translate into \(target). Idiomatic, not literal. Output ONLY the translation.\n\(input.text)"
+        runInference(
+            prompt: prompt,
+            options: ["temperature": 0.2, "num_ctx": 4096, "num_predict": 1024]
+        ) { result in
             switch result {
             case .success(let raw):
                 let cleaned = Self.unwrapModelOutput(raw)
@@ -213,6 +205,13 @@ final class OllamaAssistant: AIAssistant {
     /// https://github.com/ollama/ollama/blob/main/docs/api.md#parameters.
     /// `images` is an array of base64-encoded image bytes for
     /// multimodal models.
+    ///
+    /// We always pass `keep_alive: "30m"` so the model stays resident
+    /// in VRAM between calls. Default Ollama keep-alive is 5 minutes —
+    /// fine for chat, but too short for sporadic typing where users
+    /// might go 6-10 min between sentences and pay the full cold-load
+    /// cost again. 30 min is a sweet spot: model evicts when truly idle
+    /// but stays warm for typical typing sessions.
     private func runInference(
         prompt: String,
         options: [String: Any],
@@ -220,9 +219,10 @@ final class OllamaAssistant: AIAssistant {
         completion: @escaping (InferenceResult) -> Void
     ) {
         var body: [String: Any] = [
-            "model":  model,
-            "prompt": prompt,
-            "stream": false
+            "model":      model,
+            "prompt":     prompt,
+            "stream":     false,
+            "keep_alive": "30m"
         ]
         if !options.isEmpty {
             body["options"] = options

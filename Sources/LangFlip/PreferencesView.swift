@@ -249,6 +249,7 @@ private struct ModelsTab: View {
     @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
     @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
     @AppStorage("lf.ollamaModel") private var ollamaModel = "gemma4"
+    @AppStorage("lf.tripleShiftAction") private var tripleShiftAction = TripleShiftAction.secondaryLanguage.rawValue
 
     var body: some View {
         Form {
@@ -270,6 +271,13 @@ private struct ModelsTab: View {
 
                 Toggle("Smart selection fix (AI fixes everything)", isOn: $smartSelectionFix)
                 helpText("Select any text, then double-tap Shift. With this on, the AI rewrites the selection to fix typos, grammar, wrong-keyboard-layout gibberish, and mid-sentence script flips — anything it can repair while preserving meaning. Without this toggle, the same gesture only does a mechanical layout flip. Falls back to the mechanical flip if the AI is unavailable or declines.")
+
+                Picker("Triple-tap Shift action", selection: $tripleShiftAction) {
+                    ForEach(TripleShiftAction.allCases) { a in
+                        Text(a.displayName).tag(a.rawValue)
+                    }
+                }
+                helpText("If you don't use a secondary language, repurpose triple-tap-Shift as a non-conflicting AI gesture. Select text, triple-tap Shift, the AI rewrites it. Same fix-everything pipeline as the smart selection fix toggle above — bind it to whichever gesture fits your muscle memory better.")
             }
 
             Section("Translate selection") {
