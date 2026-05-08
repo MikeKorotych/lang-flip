@@ -64,6 +64,7 @@ final class Settings {
         static let aiMode = "lf.aiMode"
         static let activeModelID = "lf.activeModelID"
         static let grammarCheckOnSingleShift = "lf.grammarCheckOnSingleShift"
+        static let grammarCheckOnSentenceEnd = "lf.grammarCheckOnSentenceEnd"
     }
 
     var enabled: Bool {
@@ -149,6 +150,18 @@ final class Settings {
     var grammarCheckOnSingleShift: Bool {
         get { defaults.object(forKey: Keys.grammarCheckOnSingleShift) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.grammarCheckOnSingleShift) }
+    }
+
+    /// When true, typing a sentence-ending punctuation mark (`.`, `!`, `?`)
+    /// kicks off an AI grammar / typo pass on the just-completed sentence
+    /// and silently applies the result. The fix is dropped if the user
+    /// kept typing past the next sentence boundary while the model was
+    /// thinking, so fast typists never get the rug pulled out from under
+    /// them. Default OFF — auto-rewriting prose without an explicit
+    /// gesture is high-impact and we want users to opt in.
+    var grammarCheckOnSentenceEnd: Bool {
+        get { defaults.object(forKey: Keys.grammarCheckOnSentenceEnd) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.grammarCheckOnSentenceEnd) }
     }
 
     /// When `aiMode == .bundledModel`, identifies which catalog entry to

@@ -244,6 +244,7 @@ private struct ModelsTab: View {
     @AppStorage("lf.aiMode") private var aiMode = AIMode.off.rawValue
     @AppStorage("lf.activeModelID") private var activeModelID = ""
     @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = false
+    @AppStorage("lf.grammarCheckOnSentenceEnd") private var grammarOnSentenceEnd = false
 
     var body: some View {
         Form {
@@ -259,6 +260,9 @@ private struct ModelsTab: View {
             Section("Features") {
                 Toggle("Grammar fix on single Shift tap", isOn: $grammarOnSingleShift)
                 helpText("When the AI is on, a single clean tap of Shift (no other key in between, no second tap within ~350 ms) rewrites the most recent sentence to fix typos and grammar. Off by default — single Shift is a low-friction gesture and accidental fixes would be annoying. Only fires when the assistant is ready, so safe to leave on if you have Apple Intelligence enabled. The rewrite is silent: no overlay, no sound, just the diff in your text.")
+
+                Toggle("Auto-fix sentences when you type . ! or ?", isOn: $grammarOnSentenceEnd)
+                helpText("Each time you finish a sentence with a period, exclamation mark, or question mark, the AI rewrites it in place to fix typos and grammar. The fix lands silently a moment later. If you keep typing past the next sentence boundary while the model is thinking, the fix is dropped to avoid disrupting fast typing. Off by default — silent rewrites are powerful and you should opt in only when you trust the model.")
             }
 
             if AIMode(rawValue: aiMode) == .bundledModel {

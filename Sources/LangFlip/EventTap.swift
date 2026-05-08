@@ -174,6 +174,21 @@ final class EventTap {
 
                 let s = String(utf16CodeUnits: chars, count: len)
                 sentenceBuffer.feed(s)
+
+                // Sentence-end auto grammar fix (Sprint C.2). Runs as soon
+                // as the user types `.` `!` or `?` — the buffer has just
+                // rolled over so sentenceBuffer.previous is the sentence
+                // we want to rewrite. We deliberately exclude `\n`
+                // (Enter) because in chat apps the message has already
+                // been sent, and a delayed in-place fix would land in the
+                // wrong place.
+                if Settings.shared.grammarCheckOnSentenceEnd,
+                   Settings.shared.aiMode != .off,
+                   s.contains(where: { $0 == "." || $0 == "!" || $0 == "?" }),
+                   AppContext.suppressionCause() == nil {
+                    maybeStartSentenceEndGrammar()
+                }
+
                 if let completed = buffer.feedReturningCompleted(s) {
                     let suppression = AppContext.suppressionCause()
                     var word = completed
@@ -767,6 +782,91 @@ final class EventTap {
         // Don't play sound or overlay — rewrites should be a quiet
         // background fix, not a celebration. Different surface from
         // layout flips.
+    }
+
+    // MARK: - Sentence-end auto grammar (Sprint C.2)
+
+    /// Called from the keyDown path right after the SentenceBuffer rolls
+    /// over on a `.` / `!` / `?`. Decides whether the just-completed
+    /// sentence is worth a grammar pass and kicks off an async AI call
+    /// that — if it returns before the user types another sentence — is
+    /// applied silently in place.
+    ///
+    /// Trivial sentences ("Ok.", "Yes!", "What?") are skipped: the cost
+    /// of an in-place rewrite isn't worth the marginal value, and a
+    /// model echoing the same single word back fires `unchanged` anyway.
+    /// We use a 4-word threshold to keep the sweet spot.
+    ///
+    /// Shares `grammarToken` with the single-Shift speculative path so
+    /// the two features can't fight each other — whichever fires last
+    /// wins, the older inference's result is discarded on arrival.
+    private func maybeStartSentenceEndGrammar() {
+        let prev = sentenceBuffer.previous
+        let trimmed = prev.trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = trimmed.split(whereSeparator: { $0.isWhitespace })
+        guard words.count >= 4 else {
+            if debug {
+                FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar skip: only \(words.count) words\n".utf8))
+            }
+            return
+        }
+        grammarToken &+= 1
+        let token = grammarToken
+        let request = AIRewriteRequest(
+            text: prev,
+            preferredLayout: InputSource.currentLayout()
+        )
+        AIAssistantManager.shared.current.rewriteSentence(request) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard self.grammarToken == token else {
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar discarded (stale token)\n".utf8)) }
+                    return
+                }
+                self.applySentenceEndGrammar(originalSentence: prev, result: result)
+            }
+        }
+        if debug {
+            FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar started (token=\(token), len=\(prev.count))\n".utf8))
+        }
+    }
+
+    /// Result handler for a sentence-end grammar request. Applies the
+    /// rewrite in-place if the buffer state is still consistent — i.e.
+    /// the user hasn't typed past another sentence boundary while the
+    /// model was thinking. Anything they typed after the trigger boundary
+    /// (the `current` portion) is preserved by erasing through it,
+    /// retyping the corrected sentence, then retyping the captured
+    /// trailing text.
+    private func applySentenceEndGrammar(originalSentence: String, result: AIRewriteResult) {
+        switch result {
+        case .rewritten(let corrected):
+            guard sentenceBuffer.previous == originalSentence else {
+                if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar dropped (buffer rolled over)\n".utf8)) }
+                return
+            }
+            guard corrected != originalSentence else { return }
+            let typedSince = sentenceBuffer.current
+            if debug {
+                let oPrefix = String(originalSentence.prefix(60))
+                let cPrefix = String(corrected.prefix(60))
+                FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end fix '\(oPrefix)' → '\(cPrefix)' (typedSince=\(typedSince.count))\n".utf8))
+            }
+            let totalErase = typedSince.count + originalSentence.count
+            for _ in 0..<totalErase {
+                postKey(virtualKey: CGKeyCode(kVK_Delete))
+            }
+            for ch in corrected { postUnicode(String(ch)) }
+            for ch in typedSince { postUnicode(String(ch)) }
+            sentenceBuffer.replacePrevious(with: corrected)
+            // current is intact — typedSince is back where it was.
+        case .unchanged:
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar — unchanged\n".utf8)) }
+        case .unsupported:
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar — unsupported\n".utf8)) }
+        case .failed(let reason):
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar — failed: \(reason)\n".utf8)) }
+        }
     }
 
     // MARK: - Posting synthesized events
