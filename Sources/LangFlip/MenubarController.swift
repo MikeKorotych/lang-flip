@@ -14,12 +14,33 @@ final class MenubarController: NSObject {
     private let updatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     private let quitItem = NSMenuItem(title: "Quit LangFlip", action: #selector(quit), keyEquivalent: "q")
 
+    /// Cached, resized copy of AppIcon for the menu bar. macOS renders
+    /// menu-bar items at ~18pt; pre-resizing here keeps the layout
+    /// stable and avoids the OS picking a fuzzy intermediate size.
+    private static let menubarIcon: NSImage? = {
+        guard let icon = NSImage(named: "AppIcon") else { return nil }
+        let resized = NSImage(size: NSSize(width: 18, height: 18))
+        resized.lockFocus()
+        icon.draw(in: NSRect(x: 0, y: 0, width: 18, height: 18),
+                  from: .zero,
+                  operation: .sourceOver,
+                  fraction: 1.0)
+        resized.unlockFocus()
+        return resized
+    }()
+
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
         if let button = statusItem.button {
-            button.title = "⌥"
+            if let icon = Self.menubarIcon {
+                button.image = icon
+                button.imagePosition = .imageOnly
+            } else {
+                // Fallback if AppIcon isn't bundled for some reason.
+                button.title = "⌥"
+            }
             button.toolTip = "LangFlip — keyboard layout converter"
         }
 
@@ -40,7 +61,8 @@ final class MenubarController: NSObject {
         statusItem.menu = menu
         menu.delegate = self
 
-        // Refresh on the both-Shifts toggle so the icon ⌥ ↔ ⌥̶ stays in sync.
+        // Refresh on the both-Shifts toggle so the menubar icon's
+        // dimmed-when-disabled state stays in sync with Settings.enabled.
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(externalEnabledChange),
@@ -59,7 +81,13 @@ final class MenubarController: NSObject {
         enabledItem.state = Settings.shared.enabled ? .on : .off
         autoFlipItem.state = Settings.shared.autoFlip ? .on : .off
         if let button = statusItem.button {
-            button.title = Settings.shared.enabled ? "⌥" : "⌥̶"
+            // When the icon is bundled, dim it to communicate "paused";
+            // when we're on the text fallback, swap glyph as before.
+            if Self.menubarIcon != nil {
+                button.alphaValue = Settings.shared.enabled ? 1.0 : 0.4
+            } else {
+                button.title = Settings.shared.enabled ? "⌥" : "⌥̶"
+            }
         }
     }
 
