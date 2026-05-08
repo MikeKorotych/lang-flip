@@ -17,6 +17,7 @@ final class Settings {
         static let soundEnabled = "lf.soundEnabled"
         static let onboardingDone = "lf.onboardingDone"
         static let showOverlay = "lf.showOverlay"
+        static let crossLayoutFix = "lf.crossLayoutFix"
     }
 
     var enabled: Bool {
@@ -77,6 +78,14 @@ final class Settings {
     var soundEnabled: Bool {
         get { defaults.object(forKey: Keys.soundEnabled) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.soundEnabled) }
+    }
+
+    /// Catches single-letter mix-ups between Ukrainian-only and Russian-
+    /// only letters (ы↔і, э↔є). On by default — strict dict check makes
+    /// false positives rare. See CrossLayoutFix.swift.
+    var crossLayoutFix: Bool {
+        get { defaults.object(forKey: Keys.crossLayoutFix) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.crossLayoutFix) }
     }
 
     /// Sticky-shift correction. On by default — matches Caramba's behaviour

@@ -171,6 +171,7 @@ private struct LanguagesTab: View {
 private struct BehaviorTab: View {
     @AppStorage("lf.autoFlip") private var autoFlip = true
     @AppStorage("lf.doubleCapsFix") private var doubleCapsFix = true
+    @AppStorage("lf.crossLayoutFix") private var crossLayoutFix = true
     @AppStorage("lf.suppressInFullscreen") private var suppressInFullscreen = false
     @AppStorage("lf.showOverlay") private var showOverlay = true
 
@@ -183,6 +184,10 @@ private struct BehaviorTab: View {
             Section {
                 Toggle("Fix sticky-shift typos (WOrld → World)", isOn: $doubleCapsFix)
                 helpText("Catches the classic two-uppercase mistake. Only applied when the corrected form is a real dictionary word, so acronyms like OAuth aren't mangled.")
+            }
+            Section {
+                Toggle("Fix UK ↔ RU letter slips (ы ↔ і, э ↔ є)", isOn: $crossLayoutFix)
+                helpText("Catches words where one Russian-only letter (ы, э) is sitting in an otherwise Ukrainian word — or vice versa. \"пыдтримую\" → \"підтримую\", \"эдиний\" → \"єдиний\", \"єто\" → \"это\". Only fires when the corrected form is in the target language's dictionary.")
             }
             Section {
                 HStack {

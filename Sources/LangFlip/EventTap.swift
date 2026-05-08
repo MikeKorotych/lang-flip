@@ -153,8 +153,9 @@ final class EventTap {
                     let suppression = AppContext.suppressionCause()
                     var word = completed
 
-                    // Sticky-shift correction first — its result feeds the
-                    // auto-flip stage so a flipped word gets corrected too.
+                    // Sticky-shift correction first — its result feeds
+                    // the cross-layout / auto-flip stages so a fix
+                    // composes if the word also has another problem.
                     if Settings.shared.doubleCapsFix,
                        suppression == nil,
                        let fixed = DoubleCapsFix.correction(for: word) {
@@ -162,6 +163,18 @@ final class EventTap {
                         rewriteCompletedWord(originalLength: word.count, replacement: fixed)
                         FlipOverlay.shared.show()
                         word = fixed
+                    }
+
+                    // Cross-layout single-letter fix (ы↔і, э↔є). Same
+                    // suppression rules as auto-flip — silent in
+                    // terminals, password apps, etc.
+                    if Settings.shared.crossLayoutFix,
+                       suppression == nil,
+                       !BackspaceLearner.shared.isExcluded(word),
+                       let cross = CrossLayoutFix.correction(for: word) {
+                        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: cross-layout fix '\(word)' → '\(cross.corrected)' (\(cross.target))\n".utf8)) }
+                        applyCrossLayoutFix(original: word, fix: cross)
+                        word = cross.corrected
                     }
 
                     if Settings.shared.autoFlip {
@@ -195,6 +208,31 @@ final class EventTap {
         for ch in replacement { postUnicode(String(ch)) }
         postUnicode(" ")
         Sound.playFlip()
+    }
+
+    /// Apply a cross-layout single-letter fix: rewrite the word, switch
+    /// the system input source, and arm the BackspaceLearner so the user
+    /// can hit Backspace to undo + permanently exclude the word.
+    private func applyCrossLayoutFix(original: String, fix: CrossLayoutFix.Correction) {
+        let eraseCount = original.count + 1
+        for _ in 0..<eraseCount { postKey(virtualKey: CGKeyCode(kVK_Delete)) }
+        InputSource.switchTo(fix.target)
+        for ch in fix.corrected { postUnicode(String(ch)) }
+        postUnicode(" ")
+        Sound.playFlip()
+        FlipOverlay.shared.show()
+
+        // Treat as a layout flip from the user's perspective: capture the
+        // pre-fix layout (best effort — we use the *opposite* of the
+        // target since the wrong-letter side of the pair effectively
+        // implies that layout was active).
+        let source: Layout = (fix.target == .uk) ? .ru : .uk
+        BackspaceLearner.shared.recordFlip(
+            original: original,
+            converted: fix.corrected,
+            source: source,
+            target: fix.target
+        )
     }
 
     /// Physically undo an auto-flip the user just rejected. We're called from
