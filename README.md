@@ -60,6 +60,12 @@ That's it. After the wizard you'll see a small `⌥` icon in the menu bar.
   bad rewrite would do real damage. Optional: pause in fullscreen apps (off by default).
 - **Per-app override.** From the menubar, disable auto-flip in any specific app you don't
   want it touching.
+- **Visual confirmation.** A bouncy 180° icon flip pops up at the bottom of the screen
+  on every rewrite. Off by default; opt in via Preferences > Behavior. Same animation
+  reused below:
+
+  <p align="center"><img src="docs/media/overlay-animation.gif" alt="Bouncy icon flip" width="160" /></p>
+
 - **Sound feedback.** Quiet system tick on every rewrite. Off by default.
 - **Launch at login.** One toggle in Preferences.
 - **Bundled UK / RU dictionaries.** ~45 k words each, frequency-ordered (from the
