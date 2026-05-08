@@ -154,10 +154,12 @@ private struct FlipOverlayView: View {
             opacity = 1
         }
 
-        // Pass 2 — Y-axis spin starts a beat after the bounce begins, runs
-        // a touch slower for a more deliberate "flip" feel. ~0.1..~0.7 s.
+        // Pass 2 — Y-axis half-flip starts a beat after the bounce begins.
+        // 180° matches the metaphor of switching the layout once: the icon
+        // turns over, doesn't spin all the way back to where it started.
+        // ~0.1..~0.7 s.
         withAnimation(.spring(response: 0.7, dampingFraction: 0.75).delay(0.08)) {
-            rotation = 360
+            rotation = 180
         }
     }
 
