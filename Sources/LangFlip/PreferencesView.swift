@@ -174,9 +174,18 @@ private struct BehaviorTab: View {
     @AppStorage("lf.crossLayoutFix") private var crossLayoutFix = true
     @AppStorage("lf.suppressInFullscreen") private var suppressInFullscreen = false
     @AppStorage("lf.showOverlay") private var showOverlay = true
+    @AppStorage("lf.hotkeyPreset") private var hotkeyPreset = HotkeyPreset.doubleShift.rawValue
 
     var body: some View {
         Form {
+            Section {
+                Picker("Hotkey", selection: $hotkeyPreset) {
+                    ForEach(HotkeyPreset.allCases) { preset in
+                        Text(preset.displayName).tag(preset.rawValue)
+                    }
+                }
+                helpText("Pick the gesture that flips the last word or selection. Heavy-use modifiers like plain Cmd / Option are intentionally excluded — they'd false-fire on rapid system shortcuts. Pressing both Shifts at once still pauses the app regardless of this setting.")
+            }
             Section {
                 Toggle("Auto-flip on word boundary", isOn: $autoFlip)
                 helpText("After a space or punctuation, if the just-typed word reads as gibberish in the current layout but a real word in another, fix it automatically. Press Backspace right after to undo and teach the app to skip that word forever.")

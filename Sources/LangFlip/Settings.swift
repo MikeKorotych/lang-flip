@@ -1,4 +1,46 @@
 import Foundation
+import Carbon.HIToolbox
+
+/// User-selectable hotkey gestures. We deliberately keep the list short
+/// and limited to "safe" keys — any modifier that's heavily used in
+/// system shortcuts (left Cmd, plain Option) would false-fire on rapid
+/// shortcut sequences (Cmd+C, Cmd+V…) and ruin the experience. The
+/// default `.doubleShift` is what Caramba and most muscle memory
+/// expects.
+enum HotkeyPreset: String, CaseIterable, Identifiable {
+    case doubleShift
+    case doubleRightCmd
+    case doubleRightOption
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .doubleShift:       return "Double-tap Shift (any side)"
+        case .doubleRightCmd:    return "Double-tap right Command"
+        case .doubleRightOption: return "Double-tap right Option"
+        }
+    }
+
+    /// The physical keys the tap-counter watches for this preset, paired
+    /// with the NX device-flag bit that says "this key is currently held"
+    /// inside CGEventFlags.rawValue. Multiple entries mean either key
+    /// counts toward a tap (the default `.doubleShift` accepts left or
+    /// right Shift indifferently).
+    var watchedKeys: [(keyCode: CGKeyCode, bitMask: UInt64)] {
+        switch self {
+        case .doubleShift:
+            return [
+                (CGKeyCode(kVK_Shift),         0x2),  // NX_DEVICELSHIFTKEYMASK
+                (CGKeyCode(kVK_RightShift),    0x4),  // NX_DEVICERSHIFTKEYMASK
+            ]
+        case .doubleRightCmd:
+            return [(CGKeyCode(kVK_RightCommand), 0x10)] // NX_DEVICERCMDKEYMASK
+        case .doubleRightOption:
+            return [(CGKeyCode(kVK_RightOption), 0x40)]  // NX_DEVICERALTKEYMASK
+        }
+    }
+}
 
 /// User-facing toggles persisted in UserDefaults. Read by EventTap on each event,
 /// so changes from the menubar take effect immediately without restart.
@@ -18,6 +60,7 @@ final class Settings {
         static let onboardingDone = "lf.onboardingDone"
         static let showOverlay = "lf.showOverlay"
         static let crossLayoutFix = "lf.crossLayoutFix"
+        static let hotkeyPreset = "lf.hotkeyPreset"
     }
 
     var enabled: Bool {
@@ -78,6 +121,18 @@ final class Settings {
     var soundEnabled: Bool {
         get { defaults.object(forKey: Keys.soundEnabled) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.soundEnabled) }
+    }
+
+    /// Which gesture should trigger a flip. Default `.doubleShift` keeps
+    /// the muscle memory most users expect.
+    var hotkeyPreset: HotkeyPreset {
+        get {
+            guard let raw = defaults.string(forKey: Keys.hotkeyPreset),
+                  let value = HotkeyPreset(rawValue: raw)
+            else { return .doubleShift }
+            return value
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.hotkeyPreset) }
     }
 
     /// Catches single-letter mix-ups between Ukrainian-only and Russian-
