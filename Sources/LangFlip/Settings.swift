@@ -194,15 +194,17 @@ final class Settings {
     /// Used both by the hotkey and as the highlighted entry in the
     /// menubar submenu. Defaults to English — most non-English users
     /// most often translate INTO English for shared communication.
-    /// Ollama model tag (e.g. "gemma3", "qwen2.5:1.5b", "llama3.2").
-    /// Used only when `aiMode == .ollama`. Default `gemma3` because
-    /// Google's Gemma 3 is a strong general-purpose multilingual
-    /// open-weight model under 2 GB. Users who pull a different one
-    /// just type its name here and it picks up immediately.
+    /// Ollama model tag (e.g. "gemma4", "gemma4:e4b", "qwen2.5:1.5b",
+    /// "llama3.2"). Used only when `aiMode == .ollama`. Default
+    /// `gemma4` — Google's latest open multilingual model with strong
+    /// 140-language support including UK/RU/EN and a long context
+    /// window. The E4B (~9.6 GB) "edge" variant runs comfortably on
+    /// Apple Silicon. Users who pull a different one just type its
+    /// name here and it picks up immediately.
     var ollamaModel: String {
         get {
             let raw = defaults.string(forKey: Keys.ollamaModel)?.trimmingCharacters(in: .whitespaces)
-            return (raw?.isEmpty == false) ? raw! : "gemma3"
+            return (raw?.isEmpty == false) ? raw! : "gemma4"
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespaces)

@@ -248,7 +248,7 @@ private struct ModelsTab: View {
     @AppStorage("lf.smartSelectionFix") private var smartSelectionFix = false
     @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
     @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
-    @AppStorage("lf.ollamaModel") private var ollamaModel = "gemma3"
+    @AppStorage("lf.ollamaModel") private var ollamaModel = "gemma4"
 
     var body: some View {
         Form {
@@ -288,7 +288,7 @@ private struct ModelsTab: View {
                 Section("Ollama") {
                     TextField("Model name", text: $ollamaModel)
                         .textFieldStyle(.roundedBorder)
-                    helpText("Type the model tag you've already pulled with `ollama pull`. Examples: `gemma3`, `qwen2.5:1.5b`, `llama3.2`. LangFlip talks to Ollama on http://localhost:11434 — make sure the daemon is running (it auto-starts after `brew install ollama` or installing the .app from ollama.com). Smaller models (1-2 GB) feel responsive; bigger ones add cold-load delay on the first inference.")
+                    helpText("Type the model tag you've already pulled with `ollama pull`. Examples: `gemma4`, `gemma4:e4b`, `qwen2.5:1.5b`, `llama3.2`. LangFlip talks to Ollama on http://localhost:11434 — make sure the daemon is running (it auto-starts after `brew install ollama` or installing the .app from ollama.com). Smaller models (1-2 GB) feel responsive; bigger ones add cold-load delay on the first inference.")
                 }
             }
 
