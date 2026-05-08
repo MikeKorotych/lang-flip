@@ -533,7 +533,76 @@ final class EventTap {
         let converted = convert(completedWord, from: current, to: target)
         guard converted != completedWord else { return }
 
-        let eraseCount = completedWord.count + 1
+        // Two-vote agreement: when the user has an AI assistant enabled
+        // and ready, ask it for a second opinion before committing the
+        // flip. AI inference runs off-main; the apply path hops back via
+        // DispatchQueue.main.async. When AI is .off or unavailable, we
+        // skip the vote entirely and apply immediately — keeps latency
+        // identical to v0.2.0 for users who haven't opted in.
+        if Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady {
+            consultAIThenApplyFlip(
+                original: completedWord,
+                converted: converted,
+                source: current,
+                target: target
+            )
+        } else {
+            applyAutoFlip(
+                original: completedWord,
+                converted: converted,
+                source: current,
+                target: target
+            )
+        }
+    }
+
+    /// Submit the candidate flip to the AI assistant. On `.flip` /
+    /// `.unknown` we proceed with the rules-based flip; on `.dontFlip`
+    /// we drop it entirely (the AI explicitly vetoed). Failures /
+    /// timeouts collapse to `.unknown` upstream so we don't lose flips
+    /// to flaky inference.
+    private func consultAIThenApplyFlip(
+        original: String,
+        converted: String,
+        source: Layout,
+        target: Layout
+    ) {
+        let candidate = AICandidate(
+            originalWord: original,
+            proposedFlip: converted,
+            context: buffer.recentContext(),
+            sourceLayout: source,
+            targetLayout: target
+        )
+        AIAssistantManager.shared.current.review(candidateFlip: candidate) { [weak self] decision in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch decision {
+                case .dontFlip:
+                    if self.debug {
+                        FileHandle.standardError.write(Data("lang-flip[debug]: AI vetoed flip '\(original)' → '\(converted)'\n".utf8))
+                    }
+                case .flip, .unknown:
+                    self.applyAutoFlip(
+                        original: original,
+                        converted: converted,
+                        source: source,
+                        target: target
+                    )
+                }
+            }
+        }
+    }
+
+    /// Erase + retype + record. Shared between the immediate-apply path
+    /// (AI off) and the AI-confirmed-apply path.
+    private func applyAutoFlip(
+        original: String,
+        converted: String,
+        source: Layout,
+        target: Layout
+    ) {
+        let eraseCount = original.count + 1
         for _ in 0..<eraseCount { postKey(virtualKey: CGKeyCode(kVK_Delete)) }
         InputSource.switchTo(target)
         for ch in converted { postUnicode(String(ch)) }
@@ -544,9 +613,9 @@ final class EventTap {
         // Open the disagreement-watch window so the user can backspace this
         // away and have us learn from it.
         BackspaceLearner.shared.recordFlip(
-            original: completedWord,
+            original: original,
             converted: converted,
-            source: current,
+            source: source,
             target: target
         )
     }
