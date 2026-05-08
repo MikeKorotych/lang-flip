@@ -77,6 +77,16 @@ enum CrossLayoutFix {
         let lower = word.lowercased()
         let chars = Array(lower)
 
+        // If the typed word is already a real word in any of our
+        // dictionaries, leave it alone. This is what blocks the
+        // oscillation case: "стороны" is a valid Russian word AND its
+        // UK substitution "сторони" is a valid Ukrainian word — without
+        // this check we'd flip "стороны → сторони → стороны → …" every
+        // time the user retypes either form.
+        if autoFlip.isKnownWord(lower) {
+            return nil
+        }
+
         // Decide direction by which side's exclusive letters appear. If
         // both sides' exclusive letters are present, the word is
         // genuinely mixed and we don't touch it.
