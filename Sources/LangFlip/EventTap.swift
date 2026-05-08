@@ -193,6 +193,13 @@ final class EventTap {
                 let s = String(utf16CodeUnits: chars, count: len)
                 sentenceBuffer.feed(s)
 
+                // Compute suppression once per keystroke. With C.2 enabled
+                // both the sentence-end gate and the word-boundary gate
+                // need it; suppressionCause() does an NSWorkspace
+                // frontmost-app lookup so calling it twice per keystroke
+                // is wasteful.
+                let suppression = AppContext.suppressionCause()
+
                 // Sentence-end auto grammar fix (Sprint C.2). Runs as soon
                 // as the user types `.` `!` or `?` — the buffer has just
                 // rolled over so sentenceBuffer.previous is the sentence
@@ -203,12 +210,11 @@ final class EventTap {
                 if Settings.shared.grammarCheckOnSentenceEnd,
                    Settings.shared.aiMode != .off,
                    s.contains(where: { $0 == "." || $0 == "!" || $0 == "?" }),
-                   AppContext.suppressionCause() == nil {
+                   suppression == nil {
                     maybeStartSentenceEndGrammar()
                 }
 
                 if let completed = buffer.feedReturningCompleted(s) {
-                    let suppression = AppContext.suppressionCause()
                     var word = completed
 
                     // Sticky-shift correction first — its result feeds
