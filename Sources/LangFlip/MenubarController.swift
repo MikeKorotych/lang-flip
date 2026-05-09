@@ -14,6 +14,8 @@ final class MenubarController: NSObject {
 
     private let enabledItem = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
     private let autoFlipItem = NSMenuItem(title: "Auto-flip at word end", action: #selector(toggleAutoFlip), keyEquivalent: "")
+    private let flipSelectionItem = NSMenuItem(title: "Flip Selected Text", action: #selector(flipSelectedText), keyEquivalent: "")
+    private let fixSelectionItem = NSMenuItem(title: "Fix Selected Text", action: #selector(fixSelectedText), keyEquivalent: "")
     private let translateMenuItem = NSMenuItem(title: "Translate selection", action: nil, keyEquivalent: "")
     private let ocrMenuItem = NSMenuItem(title: "Capture text from screen…", action: #selector(captureScreenText), keyEquivalent: "")
     private let prefsItem = NSMenuItem(title: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",")
@@ -53,12 +55,17 @@ final class MenubarController: NSObject {
 
         enabledItem.target = self
         autoFlipItem.target = self
+        flipSelectionItem.target = self
+        fixSelectionItem.target = self
         prefsItem.target = self
         updatesItem.target = self
         quitItem.target = self
 
         menu.addItem(enabledItem)
         menu.addItem(autoFlipItem)
+        menu.addItem(.separator())
+        menu.addItem(flipSelectionItem)
+        menu.addItem(fixSelectionItem)
 
         // Translate-selection submenu — built once, shown/hidden in
         // refresh() based on whether AI is active.
@@ -110,6 +117,7 @@ final class MenubarController: NSObject {
     private func refresh() {
         enabledItem.state = Settings.shared.enabled ? .on : .off
         autoFlipItem.state = Settings.shared.autoFlip ? .on : .off
+        fixSelectionItem.isEnabled = Settings.shared.aiMode != .off && AIAssistantManager.shared.isReady
         // Hide the Translate submenu entirely when AI is off — it
         // wouldn't do anything useful and risks confusing users who
         // haven't opted into AI yet.
@@ -156,6 +164,14 @@ final class MenubarController: NSObject {
         // active app, screencapture's interactive UI takes over the
         // whole screen anyway.
         eventTap?.captureScreenTextWithAI()
+    }
+
+    @objc private func flipSelectedText() {
+        eventTap?.flipSelectedText()
+    }
+
+    @objc private func fixSelectedText() {
+        eventTap?.fixSelectedTextWithAI()
     }
 
     @objc private func translateSelectionMenuFired(_ sender: NSMenuItem) {

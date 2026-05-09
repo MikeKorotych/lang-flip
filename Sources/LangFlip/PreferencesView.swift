@@ -195,7 +195,8 @@ private struct DictionaryPackView: View {
                 Button {
                     installExtendedPack()
                 } label: {
-                    Label("Install extended dictionaries", systemImage: "arrow.down.circle")
+                    Label(hasInstalledWords ? "Update extended dictionaries" : "Install extended dictionaries",
+                          systemImage: hasInstalledWords ? "arrow.clockwise.circle" : "arrow.down.circle")
                 }
                 .disabled(isInstalling)
 
@@ -236,7 +237,11 @@ private struct DictionaryPackView: View {
     private var statusText: some View {
         switch state {
         case .idle:
-            Text("Bundled dictionaries work offline. Extended dictionaries improve coverage for auto-flip and sticky-shift checks.")
+            if hasInstalledWords {
+                Text("Extended dictionaries are active. Update them anytime, or reset to the bundled offline dictionaries.")
+            } else {
+                Text("Bundled dictionaries work offline. Extended dictionaries improve coverage for auto-flip and sticky-shift checks.")
+            }
         case .installing:
             Text("Downloading and cleaning dictionaries...")
         case .installed(let message):
@@ -262,14 +267,25 @@ private struct DictionaryPackView: View {
         return HStack {
             Text(title)
             Spacer()
-            Text("\(format(item.effectiveCount)) words")
-                .foregroundColor(.secondary)
-            if item.installedCount > 0 {
-                Text("+\(format(item.installedCount)) installed")
+            VStack(alignment: .trailing, spacing: 1) {
+                Text("\(format(item.effectiveCount)) active words")
                     .foregroundColor(.secondary)
+                if item.installedCount > 0 {
+                    Text("extended pack installed")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .font(.callout)
+    }
+
+    private func installSummary(_ counts: [Layout: Int]) -> String {
+        Layout.allCases
+            .compactMap { layout in
+                counts[layout].map { "\(layout.rawValue.uppercased()) \(format($0))" }
+            }
+            .joined(separator: ", ")
     }
 
     private func installExtendedPack() {
@@ -279,9 +295,7 @@ private struct DictionaryPackView: View {
                 switch result {
                 case .success(let counts):
                     refresh()
-                    let summary = Layout.allCases
-                        .compactMap { layout in counts[layout].map { "\(layout.rawValue.uppercased()) \($0)" } }
-                        .joined(separator: ", ")
+                    let summary = installSummary(counts)
                     state = .installed("Installed extended dictionaries: \(summary). Auto-flip reloaded.")
                 case .failure(let error):
                     state = .failed(error.localizedDescription)

@@ -525,6 +525,12 @@ final class EventTap {
         }
     }
 
+    /// Menu entry point for the same selection-only layout flip as the
+    /// double-Shift hotkey.
+    func flipSelectedText() {
+        handleHotkey(targetNonEnglish: Settings.shared.primaryLanguage)
+    }
+
     /// Given the source layout detected from text, choose where to flip to.
     /// Rule: source==EN → target = configured non-English; source!=EN → EN.
     private func resolveTarget(source: Layout, configured: Layout) -> Layout {
@@ -922,6 +928,13 @@ final class EventTap {
                 snapshot.restore(to: pb)
             }
         }
+    }
+
+    /// Menu entry point for the same selected-text grammar fix as a
+    /// single Shift tap.
+    func fixSelectedTextWithAI() {
+        guard !singleShiftGrammarInFlight else { return }
+        fireSingleShiftGrammarFix()
     }
 
     private func applySingleShiftAIFixToSelection(text: String, snapshot: PasteboardSnapshot) {

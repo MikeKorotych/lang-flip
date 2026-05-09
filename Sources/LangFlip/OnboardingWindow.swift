@@ -23,13 +23,15 @@ final class OnboardingWindowController: NSObject {
         self.onComplete = onComplete
         if window == nil {
             let view = OnboardingView(onContinue: { [weak self] in
-                self?.markDoneAndClose()
+                self?.markDoneAndClose(openPreferences: false)
+            }, onOpenPreferences: { [weak self] in
+                self?.markDoneAndClose(openPreferences: true)
             })
             let host = NSHostingController(rootView: view)
             let win = NSWindow(contentViewController: host)
             win.title = "LangFlip"
             win.styleMask = [.titled, .closable]
-            win.setContentSize(NSSize(width: 480, height: 460))
+            win.setContentSize(NSSize(width: 520, height: 560))
             win.isReleasedWhenClosed = false
             win.center()
             // Keep the window above other apps so when the user comes back
@@ -54,13 +56,18 @@ final class OnboardingWindowController: NSObject {
         window.makeKeyAndOrderFront(nil)
     }
 
-    private func markDoneAndClose() {
+    private func markDoneAndClose(openPreferences: Bool) {
         Settings.shared.onboardingDone = true
         window?.close()
         NSApp.setActivationPolicy(.accessory)
         let cb = onComplete
         onComplete = nil
         cb?()
+        if openPreferences {
+            DispatchQueue.main.async {
+                PreferencesWindowController.shared.show()
+            }
+        }
     }
 }
 
@@ -68,6 +75,7 @@ final class OnboardingWindowController: NSObject {
 
 private struct OnboardingView: View {
     let onContinue: () -> Void
+    let onOpenPreferences: () -> Void
 
     @State private var status: PermissionStatus = .current()
     /// Driven by polling — when it changes from "missing" to "granted",
@@ -101,6 +109,7 @@ private struct OnboardingView: View {
                 } else {
                     completedStep(.accessibility)
                     completedStep(.inputMonitoring)
+                    quickSetup
                 }
             }
 
@@ -151,19 +160,27 @@ private struct OnboardingView: View {
         case 1:
             return "One more permission to go."
         default:
-            return "Look for ⌥ in your menu bar. Select text, then double-tap Shift to flip its layout; press both Shifts at once to pause."
+            return "LangFlip is ready. One quick setup pass can make the first session much better."
         }
     }
 
     @ViewBuilder
     private var footer: some View {
         if status.allGranted {
-            Button(action: onContinue) {
-                Text("Continue")
-                    .frame(minWidth: 120)
+            HStack(spacing: 10) {
+                Button(action: onContinue) {
+                    Text("Continue")
+                        .frame(minWidth: 120)
+                }
+                .keyboardShortcut(.return)
+                .controlSize(.large)
+
+                Button(action: onOpenPreferences) {
+                    Text("Open Preferences")
+                        .frame(minWidth: 140)
+                }
+                .controlSize(.large)
             }
-            .keyboardShortcut(.return)
-            .controlSize(.large)
         } else {
             // Plain helper text while the user is mid-flow. Tells them
             // explicitly to come back, since otherwise it's easy to assume
@@ -174,6 +191,49 @@ private struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 8)
+        }
+    }
+
+    private var quickSetup: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            quickSetupRow(
+                icon: "text.book.closed",
+                title: "Install extended dictionaries",
+                detail: "Preferences → Languages → Dictionaries adds larger EN/UK/RU word lists for better auto-flip coverage."
+            )
+            quickSetupRow(
+                icon: "sparkles",
+                title: "Enable local AI",
+                detail: "Preferences → AI can use Ollama with Qwen 3.5 4B for selected-text fixes, translation, and screen text capture."
+            )
+            quickSetupRow(
+                icon: "keyboard",
+                title: "Start with selected text",
+                detail: "Double-tap Shift to flip layout, tap Shift once to fix grammar, or press Shift+Command+S to capture text from the screen."
+            )
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.secondary.opacity(0.06))
+        )
+    }
+
+    private func quickSetupRow(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(.accentColor)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
