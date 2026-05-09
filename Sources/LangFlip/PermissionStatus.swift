@@ -13,11 +13,21 @@ struct PermissionStatus: Equatable {
 
     /// Read the current permission state. `prompt = true` shows the
     /// Accessibility consent dialog the first time it's queried.
+    ///
+    /// Passing an empty CFDictionary to AXIsProcessTrustedWithOptions
+    /// crashes inside CFGetTypeID on macOS 26 (EXC_BAD_ACCESS at
+    /// offset 0x8) — we hit this on every silent permission probe
+    /// after the onboarding refactor went prompt-free. Pass nil
+    /// explicitly when there's no option to set; that's the supported
+    /// shape per Apple's docs.
     static func current(prompt: Bool = false) -> PermissionStatus {
-        let opts: CFDictionary = prompt
-            ? [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
-            : [:] as CFDictionary
-        let ax = AXIsProcessTrustedWithOptions(opts)
+        let ax: Bool
+        if prompt {
+            let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+            ax = AXIsProcessTrustedWithOptions(opts)
+        } else {
+            ax = AXIsProcessTrustedWithOptions(nil)
+        }
         let im = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
         return PermissionStatus(accessibility: ax, inputMonitoring: im)
     }
