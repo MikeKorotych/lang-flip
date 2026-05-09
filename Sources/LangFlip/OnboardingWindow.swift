@@ -151,7 +151,7 @@ private struct OnboardingView: View {
         case 1:
             return "One more permission to go."
         default:
-            return "Look for ⌥ in your menu bar. Double-tap Shift to flip the last word; press both Shifts at once to pause."
+            return "Look for ⌥ in your menu bar. Select text, then double-tap Shift to flip its layout; press both Shifts at once to pause."
         }
     }
 

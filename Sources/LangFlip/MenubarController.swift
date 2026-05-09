@@ -13,7 +13,7 @@ final class MenubarController: NSObject {
     private weak var eventTap: EventTap?
 
     private let enabledItem = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
-    private let autoFlipItem = NSMenuItem(title: "Auto-flip on word boundary", action: #selector(toggleAutoFlip), keyEquivalent: "")
+    private let autoFlipItem = NSMenuItem(title: "Auto-flip at word end", action: #selector(toggleAutoFlip), keyEquivalent: "")
     private let translateMenuItem = NSMenuItem(title: "Translate selection", action: nil, keyEquivalent: "")
     private let ocrMenuItem = NSMenuItem(title: "Capture text from screen…", action: #selector(captureScreenText), keyEquivalent: "")
     private let prefsItem = NSMenuItem(title: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",")

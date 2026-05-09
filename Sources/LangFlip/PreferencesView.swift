@@ -154,9 +154,13 @@ private struct LanguagesTab: View {
                 }
             }
 
+            Section("Dictionaries") {
+                DictionaryPackView()
+            }
+
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("Double-tap ⇧ swaps with the **primary** language.", systemImage: "1.circle")
+                    Label("Double-tap ⇧ flips the **selected** text.", systemImage: "1.circle")
                     Label("Triple-tap ⇧ swaps with the **secondary** language.", systemImage: "2.circle")
                     Label("Press both ⇧ at once to pause / resume.", systemImage: "pause.circle")
                 }
@@ -166,6 +170,149 @@ private struct LanguagesTab: View {
         }
         .formStyle(.grouped)
     }
+}
+
+private struct DictionaryPackView: View {
+    private enum InstallState: Equatable {
+        case idle
+        case installing
+        case installed(String)
+        case failed(String)
+    }
+
+    @State private var stats = DictionaryManager.stats()
+    @State private var state: InstallState = .idle
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                dictionaryRow("English", layout: .en)
+                dictionaryRow("Українська", layout: .uk)
+                dictionaryRow("Русский", layout: .ru)
+            }
+
+            HStack {
+                Button {
+                    installExtendedPack()
+                } label: {
+                    Label("Install extended dictionaries", systemImage: "arrow.down.circle")
+                }
+                .disabled(isInstalling)
+
+                Button("Reset") {
+                    resetInstalledPack()
+                }
+                .disabled(isInstalling || !hasInstalledWords)
+
+                Spacer()
+            }
+            .controlSize(.small)
+
+            statusText
+                .font(.caption)
+                .foregroundColor(statusColor)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Downloads a balanced word-list pack from \(DictionaryManager.extendedPackSource) (\(DictionaryManager.extendedPackLicense)). LangFlip keeps only clean alphabetic words and caps each language to the most frequent 120k entries to reduce false positives.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .onAppear {
+            refresh()
+        }
+    }
+
+    private var isInstalling: Bool {
+        if case .installing = state { return true }
+        return false
+    }
+
+    private var hasInstalledWords: Bool {
+        stats.values.contains { $0.installedCount > 0 }
+    }
+
+    @ViewBuilder
+    private var statusText: some View {
+        switch state {
+        case .idle:
+            Text("Bundled dictionaries work offline. Extended dictionaries improve coverage for auto-flip and sticky-shift checks.")
+        case .installing:
+            Text("Downloading and cleaning dictionaries...")
+        case .installed(let message):
+            Text(message)
+        case .failed(let reason):
+            Text("Failed: \(reason)")
+        }
+    }
+
+    private var statusColor: Color {
+        switch state {
+        case .installed:
+            return .green
+        case .failed:
+            return .orange
+        default:
+            return .secondary
+        }
+    }
+
+    private func dictionaryRow(_ title: String, layout: Layout) -> some View {
+        let item = stats[layout] ?? .init(bundledCount: 0, installedCount: 0, effectiveCount: 0)
+        return HStack {
+            Text(title)
+            Spacer()
+            Text("\(format(item.effectiveCount)) words")
+                .foregroundColor(.secondary)
+            if item.installedCount > 0 {
+                Text("+\(format(item.installedCount)) installed")
+                    .foregroundColor(.secondary)
+            }
+        }
+        .font(.callout)
+    }
+
+    private func installExtendedPack() {
+        state = .installing
+        DictionaryManager.installExtendedFrequencyPack { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let counts):
+                    refresh()
+                    let summary = Layout.allCases
+                        .compactMap { layout in counts[layout].map { "\(layout.rawValue.uppercased()) \($0)" } }
+                        .joined(separator: ", ")
+                    state = .installed("Installed extended dictionaries: \(summary). Auto-flip reloaded.")
+                case .failure(let error):
+                    state = .failed(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func resetInstalledPack() {
+        do {
+            try DictionaryManager.resetInstalledDictionaries()
+            refresh()
+            state = .installed("Removed installed dictionaries. Bundled dictionaries are active again.")
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    private func refresh() {
+        stats = DictionaryManager.stats()
+    }
+
+    private func format(_ value: Int) -> String {
+        Self.formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
+    private static let formatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter
+    }()
 }
 
 // MARK: - Behavior
@@ -186,10 +333,10 @@ private struct BehaviorTab: View {
                         Text(preset.displayName).tag(preset.rawValue)
                     }
                 }
-                helpText("Pick the gesture that flips the last word or selection. Heavy-use modifiers like plain Cmd / Option are intentionally excluded — they'd false-fire on rapid system shortcuts. Pressing both Shifts at once still pauses the app regardless of this setting.")
+                helpText("Pick the gesture that flips selected text between layouts. If nothing is selected, the gesture does nothing. Heavy-use modifiers like plain Cmd / Option are intentionally excluded — they'd false-fire on rapid system shortcuts. Pressing both Shifts at once still pauses the app regardless of this setting.")
             }
             Section {
-                Toggle("Auto-flip on word boundary", isOn: $autoFlip)
+                Toggle("Auto-flip at word end", isOn: $autoFlip)
                 helpText("After a space or punctuation, if the just-typed word reads as gibberish in the current layout but a real word in another, fix it automatically. Press Backspace right after to undo and teach the app to skip that word forever.")
             }
             Section {
@@ -245,12 +392,10 @@ private struct ModelsTab: View {
 
     @AppStorage("lf.aiMode") private var aiMode = AIMode.off.rawValue
     @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = false
-    @AppStorage("lf.grammarCheckOnSentenceEnd") private var grammarOnSentenceEnd = false
     @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
     @AppStorage("lf.screenTextCaptureHotkeyEnabled") private var screenTextCaptureHotkeyEnabled = true
     @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
     @AppStorage("lf.ollamaModel") private var ollamaModel = "qwen3.5:4b"
-    @AppStorage("lf.tripleShiftAction") private var tripleShiftAction = TripleShiftAction.secondaryLanguage.rawValue
     @AppStorage("lf.cloudProvider") private var cloudProvider = AICloudProvider.openRouter.rawValue
     @AppStorage("lf.openaiModel") private var openaiModel = "gpt-5-nano"
     @AppStorage("lf.openaiBaseURL") private var openaiBaseURL = "https://api.openai.com/v1"
@@ -339,17 +484,7 @@ private struct ModelsTab: View {
 
             Section("Features") {
                 Toggle("AI fix on single Shift tap", isOn: $grammarOnSingleShift)
-                helpText("Single clean tap of Shift (no other key in between, no second tap within ~350 ms) is the all-purpose AI fix gesture. If you have text selected, the AI rewrites the selection — typos, grammar, wrong-keyboard-layout gibberish, mid-sentence script flips. If nothing is selected, it rewrites the most recent sentence. Double-tap Shift stays purely mechanical (layout flip), so the two gestures don't fight. Off by default — opt in once you trust the model on your text.")
-
-                Toggle("Auto-fix sentences when you type . ! or ?", isOn: $grammarOnSentenceEnd)
-                helpText("Each time you finish a sentence with a period, exclamation mark, or question mark, the AI rewrites it in place to fix typos and grammar. The fix lands silently a moment later. If you keep typing past the next sentence boundary while the model is thinking, the fix is dropped to avoid disrupting fast typing. Off by default — silent rewrites are powerful and you should opt in only when you trust the model.")
-
-                Picker("Triple-tap Shift action", selection: $tripleShiftAction) {
-                    ForEach(TripleShiftAction.allCases) { a in
-                        Text(a.displayName).tag(a.rawValue)
-                    }
-                }
-                helpText("Triple-tap is the secondary-language gesture by default. If you don't use a secondary language, repurpose it for AI fix on selection — useful as a stronger or more-deliberate alternative to single-tap when you've already trained the muscle memory.")
+                helpText("Single clean tap of Shift (no other key in between, no second tap within ~350 ms) rewrites the selected text — typos, grammar, wrong-keyboard-layout gibberish, mid-sentence script flips. If nothing is selected, it does nothing. Double-tap Shift stays purely mechanical (layout flip), so the two gestures don't fight. Off by default — opt in once you trust the model on your text.")
             }
 
             Section("Translate selection") {
@@ -358,7 +493,7 @@ private struct ModelsTab: View {
                         Text(layout.displayName).tag(layout.rawValue)
                     }
                 }
-                helpText("Used by the menubar's Translate submenu (highlights this entry) and the ⌃⌥T hotkey below.")
+                helpText("Used by the menubar's Translate submenu and the optional ⇧Space hotkey.")
 
                 Toggle("Enable ⇧Space hotkey to translate selection", isOn: $translationHotkeyEnabled)
                 helpText("When this is on AND AI is on, pressing Shift + Space translates the current text selection into the default target above. Shift+Space is rare in normal typing (you release Shift before the trailing space), so hijacking it is generally safe — but disable here if you find a conflict. The menubar's Translate selection → submenu always works regardless of this toggle.")
@@ -554,7 +689,7 @@ private struct AIModelTestView: View {
     private var statusText: some View {
         switch state {
         case .idle:
-            Text("Runs the same grammar rewrite path used by Shift and sentence-end auto-fix.")
+            Text("Runs the same grammar rewrite path used by single Shift on selected text.")
         case .running:
             Text("Running model test...")
         case .success(_, let seconds):
@@ -590,20 +725,20 @@ private struct AIModelTestView: View {
         let started = Date()
         state = .running(started)
 
-        let request = AIRewriteRequest(
+        let request = AIFixRequest(
             text: sample,
-            preferredLayout: .en
+            activeLayout: .en
         )
-        AIAssistantManager.shared.current.rewriteSentence(request) { result in
+        AIAssistantManager.shared.current.fixSelection(request) { result in
             DispatchQueue.main.async {
                 let seconds = Date().timeIntervalSince(started)
                 switch result {
-                case .rewritten(let output):
+                case .fixed(let output):
                     state = .success(output: output, seconds: seconds)
                 case .unchanged:
                     state = .unchanged(seconds: seconds)
                 case .unsupported:
-                    state = .failed("selected assistant does not support grammar rewrite")
+                    state = .failed("selected assistant does not support selected-text fixes")
                 case .failed(let reason):
                     state = .failed(reason)
                 }

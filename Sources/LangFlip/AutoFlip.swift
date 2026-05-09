@@ -10,11 +10,22 @@ import Foundation
 final class AutoFlip {
     static let shared = AutoFlip()
 
-    private let enWords: Set<String>
-    private let ukCommon: Set<String>
-    private let ruCommon: Set<String>
+    private var enWords: Set<String> = []
+    private var ukCommon: Set<String> = []
+    private var ruCommon: Set<String> = []
 
     private init() {
+        reloadDictionaries()
+        _ = NotificationCenter.default.addObserver(
+            forName: .langFlipDictionariesChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.reloadDictionaries()
+        }
+    }
+
+    func reloadDictionaries() {
         // System English dictionary (preinstalled on macOS in /usr/share/dict/words).
         // If absent (chrooted env, customized macOS, etc.), auto-flip can still
         // work but loses its strongest "is this a real English word?" signal.
@@ -27,6 +38,7 @@ final class AutoFlip {
             ))
             enWords = []
         }
+        enWords.formUnion(DictionaryManager.installedWords(for: .en))
 
         // UK / RU lists shipped as bundled resources (built by
         // Scripts/build-dicts.sh). If a file is missing — e.g. running from
@@ -35,6 +47,8 @@ final class AutoFlip {
         // negative signal still works for the most common words.
         ukCommon = Self.loadResource(name: "uk-words", fallback: EmbeddedDicts.ukrainian)
         ruCommon = Self.loadResource(name: "ru-words", fallback: EmbeddedDicts.russian)
+        ukCommon.formUnion(DictionaryManager.installedWords(for: .uk))
+        ruCommon.formUnion(DictionaryManager.installedWords(for: .ru))
     }
 
     private static func loadResource(name: String, fallback: [String]) -> Set<String> {

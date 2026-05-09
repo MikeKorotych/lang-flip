@@ -19,19 +19,19 @@ Supports **English, Ukrainian, and Russian** out of the box.
 - 🔁 **Fixes wrong layout while you type.** Type `руддщ` when you meant `hello`,
   press Space, and LangFlip rewrites it as `hello` while switching the system
   input source back to ABC.
-- ✍️ **Fixes selected text.** Select a word, sentence, or paragraph and use the
-  hotkey. LangFlip converts the text and restores your clipboard afterward.
-- 🧠 **Corrects grammar with local AI.** A single Shift tap can fix typos,
-  punctuation, capitalization, and small grammar mistakes in selected text or in
-  the latest sentence.
-- ⚡ **Auto-fixes completed sentences.** When enabled, typing `.`, `!`, or `?`
-  can trigger a quick grammar pass on the sentence you just finished.
+- ✍️ **Flips selected text.** Select a word, sentence, or paragraph and
+  double-tap Shift. LangFlip converts the keyboard layout and restores your
+  clipboard afterward.
+- 🧠 **Corrects selected text with local AI.** Select text and tap Shift once to
+  fix typos, punctuation, capitalization, and small grammar mistakes.
 - 🌍 **Translates selected text.** Translate into English, Ukrainian, or Russian
   from the menu or with the optional Shift+Space hotkey.
 - 📸 **Captures text from the screen.** Press Shift+Command+S, select a screen
   region, and LangFlip copies recognized text to the clipboard.
 - ↩️ **Learns from Backspace.** If LangFlip flips something you did not want, press
   Backspace and it remembers that word as an exception.
+- 📚 **Installs extended dictionaries.** Download larger EN/UK/RU word lists
+  from Preferences to improve auto-flip coverage without updating the app.
 - 🛡️ **Stays out of risky places.** Auto-flip is quiet in terminals, password
   managers, and other apps where automatic rewrites would be dangerous.
 
@@ -54,15 +54,17 @@ After installation, LangFlip lives in the macOS menu bar.
 
 Common shortcuts:
 
-- **Double-tap Shift** - flip the latest word or selected text.
-- **Triple-tap Shift** - switch to the secondary language, or use it for AI fix
-  if configured that way.
+- **Double-tap Shift** - flip selected text to the other keyboard layout.
 - **Press both Shift keys** - pause or resume LangFlip.
-- **Single Shift tap** - AI-fix selected text or the latest sentence, if enabled.
+- **Single Shift tap** - AI-fix selected text, if enabled.
 - **Shift+Space** - translate selected text, if enabled.
 - **Shift+Command+S** - capture text from a selected screen region.
 
-Most behavior can be changed in **Preferences**.
+Without selected text, the single-Shift and double-Shift actions do nothing.
+That keeps AI corrections explicit and predictable.
+
+For better auto-flip coverage, open **Preferences → Languages → Dictionaries**
+and install the extended word-list pack.
 
 ## 🚀 Install
 

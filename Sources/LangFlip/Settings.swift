@@ -1,33 +1,6 @@
 import Foundation
 import Carbon.HIToolbox
 
-/// What the triple-tap-Shift gesture should do. Repurposing this slot
-/// is useful for users who don't have a secondary language configured —
-/// the gesture would otherwise be a no-op. Default `.secondaryLanguage`
-/// preserves historical behaviour for users who DO have a secondary
-/// configured.
-enum TripleShiftAction: String, CaseIterable, Identifiable {
-    /// Switch the system input source to `secondaryLanguage` (or
-    /// English if the current layout is already secondary). Original
-    /// behaviour. No-op when `secondaryLanguage` is nil.
-    case secondaryLanguage
-    /// Send the current text selection through an AI "fix everything"
-    /// pass — typos, grammar, wrong-keyboard-layout gibberish.
-    /// Identical pipeline to the smart-selection-fix toggle on
-    /// double-Shift, just bound to a different gesture so users can
-    /// keep double-Shift purely mechanical.
-    case aiSelectionFix
-
-    var id: Self { self }
-
-    var displayName: String {
-        switch self {
-        case .secondaryLanguage: return "Switch to secondary language"
-        case .aiSelectionFix:    return "AI fix on selection"
-        }
-    }
-}
-
 /// User-selectable hotkey gestures. We deliberately keep the list short
 /// and limited to "safe" keys — any modifier that's heavily used in
 /// system shortcuts (left Cmd, plain Option) would false-fire on rapid
@@ -91,13 +64,10 @@ final class Settings {
         static let aiMode = "lf.aiMode"
         static let activeModelID = "lf.activeModelID"
         static let grammarCheckOnSingleShift = "lf.grammarCheckOnSingleShift"
-        static let grammarCheckOnSentenceEnd = "lf.grammarCheckOnSentenceEnd"
-        static let smartSelectionFix = "lf.smartSelectionFix"
         static let translationHotkeyEnabled = "lf.translationHotkeyEnabled"
         static let screenTextCaptureHotkeyEnabled = "lf.screenTextCaptureHotkeyEnabled"
         static let translationTarget = "lf.translationTarget"
         static let ollamaModel = "lf.ollamaModel"
-        static let tripleShiftAction = "lf.tripleShiftAction"
         static let openaiModel = "lf.openaiModel"
         static let openaiBaseURL = "lf.openaiBaseURL"
     }
@@ -178,37 +148,12 @@ final class Settings {
 
     /// When true, a single clean Shift tap (no other key in between, no
     /// second tap within the window) fires an AI grammar / typo pass on
-    /// the last sentence and silently applies the result. Speculative
-    /// inference starts at the moment Shift is released so the felt
-    /// latency is just the tap window. Default OFF — single Shift is
-    /// too low-friction to ship enabled out of the box.
+    /// the current selection and silently applies the result. Default
+    /// OFF — single Shift is too low-friction to ship enabled out of
+    /// the box.
     var grammarCheckOnSingleShift: Bool {
         get { defaults.object(forKey: Keys.grammarCheckOnSingleShift) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.grammarCheckOnSingleShift) }
-    }
-
-    /// When true, typing a sentence-ending punctuation mark (`.`, `!`, `?`)
-    /// kicks off an AI grammar / typo pass on the just-completed sentence
-    /// and silently applies the result. The fix is dropped if the user
-    /// kept typing past the next sentence boundary while the model was
-    /// thinking, so fast typists never get the rug pulled out from under
-    /// them. Default OFF — auto-rewriting prose without an explicit
-    /// gesture is high-impact and we want users to opt in.
-    var grammarCheckOnSentenceEnd: Bool {
-        get { defaults.object(forKey: Keys.grammarCheckOnSentenceEnd) as? Bool ?? false }
-        set { defaults.set(newValue, forKey: Keys.grammarCheckOnSentenceEnd) }
-    }
-
-    /// When true AND AI is enabled AND the user has text selected, the
-    /// configured hotkey routes the selection through an AI "fix
-    /// everything" pass instead of the mechanical layout flip — repairs
-    /// typos, grammar, mixed-layout chunks, mid-sentence script
-    /// switches. Falls back to the mechanical flip on AI failure or
-    /// when the AI declines to rewrite. Off by default — same caution
-    /// as the other auto-rewrite features.
-    var smartSelectionFix: Bool {
-        get { defaults.object(forKey: Keys.smartSelectionFix) as? Bool ?? false }
-        set { defaults.set(newValue, forKey: Keys.smartSelectionFix) }
     }
 
     /// When true, ⇧Space (Shift+Space) translates the current text
@@ -231,7 +176,7 @@ final class Settings {
     }
 
     /// Default target language for the translate-selection feature.
-    /// Used both by the hotkey and as the highlighted entry in the
+    /// Used by Shift+Space and as the highlighted entry in the
     /// menubar submenu. Defaults to English — most non-English users
     /// most often translate INTO English for shared communication.
     var translationTarget: Layout {
@@ -242,21 +187,6 @@ final class Settings {
             return layout
         }
         set { defaults.set(newValue.rawValue, forKey: Keys.translationTarget) }
-    }
-
-    /// What triple-tap Shift does. Default keeps the historical
-    /// "switch to secondary language" behaviour; users who don't have
-    /// a secondary configured can flip this to .aiSelectionFix to
-    /// repurpose the gesture as a non-conflicting AI smart-fix
-    /// trigger.
-    var tripleShiftAction: TripleShiftAction {
-        get {
-            guard let raw = defaults.string(forKey: Keys.tripleShiftAction),
-                  let value = TripleShiftAction(rawValue: raw)
-            else { return .secondaryLanguage }
-            return value
-        }
-        set { defaults.set(newValue.rawValue, forKey: Keys.tripleShiftAction) }
     }
 
     /// Ollama model tag (e.g. "qwen3.5:4b", "qwen2.5", "llama3.2").

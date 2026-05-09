@@ -135,7 +135,7 @@ final class OllamaAssistant: AIAssistant {
         runInference(
             system: system,
             prompt: input.text,
-            options: ["temperature": 0.2, "num_ctx": 4096, "num_predict": 1024]
+            options: ["temperature": 0.1, "num_ctx": 2048, "num_predict": 256]
         ) { result in
             switch result {
             case .success(let raw):
@@ -154,10 +154,10 @@ final class OllamaAssistant: AIAssistant {
     }
 
     func extractTextFromImage(_ input: AIOcrRequest, completion: @escaping (AIOcrResult) -> Void) {
-        let prompt = "Extract every piece of visible text. Output ONLY the raw text exactly as it appears, preserving line breaks. No commentary."
+        let prompt = "Read the text in the image. Output ONLY the text, preserving line breaks. No commentary."
         runInference(
             prompt: prompt,
-            options: ["temperature": 0, "num_ctx": 4096, "num_predict": 2048],
+            options: ["temperature": 0, "num_ctx": 2048, "num_predict": 256],
             images: [input.imageBase64]
         ) { result in
             switch result {

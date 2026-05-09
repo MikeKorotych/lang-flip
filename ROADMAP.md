@@ -13,16 +13,16 @@ without configuration screens.
 - [x] Double-Shift hotkey — clean detection (ignores Shift used as a real modifier)
 - [x] Triple-Shift hotkey — for secondary language; auto-disabled when none set so double-tap stays instant
 - [x] Selection-based flip — Cmd+C → convert → Cmd+V → restore clipboard, handles half-paragraph case
-- [x] Word-buffer fallback — when no selection, flip the last word in the in-progress buffer
+- [x] Selection-only manual flip — double-Shift without a selection intentionally does nothing
 - [x] Primary / secondary language settings, persisted in UserDefaults
 - [x] Menubar app with submenus, Auto-flip toggle, Quit
 - [x] App-bundle build target (`make app`) with ad-hoc codesign
 - [x] Permission diagnostics on startup (Accessibility + Input Monitoring)
-- [x] Auto-flip on word boundary (off by default until dicts grow)
+- [x] Auto-flip at word end (off by default until dicts grow)
 - [x] Cached char-map lookup (hot path no longer rebuilds the map each call)
 - [x] Hardened pasteboard restore delay (300 ms) for slow editors
-- [x] Local AI assist via Ollama for grammar fixes, sentence-end cleanup,
-  translation, and screen-region OCR
+- [x] Local AI assist via Ollama for selected-text grammar fixes, translation,
+  and screen-region OCR
 
 ---
 
@@ -113,14 +113,25 @@ Single-keystroke typo fix in obvious words: `teh → the`, `recieve → receive`
 
 After Phase 1 lands, false positives are mostly mitigated by Backspace-learning + context blacklist + entropy filter. We can finally flip the auto-flip default back to ON and ship bigger dicts to make the win-rate higher.
 
-### 2.1 Embed proper UK / RU word lists
-- UK: [`brown-uk/dict_uk`](https://github.com/brown-uk/dict_uk) (~150 k, MIT)
-- RU: [`danakt/russian-words`](https://github.com/danakt/russian-words) (~50 k, public domain)
-- Frequency-rank top 30 k each, lowercase, drop apostrophes/dashes for v1
-- `Scripts/build-dicts.sh` fetches → cleans → writes `Resources/uk-words.txt`, `Resources/ru-words.txt`
-- `AutoFlip` reads them on init (~300 KB total embedded)
+### 2.1 Installable extended word-list pack
+- EN / UK / RU: [`hermitdave/FrequencyWords`](https://github.com/hermitdave/FrequencyWords), OpenSubtitles 2018, CC BY-SA 4.0 for content.
+- Preferences → Languages → Dictionaries downloads the full lists, cleans them,
+  caps each language to the most frequent 120k words, and stores them in
+  `~/Library/Application Support/LangFlip/Dictionaries`.
+- `AutoFlip` reloads installed dictionaries immediately, without app restart.
 
-### 2.2 Default auto-flip back to ON
+### 2.2 Evaluate Hunspell / morphological dictionaries
+- EN: SCOWL / LibreOffice Hunspell is permissively licensed and suitable for
+  bundling with attribution.
+- UK: LibreOffice `uk_UA` is MPL 1.1; upstream VESUM/dict_uk data is strong but
+  has different licensing depending on the distributed derivative. Treat this
+  carefully before bundling.
+- RU: LibreOffice `ru_RU` uses a permissive BSD-like license with attribution
+  and modified-version marking.
+- Next technical step: offline Hunspell expansion into plain word forms, then
+  compare false positives against the current frequency pack before shipping.
+
+### 2.3 Default auto-flip back to ON
 After 2.1 + Phase 1.1 / 1.2 / 1.4 are in. Update `Settings.autoFlip` default to `true`.
 
 ---

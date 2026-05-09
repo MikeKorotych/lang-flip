@@ -5,4 +5,9 @@ extension Notification.Name {
     /// the menubar's own toggle (so the menubar can refresh its icon and
     /// menu state). Currently only the both-Shifts gesture posts this.
     static let langFlipEnabledChanged = Notification.Name("LangFlipEnabledChanged")
+
+    /// Posted after user-installed dictionaries are downloaded, replaced,
+    /// or reset, so the in-memory auto-flip engine can reload without
+    /// requiring an app restart.
+    static let langFlipDictionariesChanged = Notification.Name("LangFlipDictionariesChanged")
 }

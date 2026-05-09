@@ -5,7 +5,6 @@ import Carbon.HIToolbox
 
 final class EventTap {
     private let buffer = WordBuffer()
-    private let sentenceBuffer = SentenceBuffer()
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
@@ -57,11 +56,7 @@ final class EventTap {
     /// when they eventually return (Task cancellation can't always reach
     /// the Foundation Models call once it's in flight).
     private var grammarToken: Int = 0
-    /// Separate token for sentence-end grammar. It intentionally does
-    /// not get bumped by every normal keyDown: after typing "." users
-    /// almost always type a space before the model returns, and that
-    /// should be preserved rather than cancelling the correction.
-    private var sentenceEndGrammarToken: Int = 0
+    private var singleShiftGrammarInFlight = false
     /// Set true on any non-watched keyDown event while a watched modifier
     /// is held — means the user used the modifier as a real shortcut
     /// modifier, not as a hotkey tap.
@@ -197,7 +192,6 @@ final class EventTap {
         // Track what the user types into the word buffer.
         if keyCode == CGKeyCode(kVK_Delete) {
             buffer.backspace()
-            sentenceBuffer.backspace()
             // Backspace within the auto-flip watch window is a disagreement
             // signal. The learner adds the word to the exception list on the
             // first hit and asks for a physical rollback once the user has
@@ -215,38 +209,10 @@ final class EventTap {
                 BackspaceLearner.shared.cancelPending()
 
                 let s = String(utf16CodeUnits: chars, count: len)
-                sentenceBuffer.feed(s)
 
-                // Compute suppression once per keystroke. With C.2 enabled
-                // both the sentence-end gate and the word-boundary gate
-                // need it; suppressionCause() does an NSWorkspace
-                // frontmost-app lookup so calling it twice per keystroke
-                // is wasteful.
+                // Compute suppression once per keystroke; suppressionCause()
+                // does an NSWorkspace frontmost-app lookup.
                 let suppression = AppContext.suppressionCause()
-
-                // Sentence-end auto grammar fix (Sprint C.2). Runs as soon
-                // as the user types `.` `!` or `?` — the buffer has just
-                // rolled over so sentenceBuffer.previous is the sentence
-                // we want to rewrite. We deliberately exclude `\n`
-                // (Enter) because in chat apps the message has already
-                // been sent, and a delayed in-place fix would land in the
-                // wrong place.
-                let endersInBatch = s.contains(where: { $0 == "." || $0 == "!" || $0 == "?" })
-                if endersInBatch {
-                    if !Settings.shared.grammarCheckOnSentenceEnd {
-                        AppLog.write("sentence-end grammar skipped: feature off")
-                        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end seen but feature off (grammarCheckOnSentenceEnd)\n".utf8)) }
-                    } else if Settings.shared.aiMode == .off {
-                        AppLog.write("sentence-end grammar skipped: aiMode off")
-                        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end seen but aiMode = off\n".utf8)) }
-                    } else if suppression != nil {
-                        AppLog.write("sentence-end grammar skipped: suppressed context \(suppression!)")
-                        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end seen but suppressed: \(suppression!)\n".utf8)) }
-                    } else {
-                        AppLog.write("sentence-end grammar trigger seen: '\(s)' previousLen=\(sentenceBuffer.previous.count)")
-                        maybeStartSentenceEndGrammar()
-                    }
-                }
 
                 if let completed = buffer.feedReturningCompleted(s) {
                     var word = completed
@@ -468,12 +434,10 @@ final class EventTap {
             // double-tap-as-layout-flip path.
             cancelSpeculativeGrammar()
 
-            // We only wait the tripleGrace window if a triple-tap could
-            // actually do something — either the user has a secondary
-            // language to switch to, OR they've bound triple-tap to the
-            // AI selection fix. Otherwise no point delaying double-tap.
-            let tripleHasMeaning = Settings.shared.secondaryLanguage != nil ||
-                                   Settings.shared.tripleShiftAction == .aiSelectionFix
+            // We only wait the tripleGrace window if triple-tap could
+            // actually do something: switch to a configured secondary
+            // language. Otherwise no point delaying double-tap.
+            let tripleHasMeaning = Settings.shared.secondaryLanguage != nil
             if !tripleHasMeaning {
                 let count = tapCount
                 tapCount = 0
@@ -497,10 +461,10 @@ final class EventTap {
         // tapCount == 1.
         // If grammar-on-single-Shift is enabled, wait out the tap window
         // so double/triple Shift still wins. Once it expires, try the
-        // selected text first; if nothing is selected, fix the most
-        // recent sentence.
+        // selected text. If nothing is selected, nothing happens.
         if Settings.shared.grammarCheckOnSingleShift,
            AIAssistantManager.shared.isReady,
+           !singleShiftGrammarInFlight,
            AppContext.suppressionCause() == nil {
             AppLog.write("single-shift grammar scheduled")
             let work = DispatchWorkItem { [weak self] in
@@ -512,7 +476,7 @@ final class EventTap {
             pendingFire = work
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.tapWindow, execute: work)
         } else if tapCount == 1, Settings.shared.grammarCheckOnSingleShift {
-            AppLog.write("single-shift grammar not scheduled: ready=\(AIAssistantManager.shared.isReady) suppression=\(String(describing: AppContext.suppressionCause()))")
+            AppLog.write("single-shift grammar not scheduled: ready=\(AIAssistantManager.shared.isReady) inFlight=\(singleShiftGrammarInFlight) suppression=\(String(describing: AppContext.suppressionCause()))")
         }
         // Else: leave tapCount==1 dangling; if a second tap comes the
         // double-tap path takes over, otherwise it harmlessly resets on
@@ -528,17 +492,6 @@ final class EventTap {
     }
 
     private func fire(taps: Int) {
-        // Triple-tap can route to AI selection fix instead of a layout
-        // flip, depending on Settings.tripleShiftAction. The AI path
-        // doesn't go through chooseTarget / handleHotkey because it
-        // skips the input-source switch entirely.
-        if taps == 3, Settings.shared.tripleShiftAction == .aiSelectionFix {
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: firing triple-tap → AI fix on selection\n".utf8)) }
-            DispatchQueue.main.async { [weak self] in
-                self?.aiFixSelectionGesture()
-            }
-            return
-        }
         guard let target = chooseTarget(forTapCount: taps) else {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: tap count \(taps) — no target configured\n".utf8)) }
             return
@@ -546,74 +499,6 @@ final class EventTap {
         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: firing \(taps)-tap → target=\(target)\n".utf8)) }
         DispatchQueue.main.async { [weak self] in
             self?.handleHotkey(targetNonEnglish: target)
-        }
-    }
-
-    /// Triple-tap-Shift gesture entry point when the user has
-    /// configured `tripleShiftAction = .aiSelectionFix`. Captures the
-    /// current selection via Cmd+C, sends it to the AI for a "fix
-    /// everything" pass, pastes the result. No mechanical fallback —
-    /// the user explicitly wired this gesture to AI, so falling back
-    /// to a layout flip would be surprising. On AI failure we just
-    /// restore the clipboard and bail with a debug log.
-    private func aiFixSelectionGesture() {
-        guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix: AI not ready\n".utf8)) }
-            return
-        }
-        let pb = NSPasteboard.general
-        let snapshot = PasteboardSnapshot.capture(pb)
-        let countBefore = pb.changeCount
-
-        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix: posting Cmd+C\n".utf8)) }
-        postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_C))
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-            let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
-            while Date() < deadline && pb.changeCount == countBefore {
-                Thread.sleep(forTimeInterval: Self.copyPollInterval)
-            }
-            DispatchQueue.main.async {
-                guard pb.changeCount > countBefore else {
-                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix: no selection\n".utf8)) }
-                    snapshot.restore(to: pb)
-                    return
-                }
-                guard let text = pb.string(forType: .string),
-                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                      text.count >= 2 else {
-                    snapshot.restore(to: pb)
-                    return
-                }
-                let request = AIFixRequest(text: text, activeLayout: InputSource.currentLayout())
-                AIAssistantManager.shared.current.fixSelection(request) { [weak self] result in
-                    DispatchQueue.main.async {
-                        guard let self else { return }
-                        switch result {
-                        case .fixed(let corrected):
-                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix \(text.count)→\(corrected.count) chars\n".utf8)) }
-                            pb.clearContents()
-                            pb.setString(corrected, forType: .string)
-                            self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
-                            Sound.playFlip()
-                            FlipOverlay.shared.show()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
-                                snapshot.restore(to: pb)
-                            }
-                        case .unchanged:
-                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix: model returned unchanged\n".utf8)) }
-                            snapshot.restore(to: pb)
-                        case .unsupported:
-                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix: assistant unsupported\n".utf8)) }
-                            snapshot.restore(to: pb)
-                        case .failed(let reason):
-                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: triple-tap AI fix: failed (\(reason))\n".utf8)) }
-                            snapshot.restore(to: pb)
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -627,15 +512,15 @@ final class EventTap {
         }
     }
 
-    /// Hotkey entry point: try selection-based flip first, fall back to last
-    /// word in the buffer. The "non-English target" comes from the user's
-    /// primary/secondary choice based on tap count.
+    /// Hotkey entry point: selection-based layout flip only. Without a
+    /// selection, we intentionally do nothing; the typed word buffer is
+    /// not a reliable representation of the focused field after edits,
+    /// cursor moves, paste, or app-level autocorrect.
     private func handleHotkey(targetNonEnglish: Layout) {
         convertSelectionIfPresent(targetNonEnglish: targetNonEnglish) { [weak self] didConvertSelection in
             guard let self else { return }
             if !didConvertSelection {
-                if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: no selection — falling back to last-word flip\n".utf8)) }
-                self.convertLastWord(targetNonEnglish: targetNonEnglish)
+                if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: no selection — double-shift layout flip skipped\n".utf8)) }
             }
         }
     }
@@ -685,16 +570,6 @@ final class EventTap {
                     completion(false)
                     return
                 }
-
-                // Smart-selection-fix used to live here as a double-tap
-                // override that swapped mechanical layout flip for an AI
-                // rewrite. That overloaded the gesture: users who wanted
-                // muscle-memory layout flips couldn't keep using
-                // double-tap once the toggle was on. We moved the AI
-                // fix-selection path to single-tap (see
-                // handleSingleShiftAIPass) so each tap count owns one
-                // semantic — single = AI, double = mechanical, triple
-                // = secondary language or AI per Settings.
 
                 guard let from = detectLayout(text) else {
                     if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: detectLayout returned nil — no alphabetic chars in '\(text.prefix(40))'\n".utf8)) }
@@ -904,7 +779,7 @@ final class EventTap {
         }
     }
 
-    // MARK: - Word-buffer flip (manual hotkey when no selection)
+    // MARK: - Auto-flip on word boundary
 
     private func autoFlipIfNeeded(completedWord: String) {
         guard let current = InputSource.currentLayout() else { return }
@@ -998,36 +873,6 @@ final class EventTap {
         )
     }
 
-    private func convertLastWord(targetNonEnglish: Layout) {
-        let word = buffer.current
-        guard !word.isEmpty else {
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: word flip skipped — buffer empty\n".utf8)) }
-            return
-        }
-        guard let from = detectLayout(word) else {
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: word flip skipped — could not detect layout for '\(word)'\n".utf8)) }
-            return
-        }
-        let to = resolveTarget(source: from, configured: targetNonEnglish)
-
-        let converted = convert(word, from: from, to: to)
-        guard converted != word else {
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: word flip skipped — converted == original for '\(word)' (\(from)→\(to))\n".utf8)) }
-            return
-        }
-
-        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: word flip '\(word)' (\(word.count) chars, \(from)) → '\(converted)' (\(to))\n".utf8)) }
-
-        postBackspaces(word.count)
-        InputSource.switchTo(to)
-        postUnicode(converted)
-        Sound.playFlip()
-        FlipOverlay.shared.show()
-
-        buffer.reset()
-        buffer.feed(converted)
-    }
-
     // MARK: - Single-Shift grammar fix (Sprint C)
 
     /// Cancel an in-flight grammar request. The actual inference task
@@ -1038,10 +883,9 @@ final class EventTap {
     }
 
     /// Tap window expired without a second tap arriving — the user did
-    /// in fact want grammar correction. Selection gets priority because
-    /// it is the most explicit target: Shift over selected text should
-    /// fix exactly that chunk. If Cmd+C doesn't produce a usable string,
-    /// fall back to the most recent sentence from SentenceBuffer.
+    /// in fact want grammar correction. Selection is the only target we
+    /// trust for the release path: it reflects the real text currently
+    /// in the focused app instead of LangFlip's best-effort key history.
     private func fireSingleShiftGrammarFix() {
         guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
             AppLog.write("single-shift grammar fired but AI not ready")
@@ -1067,15 +911,15 @@ final class EventTap {
                 if pb.changeCount > countBefore,
                    let text = pb.string(forType: .string),
                    !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                   text.count >= 2 {
+                    text.count >= 2 {
                     AppLog.write("single-shift grammar using selection len=\(text.count)")
+                    self.singleShiftGrammarInFlight = true
                     self.applySingleShiftAIFixToSelection(text: text, snapshot: snapshot)
                     return
                 }
 
-                AppLog.write("single-shift grammar found no selection; falling back to sentence")
+                AppLog.write("single-shift grammar found no selection; skipped")
                 snapshot.restore(to: pb)
-                self.fireSingleShiftSentenceGrammarFix()
             }
         }
     }
@@ -1086,6 +930,7 @@ final class EventTap {
         AIAssistantManager.shared.current.fixSelection(request) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.singleShiftGrammarInFlight = false
                 switch result {
                 case .fixed(let corrected):
                     AppLog.write("single-shift selection fixed \(text.count)->\(corrected.count)")
@@ -1116,232 +961,9 @@ final class EventTap {
         }
     }
 
-    private func fireSingleShiftSentenceGrammarFix() {
-        guard let sentence = sentenceBuffer.mostRecentSentence,
-              sentence.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2 else {
-            AppLog.write("single-shift sentence skipped: no sentence")
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar skipped: no sentence\n".utf8)) }
-            return
-        }
-
-        grammarToken &+= 1
-        let token = grammarToken
-        let wasCurrent = sentenceBuffer.current == sentence
-        let request = AIRewriteRequest(
-            text: sentence,
-            preferredLayout: InputSource.currentLayout()
-        )
-        AIAssistantManager.shared.current.rewriteSentence(request) { [weak self] result in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                guard self.grammarToken == token else {
-                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar discarded (stale token)\n".utf8)) }
-                    return
-                }
-                self.applySingleShiftSentenceGrammar(
-                    originalSentence: sentence,
-                    wasCurrent: wasCurrent,
-                    result: result
-                )
-            }
-        }
-        AppLog.write("single-shift sentence started token=\(token) len=\(sentence.count)")
-        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar started (token=\(token), len=\(sentence.count))\n".utf8)) }
-    }
-
-    private func applySingleShiftSentenceGrammar(originalSentence: String, wasCurrent: Bool, result: AIRewriteResult) {
-        switch result {
-        case .rewritten(let rawCorrected):
-            let corrected = normalizeSentenceEndRewrite(
-                original: originalSentence,
-                corrected: rawCorrected
-            )
-            let bufferStillMatches = wasCurrent
-                ? sentenceBuffer.current == originalSentence
-                : sentenceBuffer.current.isEmpty && sentenceBuffer.previous == originalSentence
-            guard bufferStillMatches else {
-                AppLog.write("single-shift sentence dropped: buffer changed")
-                if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar dropped (buffer changed)\n".utf8)) }
-                return
-            }
-            AppLog.write("single-shift sentence rewritten \(originalSentence.count)->\(corrected.count)")
-            applyGrammarFix(original: originalSentence, corrected: corrected)
-            if wasCurrent {
-                sentenceBuffer.replaceCurrent(with: corrected)
-            } else {
-                sentenceBuffer.replacePrevious(with: corrected)
-            }
-        case .unchanged:
-            AppLog.write("single-shift sentence unchanged")
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar — unchanged\n".utf8)) }
-        case .unsupported:
-            AppLog.write("single-shift sentence unsupported")
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar — unsupported\n".utf8)) }
-        case .failed(let reason):
-            AppLog.write("single-shift sentence failed: \(reason)")
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar — failed: \(reason)\n".utf8)) }
-        }
-    }
-
-    /// Replace the just-typed sentence with the AI-corrected one.
-    /// Backspaces over the original (in the focused app), retypes the
-    /// new text and emits the same optional sound / overlay feedback as
-    /// other LangFlip rewrites.
-    private func applyGrammarFix(original: String, corrected: String) {
-        guard original != corrected else { return }
-        if debug {
-            let oPrefix = String(original.prefix(60))
-            let cPrefix = String(corrected.prefix(60))
-            FileHandle.standardError.write(Data("lang-flip[debug]: grammar fix '\(oPrefix)' → '\(cPrefix)'\n".utf8))
-        }
-        postBackspaces(original.count)
-        postUnicode(corrected)
-        // Caller updates SentenceBuffer according to whether this was
-        // the in-progress or previously-completed sentence.
-        buffer.reset()
-        playRewriteFeedback()
-    }
-
     private func playRewriteFeedback() {
         Sound.playFlip()
         FlipOverlay.shared.show()
-    }
-
-    // MARK: - Sentence-end auto grammar (Sprint C.2)
-
-    /// Called from the keyDown path right after the SentenceBuffer rolls
-    /// over on a `.` / `!` / `?`. Decides whether the just-completed
-    /// sentence is worth a grammar pass and kicks off an async AI call
-    /// that — if it returns before the user types another sentence — is
-    /// applied silently in place.
-    ///
-    /// Trivial sentences ("Ok.", "Yes!", "What?") are skipped: the cost
-    /// of an in-place rewrite isn't worth the marginal value, and a
-    /// model echoing the same single word back fires `unchanged` anyway.
-    /// We use a 4-word threshold to keep the sweet spot.
-    ///
-    /// Shares `grammarToken` with the single-Shift speculative path so
-    /// the two features can't fight each other — whichever fires last
-    /// wins, the older inference's result is discarded on arrival.
-    private func maybeStartSentenceEndGrammar() {
-        let prev = sentenceBuffer.previous
-        let trimmed = prev.trimmingCharacters(in: .whitespacesAndNewlines)
-        let words = trimmed.split(whereSeparator: { $0.isWhitespace })
-        // Two-word minimum keeps "Yes." / "Ok!" out of the round-trip
-        // while still firing for "Привіт як справи?" (3) and most
-        // real-world sentences. Earlier 4-word threshold was too tight
-        // — typical 2-3 word phrases never triggered.
-        guard words.count >= 2 else {
-            AppLog.write("sentence-end grammar skipped: only \(words.count) word(s)")
-            if debug {
-                FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar skip: only \(words.count) words in '\(trimmed.prefix(40))'\n".utf8))
-            }
-            return
-        }
-        if !AIAssistantManager.shared.isReady {
-            AppLog.write("sentence-end grammar skipped: AI not ready")
-            if debug {
-                FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar skip: AI not ready\n".utf8))
-            }
-            return
-        }
-        sentenceEndGrammarToken &+= 1
-        let token = sentenceEndGrammarToken
-        let request = AIRewriteRequest(
-            text: prev,
-            preferredLayout: InputSource.currentLayout()
-        )
-        AIAssistantManager.shared.current.rewriteSentence(request) { [weak self] result in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                guard self.sentenceEndGrammarToken == token else {
-                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar discarded (stale token=\(token), current=\(self.sentenceEndGrammarToken))\n".utf8)) }
-                    return
-                }
-                self.applySentenceEndGrammar(originalSentence: prev, result: result)
-            }
-        }
-        AppLog.write("sentence-end grammar started token=\(token) words=\(words.count) len=\(prev.count)")
-        if debug {
-            FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar started (token=\(token), \(words.count) words, \(prev.count) chars): '\(prev.prefix(60))'\n".utf8))
-        }
-    }
-
-    /// Result handler for a sentence-end grammar request. Applies the
-    /// rewrite in-place if the buffer state is still consistent — i.e.
-    /// the user hasn't typed past another sentence boundary while the
-    /// model was thinking. Anything they typed after the trigger boundary
-    /// (the `current` portion) is preserved by erasing through it,
-    /// retyping the corrected sentence, then retyping the captured
-    /// trailing text.
-    private func applySentenceEndGrammar(originalSentence: String, result: AIRewriteResult) {
-        switch result {
-        case .rewritten(let corrected):
-            let corrected = normalizeSentenceEndRewrite(
-                original: originalSentence,
-                corrected: corrected
-            )
-            guard sentenceBuffer.previous == originalSentence else {
-                AppLog.write("sentence-end grammar dropped: buffer rolled over")
-                if debug {
-                    FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar dropped (buffer rolled over)\n".utf8))
-                    FileHandle.standardError.write(Data("lang-flip[debug]:   expected: '\(originalSentence.prefix(60))'\n".utf8))
-                    FileHandle.standardError.write(Data("lang-flip[debug]:   got:      '\(sentenceBuffer.previous.prefix(60))'\n".utf8))
-                }
-                return
-            }
-            guard corrected != originalSentence else {
-                AppLog.write("sentence-end grammar no-op: corrected equals original")
-                if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar — corrected == original, no-op\n".utf8)) }
-                return
-            }
-            let typedSince = sentenceBuffer.current
-            if debug {
-                let oPrefix = String(originalSentence.prefix(60))
-                let cPrefix = String(corrected.prefix(60))
-                FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end fix '\(oPrefix)' → '\(cPrefix)' (typedSince=\(typedSince.count))\n".utf8))
-            }
-            let totalErase = typedSince.count + originalSentence.count
-            postBackspaces(totalErase)
-            postUnicode(corrected + typedSince)
-            sentenceBuffer.replacePrevious(with: corrected)
-            playRewriteFeedback()
-            AppLog.write("sentence-end grammar applied \(originalSentence.count)->\(corrected.count), preservedTail=\(typedSince.count)")
-            // current is intact — typedSince is back where it was.
-        case .unchanged:
-            AppLog.write("sentence-end grammar unchanged")
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar — unchanged\n".utf8)) }
-        case .unsupported:
-            AppLog.write("sentence-end grammar unsupported")
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar — unsupported\n".utf8)) }
-        case .failed(let reason):
-            AppLog.write("sentence-end grammar failed: \(reason)")
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar — failed: \(reason)\n".utf8)) }
-        }
-    }
-
-    /// Models are allowed to fix grammar, but the event-tap replacement
-    /// math assumes sentence boundaries stay structurally sane. Preserve
-    /// leading whitespace (usually the space before the next sentence)
-    /// and keep the original final punctuation if the model drops it.
-    private func normalizeSentenceEndRewrite(original: String, corrected raw: String) -> String {
-        let leading = String(original.prefix { $0.isWhitespace })
-        var corrected = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if !leading.isEmpty, !corrected.hasPrefix(leading) {
-            corrected = leading + corrected
-        }
-
-        let originalTrimmed = original.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let originalEnd = originalTrimmed.last,
-           ".!?".contains(originalEnd) {
-            let correctedTrimmed = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
-            if correctedTrimmed.last.map({ ".!?".contains($0) }) != true {
-                corrected += String(originalEnd)
-            }
-        }
-
-        return corrected
     }
 
     // MARK: - Posting synthesized events
