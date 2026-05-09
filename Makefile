@@ -114,13 +114,31 @@ dev: sign
 	@cp -R $(APP_DIR) /Applications/
 	@echo "✓ Installed Developer-ID-signed build to /Applications/$(BUNDLE_NAME)"
 	@open -a $(APP_NAME)
-	@sleep 1
+	@sleep 3
+	# Smoke test: did the process survive past startup? Crashes in
+	# applicationDidFinishLaunching die in <1 s, so a 3-second
+	# liveness check is plenty. Surfacing the fact loud + pointing at
+	# the freshly-written crash log saves users from chasing
+	# "the app won't open" red herrings.
+	@if ! pgrep -x $(APP_NAME) > /dev/null; then \
+		echo ""; \
+		echo "✗ FATAL: $(APP_NAME) crashed during startup."; \
+		LATEST=$$(ls -t ~/Library/Logs/DiagnosticReports/$(APP_NAME)* 2>/dev/null | head -1); \
+		if [ -n "$$LATEST" ]; then \
+			echo "  Latest crash log: $$LATEST"; \
+			echo "  Top of crashed thread:"; \
+			python3 -c "import json,sys; \
+				f=open('$$LATEST'); f.readline(); d=json.load(f); \
+				[print('   ', fr.get('symbol','?')) for thr in d.get('threads',[]) if thr.get('triggered') for fr in thr.get('frames',[])[:8]]" 2>/dev/null || echo "  (could not parse log)"; \
+		fi; \
+		exit 1; \
+	fi
 	# Second `open` triggers applicationShouldHandleReopen, which our
-	# AppDelegate uses to pop Preferences. This gives an unmistakable
-	# visual confirmation that the launch succeeded — important for
-	# menubar-only apps where the icon can hide behind a MacBook notch.
+	# AppDelegate uses to pop Preferences — visual confirmation that
+	# the launch succeeded. Important for menubar-only apps where the
+	# icon hides behind the notch on MacBooks.
 	@open -a $(APP_NAME)
-	@echo "✓ Launched. Preferences should be visible; the menubar icon is the ⌥ glyph (may be hidden behind the notch — install Ice or scoot icons left with ⌘+drag)."
+	@echo "✓ Launched and alive. Preferences window should be visible."
 
 # ─── Distribution: sign / dmg / notarize / release ────────────────
 
