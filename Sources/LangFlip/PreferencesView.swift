@@ -69,7 +69,7 @@ private struct GeneralTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Enabled", isOn: $enabled)
+                Toggle("LangFlip enabled", isOn: $enabled)
                 Toggle("Launch at login", isOn: Binding(
                     get: { launchAtLogin },
                     set: { newValue in
@@ -79,7 +79,7 @@ private struct GeneralTab: View {
                         launchAtLogin = LaunchAtLogin.isEnabled
                     }
                 ))
-                Toggle("Play sound on flip", isOn: $soundEnabled)
+                Toggle("Sound feedback", isOn: $soundEnabled)
             }
 
             Section("Permissions") {
@@ -95,9 +95,9 @@ private struct GeneralTab: View {
                 )
             }
 
-            Section("Statistics") {
+            Section("Learning") {
                 HStack {
-                    Text("Learned exceptions")
+                    Text("Remembered exceptions")
                     Spacer()
                     Text("\(exceptionsCount)").foregroundColor(.secondary)
                     Button("Forget all") {
@@ -160,9 +160,9 @@ private struct LanguagesTab: View {
 
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("Double-tap ⇧ flips the **selected** text.", systemImage: "1.circle")
-                    Label("Triple-tap ⇧ swaps with the **secondary** language.", systemImage: "2.circle")
-                    Label("Press both ⇧ at once to pause / resume.", systemImage: "pause.circle")
+                    Label("Double-tap Shift flips selected text.", systemImage: "1.circle")
+                    Label("Triple-tap Shift uses the secondary language.", systemImage: "2.circle")
+                    Label("Press both Shift keys to pause or resume.", systemImage: "pause.circle")
                 }
                 .font(.callout)
                 .foregroundColor(.secondary)
@@ -214,7 +214,7 @@ private struct DictionaryPackView: View {
                 .foregroundColor(statusColor)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Downloads a balanced word-list pack from \(DictionaryManager.extendedPackSource) (\(DictionaryManager.extendedPackLicense)). LangFlip keeps only clean alphabetic words and caps each language to the most frequent 120k entries to reduce false positives.")
+            Text("Uses \(DictionaryManager.extendedPackSource) (\(DictionaryManager.extendedPackLicense)). LangFlip keeps the most useful clean words for each language.")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -238,9 +238,9 @@ private struct DictionaryPackView: View {
         switch state {
         case .idle:
             if hasInstalledWords {
-                Text("Extended dictionaries are active. Update them anytime, or reset to the bundled offline dictionaries.")
+                Text("Extended dictionaries are active. You can update them anytime or reset to the smaller bundled set.")
             } else {
-                Text("Bundled dictionaries work offline. Extended dictionaries improve coverage for auto-flip and sticky-shift checks.")
+                Text("Bundled dictionaries work offline. Extended dictionaries improve auto-flip coverage.")
             }
         case .installing:
             Text("Downloading and cleaning dictionaries...")
@@ -347,19 +347,19 @@ private struct BehaviorTab: View {
                         Text(preset.displayName).tag(preset.rawValue)
                     }
                 }
-                helpText("Pick the gesture that flips selected text between layouts. If nothing is selected, the gesture does nothing. Heavy-use modifiers like plain Cmd / Option are intentionally excluded — they'd false-fire on rapid system shortcuts. Pressing both Shifts at once still pauses the app regardless of this setting.")
+                helpText("This gesture flips selected text between keyboard layouts. If nothing is selected, nothing happens. Pressing both Shift keys still pauses or resumes LangFlip.")
             }
             Section {
                 Toggle("Auto-flip at word end", isOn: $autoFlip)
-                helpText("After a space or punctuation, if the just-typed word reads as gibberish in the current layout but a real word in another, fix it automatically. Press Backspace right after to undo and teach the app to skip that word forever.")
+                helpText("After Space or punctuation, LangFlip can fix a word that was typed in the wrong layout. Press Backspace right away to undo and remember an exception.")
             }
             Section {
                 Toggle("Fix sticky-shift typos (WOrld → World)", isOn: $doubleCapsFix)
-                helpText("Catches the classic two-uppercase mistake. Only applied when the corrected form is a real dictionary word, so acronyms like OAuth aren't mangled.")
+                helpText("Fixes accidental double-capital starts when the corrected word is clearly safe.")
             }
             Section {
                 Toggle("Fix UK ↔ RU letter slips (ы ↔ і, э ↔ є)", isOn: $crossLayoutFix)
-                helpText("Catches words where one Russian-only letter (ы, э) is sitting in an otherwise Ukrainian word — or vice versa. \"пыдтримую\" → \"підтримую\", \"эдиний\" → \"єдиний\", \"єто\" → \"это\". Only fires when the corrected form is in the target language's dictionary.")
+                helpText("Fixes common Ukrainian/Russian letter slips when the corrected word is in the target dictionary.")
             }
             Section {
                 HStack {
@@ -380,11 +380,11 @@ private struct BehaviorTab: View {
                     }
                     .controlSize(.small)
                 }
-                helpText("A small confirmation flourish — the LangFlip icon bounces up at the bottom of the screen and does a 360° flip — every time the app rewrites text. Off by default; turn on if you want a visible cue every flip.")
+                helpText("Shows a small visual confirmation whenever LangFlip rewrites text.")
             }
             Section {
                 Toggle("Pause auto-flip in fullscreen apps", isOn: $suppressInFullscreen)
-                helpText("Useful for games and video players. Off by default — many users want flipping to keep working in a fullscreen browser or note app.")
+                helpText("Useful for games, video players, and other fullscreen apps where automatic changes may be distracting.")
             }
         }
         .formStyle(.grouped)
@@ -427,7 +427,7 @@ private struct ModelsTab: View {
                         Text(mode.displayName).tag(mode.rawValue)
                     }
                 }
-                    helpText("AI is opt-in. For most Macs today, Ollama with Qwen 3.5 4B is the easiest local setup: it stays on-device, works on current macOS versions, and can handle both grammar fixes and screen text capture.")
+                    helpText("AI is optional. Ollama with Qwen 3.5 4B is the recommended local setup for grammar fixes and screen text capture.")
             }
 
             // Backend-specific config sits directly under Mode — that's
@@ -438,12 +438,12 @@ private struct ModelsTab: View {
             if AIMode(rawValue: aiMode) == .ollama {
                 Section("Ollama") {
                     OllamaModelPicker(selectedModel: $ollamaModel)
-                    helpText("Pick a model already pulled in Ollama, or download Qwen 2.5 for grammar and Qwen 3.5 4B for screen text capture. LangFlip talks only to `127.0.0.1:11434`, so local AI stays on this Mac.")
+                    helpText("Use a model already installed in Ollama, or download one here. Local AI stays on this Mac.")
                 }
             }
 
             if AIMode(rawValue: aiMode) == .openai {
-                Section("OpenAI / compatible cloud") {
+                Section("Cloud provider") {
                     Picker("Provider", selection: $cloudProvider) {
                         ForEach(AICloudProvider.allCases) { provider in
                             Text(provider.displayName).tag(provider.rawValue)
@@ -497,8 +497,8 @@ private struct ModelsTab: View {
             }
 
             Section("Features") {
-                Toggle("AI fix on single Shift tap", isOn: $grammarOnSingleShift)
-                helpText("Single clean tap of Shift (no other key in between, no second tap within ~350 ms) rewrites the selected text — typos, grammar, wrong-keyboard-layout gibberish, mid-sentence script flips. If nothing is selected, it does nothing. Double-tap Shift stays purely mechanical (layout flip), so the two gestures don't fight. Off by default — opt in once you trust the model on your text.")
+                Toggle("Fix selected text with single Shift", isOn: $grammarOnSingleShift)
+                helpText("A single clean Shift tap sends the selected text to the active AI model for typo, punctuation, and grammar cleanup. If nothing is selected, nothing happens.")
             }
 
             Section("Translate selection") {
@@ -507,16 +507,16 @@ private struct ModelsTab: View {
                         Text(layout.displayName).tag(layout.rawValue)
                     }
                 }
-                helpText("Used by the menubar's Translate submenu and the optional ⇧Space hotkey.")
+                helpText("Used by the menu bar Translate action and the optional Shift+Space hotkey.")
 
-                Toggle("Enable ⇧Space hotkey to translate selection", isOn: $translationHotkeyEnabled)
-                helpText("When this is on AND AI is on, pressing Shift + Space translates the current text selection into the default target above. Shift+Space is rare in normal typing (you release Shift before the trailing space), so hijacking it is generally safe — but disable here if you find a conflict. The menubar's Translate selection → submenu always works regardless of this toggle.")
+                Toggle("Translate with Shift+Space", isOn: $translationHotkeyEnabled)
+                helpText("When AI is on, Shift+Space translates the current selection into the default target language.")
             }
 
             if AIMode(rawValue: aiMode) == .ollama {
                 Section("Screen text capture") {
-                    Toggle("Enable ⇧⌘S hotkey to capture text from screen", isOn: $screenTextCaptureHotkeyEnabled)
-                    helpText("Uses the selected vision-capable Ollama model to read text from a selected screen region and copy it to the clipboard. Disable this if ⇧⌘S conflicts with Save As or Duplicate in apps you use often.")
+                    Toggle("Capture text with Shift+Command+S", isOn: $screenTextCaptureHotkeyEnabled)
+                    helpText("Select a screen region and copy recognized text to the clipboard. Requires a vision-capable Ollama model.")
                 }
             }
 
@@ -543,24 +543,20 @@ private struct ModelsTab: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// Disclosure copy that matches the chosen AI backend. We're
-    /// explicit about the `.openai` cloud mode because it's the only
-    /// one that ever sends user text off-device — switching to it is
-    /// a meaningful trust trade-off and the UI shouldn't be coy about
-    /// it.
+    /// Disclosure copy that matches the chosen AI backend.
     private var privacyDisclosure: String {
         let mode = AIMode(rawValue: aiMode) ?? .off
         switch mode {
         case .off:
-            return "AI is off. The rules engine alone runs entirely on your Mac. No text leaves your machine."
+            return "AI is off. Layout correction runs locally on your Mac."
         case .appleFoundation:
-            return "Apple Intelligence runs on-device. Apple's Foundation Models execute locally — no text is sent over the network for AI inference. The rest of LangFlip is local too."
+            return "Apple Intelligence runs on-device when available. LangFlip does not send text to its own servers."
         case .ollama:
-            return "Ollama runs on-device. The text you write is sent only to the daemon at 127.0.0.1:11434, which lives on your Mac. Nothing leaves the machine for AI inference."
+            return "Ollama mode sends selected text only to the local Ollama app on this Mac."
         case .bundledModel:
             return "Bundled MLX models are not part of this release. Use Ollama with Qwen 2.5 for local grammar fixes."
         case .openai:
-            return "Cloud mode: each AI feature you trigger sends the relevant text (a sentence, a selection, etc.) to the endpoint configured above. With the default Base URL, that's OpenAI in the US. Your API key is stored in macOS Keychain. Disable any time by switching back to Off, Apple Intelligence, or Ollama. The rules-based layout-flip core remains 100% local regardless of this setting."
+            return "Cloud mode sends only the text or image you explicitly process to the selected provider. Your API key is stored in macOS Keychain. Layout correction still runs locally."
         }
     }
 
@@ -595,11 +591,11 @@ private struct ModelsTab: View {
     private var cloudHelpText: String {
         switch selectedCloudProvider {
         case .openRouter:
-            return "OpenRouter uses one billing account and one API key for hundreds of models. The model list below is fetched from OpenRouter's `/api/v1/models`; free models are marked as free, and cheap models show approximate input/output prices per 1M tokens. For short grammar fixes, free or tiny low-cost models are usually enough."
+            return "OpenRouter gives access to many models with one API key. Free models are shown first, followed by low-cost text models."
         case .openAI:
-            return "LangFlip sends requests to OpenAI's chat-completions endpoint with Bearer auth. Your API key is stored in macOS Keychain, never in plain preferences."
+            return "Use your OpenAI API key directly. The key is stored in macOS Keychain."
         case .custom:
-            return "Use any OpenAI-compatible chat-completions provider. LangFlip POSTs to `<Base URL>/chat/completions` with Bearer auth and the model string you enter."
+            return "Use any OpenAI-compatible provider by entering its base URL and model name."
         }
     }
 
@@ -703,9 +699,9 @@ private struct AIModelTestView: View {
     private var statusText: some View {
         switch state {
         case .idle:
-            Text("Runs the same grammar rewrite path used by single Shift on selected text.")
+            Text("Checks that the selected AI model can clean up text.")
         case .running:
-            Text("Running model test...")
+            Text("Running test...")
         case .success(_, let seconds):
             Text(String(format: "Model replied in %.1f s.", seconds))
         case .unchanged(let seconds):
@@ -752,7 +748,7 @@ private struct AIModelTestView: View {
                 case .unchanged:
                     state = .unchanged(seconds: seconds)
                 case .unsupported:
-                    state = .failed("selected assistant does not support selected-text fixes")
+                    state = .failed("This AI mode does not support text fixes")
                 case .failed(let reason):
                     state = .failed(reason)
                 }
@@ -812,9 +808,9 @@ private struct AIOCRTestView: View {
     private var statusText: some View {
         switch state {
         case .idle:
-            Text("Tests the image-to-text path without using screen capture permissions.")
+            Text("Checks that the selected Ollama model can read text from images.")
         case .running:
-            Text("Running OCR model test...")
+            Text("Running OCR test...")
         case .success(_, let seconds):
             Text(String(format: "OCR replied in %.1f s.", seconds))
         case .failed(let reason):
@@ -975,15 +971,15 @@ private struct OllamaModelPicker: View {
                 .disabled(isModelInstalled(visionModel) || isInstalling)
 
                 if isModelInstalled(grammarModel), isModelInstalled(visionModel) {
-                    Text("Ready for grammar and screen text capture.")
+                    Text("Ready for text fixes and screen capture.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 } else if isModelInstalled(grammarModel) {
-                    Text("Ready for local grammar fixes.")
+                    Text("Ready for local text fixes.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 } else if isModelInstalled(visionModel) {
-                    Text("Ready for local grammar and OCR tests.")
+                    Text("Ready for local text fixes and OCR.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -993,7 +989,7 @@ private struct OllamaModelPicker: View {
                 .textFieldStyle(.roundedBorder)
 
             if isLoading {
-                Text("Refreshing local Ollama models...")
+                Text("Refreshing Ollama models...")
                     .font(.caption)
                     .foregroundColor(.secondary)
             } else if let loadError {
@@ -1005,7 +1001,7 @@ private struct OllamaModelPicker: View {
                     .font(.caption)
                     .foregroundColor(installState == .failed ? .red : .secondary)
             } else if !installedModels.isEmpty {
-                Text("Found \(installedModels.count) local model\(installedModels.count == 1 ? "" : "s").")
+                Text("Found \(installedModels.count) installed model\(installedModels.count == 1 ? "" : "s").")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -1067,7 +1063,7 @@ private struct OllamaModelPicker: View {
         installState = .installing
         installingModel = model
         loadError = nil
-        installMessage = "Opening Ollama and downloading \(displayName(for: model)). This can take a few minutes the first time."
+        installMessage = "Downloading \(displayName(for: model)). This can take a few minutes."
         defer { installingModel = nil }
         openOllamaOrDownloadPage()
 
@@ -1123,7 +1119,7 @@ private struct OllamaModelPicker: View {
     nonisolated private static func pullOllamaModel(_ model: String) async -> String? {
         await Task.detached(priority: .userInitiated) {
             guard let executableURL = ollamaExecutableURL() else {
-                return "Ollama command-line tool was not found. Install Ollama from ollama.com, open it once, then try again."
+            return "Ollama was not found. Install Ollama, open it once, then try again."
             }
 
             let process = Process()
@@ -1136,7 +1132,7 @@ private struct OllamaModelPicker: View {
             do {
                 try process.run()
             } catch {
-                return "Could not start Ollama: \(error.localizedDescription)"
+                return "Could not open Ollama: \(error.localizedDescription)"
             }
 
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
@@ -1245,7 +1241,7 @@ private struct OpenRouterModelPicker: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             } else if !models.isEmpty {
-                Text("Showing free models first, then the cheapest text models.")
+                Text("Free models are listed first, followed by low-cost text models.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -1355,10 +1351,10 @@ private struct AppsTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Disabled in")
+            Text("App exclusions")
                 .font(.headline)
             if userBlocked.isEmpty {
-                Text("No apps blocked. Use the menu bar item “Auto-flip in <App>” to disable auto-flip in the focused app.")
+                Text("No apps are excluded. LangFlip automatically avoids sensitive app types like terminals and password managers.")
                     .font(.callout)
                     .foregroundColor(.secondary)
                     .padding(.bottom, 8)
@@ -1381,13 +1377,13 @@ private struct AppsTab: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Built-in blocks")
                     .font(.headline)
-                Text("These can't be turned on — auto-flip would corrupt commands or credentials.")
+                Text("Auto-flip stays off in apps where automatic rewriting could damage commands or credentials.")
                     .font(.callout)
                     .foregroundColor(.secondary)
                 Text("Terminals: Terminal, iTerm2, Warp, Ghostty, Alacritty, Kitty, Hyper, Tabby")
                     .font(.callout)
                     .foregroundColor(.secondary)
-                Text("Password managers: 1Password, LastPass, Dashlane, Bitwarden, KeePassXC, plus anything containing “password” / “keychain” / “vault” in its bundle ID.")
+                Text("Password managers: 1Password, LastPass, Dashlane, Bitwarden, KeePassXC, and similar apps.")
                     .font(.callout)
                     .foregroundColor(.secondary)
             }
@@ -1428,7 +1424,7 @@ private struct AboutTab: View {
                 .font(.callout)
                 .foregroundColor(.secondary)
 
-            Text("Free, open-source keyboard layout corrector for macOS.")
+            Text("A macOS writing assistant for wrong-layout fixes, selected-text cleanup, translation, and screen text capture.")
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
 
