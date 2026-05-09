@@ -278,9 +278,8 @@ final class EventTap {
     /// assumption auto-flip uses). Used by the double-caps fix.
     private func rewriteCompletedWord(originalLength: Int, replacement: String) {
         let eraseCount = originalLength + 1
-        for _ in 0..<eraseCount { postKey(virtualKey: CGKeyCode(kVK_Delete)) }
-        for ch in replacement { postUnicode(String(ch)) }
-        postUnicode(" ")
+        postBackspaces(eraseCount)
+        postUnicode(replacement + " ")
         Sound.playFlip()
     }
 
@@ -289,10 +288,9 @@ final class EventTap {
     /// can hit Backspace to undo + permanently exclude the word.
     private func applyCrossLayoutFix(original: String, fix: CrossLayoutFix.Correction) {
         let eraseCount = original.count + 1
-        for _ in 0..<eraseCount { postKey(virtualKey: CGKeyCode(kVK_Delete)) }
+        postBackspaces(eraseCount)
         InputSource.switchTo(fix.target)
-        for ch in fix.corrected { postUnicode(String(ch)) }
-        postUnicode(" ")
+        postUnicode(fix.corrected + " ")
         Sound.playFlip()
         FlipOverlay.shared.show()
 
@@ -315,8 +313,7 @@ final class EventTap {
     private func performRollback(_ req: BackspaceLearner.RollbackRequest) {
         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: rollback to '\(req.originalWord)' (\(req.sourceLayout))\n".utf8)) }
         InputSource.switchTo(req.sourceLayout)
-        for ch in req.originalWord { postUnicode(String(ch)) }
-        postUnicode(" ")
+        postUnicode(req.originalWord + " ")
         Sound.playFlip()
         FlipOverlay.shared.show()
         // Rebuild buffer to reflect the just-typed word so a subsequent
@@ -1059,10 +1056,9 @@ final class EventTap {
         target: Layout
     ) {
         let eraseCount = original.count + 1
-        for _ in 0..<eraseCount { postKey(virtualKey: CGKeyCode(kVK_Delete)) }
+        postBackspaces(eraseCount)
         InputSource.switchTo(target)
-        for ch in converted { postUnicode(String(ch)) }
-        postUnicode(" ")
+        postUnicode(converted + " ")
         Sound.playFlip()
         FlipOverlay.shared.show()
 
@@ -1078,18 +1074,27 @@ final class EventTap {
 
     private func convertLastWord(targetNonEnglish: Layout) {
         let word = buffer.current
-        guard !word.isEmpty else { return }
-        guard let from = detectLayout(word) else { return }
+        guard !word.isEmpty else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: word flip skipped — buffer empty\n".utf8)) }
+            return
+        }
+        guard let from = detectLayout(word) else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: word flip skipped — could not detect layout for '\(word)'\n".utf8)) }
+            return
+        }
         let to = resolveTarget(source: from, configured: targetNonEnglish)
 
         let converted = convert(word, from: from, to: to)
-        guard converted != word else { return }
+        guard converted != word else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: word flip skipped — converted == original for '\(word)' (\(from)→\(to))\n".utf8)) }
+            return
+        }
 
-        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: word flip '\(word)' (\(from)) → '\(converted)' (\(to))\n".utf8)) }
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: word flip '\(word)' (\(word.count) chars, \(from)) → '\(converted)' (\(to))\n".utf8)) }
 
-        for _ in 0..<word.count { postKey(virtualKey: CGKeyCode(kVK_Delete)) }
+        postBackspaces(word.count)
         InputSource.switchTo(to)
-        for ch in converted { postUnicode(String(ch)) }
+        postUnicode(converted)
         Sound.playFlip()
         FlipOverlay.shared.show()
 
@@ -1167,10 +1172,8 @@ final class EventTap {
             let cPrefix = String(corrected.prefix(60))
             FileHandle.standardError.write(Data("lang-flip[debug]: grammar fix '\(oPrefix)' → '\(cPrefix)'\n".utf8))
         }
-        for _ in 0..<original.count {
-            postKey(virtualKey: CGKeyCode(kVK_Delete))
-        }
-        for ch in corrected { postUnicode(String(ch)) }
+        postBackspaces(original.count)
+        postUnicode(corrected)
         // Update both buffers so subsequent typing / boundaries reflect
         // the corrected text.
         sentenceBuffer.replaceCurrent(with: corrected)
@@ -1266,11 +1269,8 @@ final class EventTap {
                 FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end fix '\(oPrefix)' → '\(cPrefix)' (typedSince=\(typedSince.count))\n".utf8))
             }
             let totalErase = typedSince.count + originalSentence.count
-            for _ in 0..<totalErase {
-                postKey(virtualKey: CGKeyCode(kVK_Delete))
-            }
-            for ch in corrected { postUnicode(String(ch)) }
-            for ch in typedSince { postUnicode(String(ch)) }
+            postBackspaces(totalErase)
+            postUnicode(corrected + typedSince)
             sentenceBuffer.replacePrevious(with: corrected)
             // current is intact — typedSince is back where it was.
         case .unchanged:
@@ -1294,6 +1294,25 @@ final class EventTap {
 
     private func postKey(virtualKey: CGKeyCode) {
         postKey(virtualKey: virtualKey, flags: [])
+    }
+
+    /// Send N backspace events. Used to erase the original word/sentence
+    /// before retyping a corrected one. Earlier code did
+    /// `for _ in 0..<n { postKey(kVK_Delete) }`, which works in Notes and
+    /// most native apps but unreliably in Slack, Notion, and Electron-
+    /// based editors — they drop the back half of a fast burst, so the
+    /// flip ends up rewriting only the tail of a long word.
+    ///
+    /// Adding a sub-millisecond gap between events fixes it across every
+    /// app we've tested while staying invisible to the user (a 12-letter
+    /// word costs ~6 ms total).
+    private func postBackspaces(_ count: Int) {
+        for i in 0..<count {
+            postKey(virtualKey: CGKeyCode(kVK_Delete))
+            if i + 1 < count {
+                Thread.sleep(forTimeInterval: 0.0005)
+            }
+        }
     }
 
     private func postKey(virtualKey: CGKeyCode, flags: CGEventFlags) {
