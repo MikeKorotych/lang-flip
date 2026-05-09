@@ -249,6 +249,7 @@ private struct ModelsTab: View {
     @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
     @AppStorage("lf.ollamaModel") private var ollamaModel = "qwen2.5"
     @AppStorage("lf.tripleShiftAction") private var tripleShiftAction = TripleShiftAction.secondaryLanguage.rawValue
+    @AppStorage("lf.cloudProvider") private var cloudProvider = AICloudProvider.openRouter.rawValue
     @AppStorage("lf.openaiModel") private var openaiModel = "gpt-5-nano"
     @AppStorage("lf.openaiBaseURL") private var openaiBaseURL = "https://api.openai.com/v1"
 
@@ -276,27 +277,51 @@ private struct ModelsTab: View {
             if AIMode(rawValue: aiMode) == .ollama {
                 Section("Ollama") {
                     OllamaModelPicker(selectedModel: $ollamaModel)
-                    helpText("Pick a model already pulled in Ollama. LangFlip refreshes this list from `http://localhost:11434/api/tags`; if Ollama is closed, the recommended fallback stays available. Qwen 2.5 is the default because it is usually a better latency/quality trade-off for short grammar fixes than heavier Gemma variants.")
+                    helpText("Pick a model already pulled in Ollama. LangFlip refreshes this list from `http://127.0.0.1:11434/api/tags`; if Ollama is closed, use the Open Ollama button above and refresh. Qwen 2.5 is the default because it is usually a better latency/quality trade-off for short grammar fixes than heavier Gemma variants.")
                 }
             }
 
             if AIMode(rawValue: aiMode) == .openai {
                 Section("OpenAI / compatible cloud") {
-                    SecureField("API key (sk-…)", text: $openaiKeyDraft)
+                    Picker("Provider", selection: $cloudProvider) {
+                        ForEach(AICloudProvider.allCases) { provider in
+                            Text(provider.displayName).tag(provider.rawValue)
+                        }
+                    }
+                    .onChange(of: cloudProvider) { raw in
+                        guard let provider = AICloudProvider(rawValue: raw) else { return }
+                        if provider != .custom {
+                            openaiBaseURL = provider.defaultBaseURL
+                        }
+                        if openaiModel.isEmpty || openaiModel == "gpt-5-nano" || openaiModel == "openrouter/auto" {
+                            openaiModel = provider.defaultModel
+                        }
+                    }
+
+                    SecureField(apiKeyPlaceholder, text: $openaiKeyDraft)
                         .textFieldStyle(.roundedBorder)
                         .onChange(of: openaiKeyDraft) { newValue in
                             KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
                         }
 
-                    TextField("Model", text: $openaiModel)
-                        .textFieldStyle(.roundedBorder)
+                    if AICloudProvider(rawValue: cloudProvider) == .openRouter {
+                        OpenRouterModelPicker(selectedModel: $openaiModel)
+                    } else {
+                        TextField("Model", text: $openaiModel)
+                            .textFieldStyle(.roundedBorder)
+                    }
 
-                    TextField("Base URL", text: $openaiBaseURL)
-                        .textFieldStyle(.roundedBorder)
+                    if AICloudProvider(rawValue: cloudProvider) == .custom {
+                        TextField("Base URL", text: $openaiBaseURL)
+                            .textFieldStyle(.roundedBorder)
+                    }
 
-                    Link("Open OpenAI API keys...", destination: URL(string: "https://platform.openai.com/api-keys")!)
+                    Link(cloudProviderLinkTitle, destination: cloudProviderLinkURL)
 
-                    helpText("LangFlip POSTs to <Base URL>/chat/completions with Bearer auth — works for any OpenAI-compatible provider. Examples:\n  • OpenAI direct: https://api.openai.com/v1 + `gpt-5-nano`\n  • OpenRouter: https://openrouter.ai/api/v1 + `openai/gpt-oss-120b` (single key, hundreds of models)\n  • Together AI: https://api.together.xyz/v1 + `gpt-oss-120b`\n  • Groq: https://api.groq.com/openai/v1 + `llama-3.1-70b-versatile` (very fast, free tier)\n\nOpenAI API access uses an API key from your OpenAI account. Your key is stored in macOS Keychain (encrypted at rest with your login key), never in plain config. Empty the field to remove.")
+                    helpText(cloudHelpText)
+                }
+                .onAppear {
+                    applyCloudProviderDefaultsIfNeeded()
                 }
             }
 
@@ -324,6 +349,12 @@ private struct ModelsTab: View {
                         .padding(.vertical, 2)
                     }
                     helpText("Models live in ~/Library/Application Support/LangFlip/Models/. Download is verified against an EdDSA signature before installation. (Downloader lands in Sprint D — for now this is UI scaffolding only.)")
+                }
+            }
+
+            if AIMode(rawValue: aiMode) != .off {
+                Section("Test") {
+                    AIModelTestView()
                 }
             }
 
@@ -392,6 +423,202 @@ private struct ModelsTab: View {
             return "Cloud mode: each AI feature you trigger sends the relevant text (a sentence, a selection, etc.) to the endpoint configured above. With the default Base URL, that's OpenAI in the US. Your API key is stored in macOS Keychain. Disable any time by switching back to Off, Apple Intelligence, or Ollama. The rules-based layout-flip core remains 100% local regardless of this setting."
         }
     }
+
+    private var selectedCloudProvider: AICloudProvider {
+        AICloudProvider(rawValue: cloudProvider) ?? .openRouter
+    }
+
+    private var apiKeyPlaceholder: String {
+        switch selectedCloudProvider {
+        case .openRouter: return "OpenRouter API key"
+        case .openAI:     return "OpenAI API key (sk-...)"
+        case .custom:     return "API key"
+        }
+    }
+
+    private var cloudProviderLinkTitle: String {
+        switch selectedCloudProvider {
+        case .openRouter: return "Open OpenRouter API keys..."
+        case .openAI:     return "Open OpenAI API keys..."
+        case .custom:     return "Open provider dashboard..."
+        }
+    }
+
+    private var cloudProviderLinkURL: URL {
+        switch selectedCloudProvider {
+        case .openRouter: return URL(string: "https://openrouter.ai/settings/keys")!
+        case .openAI:     return URL(string: "https://platform.openai.com/api-keys")!
+        case .custom:     return URL(string: "https://openrouter.ai/settings/keys")!
+        }
+    }
+
+    private var cloudHelpText: String {
+        switch selectedCloudProvider {
+        case .openRouter:
+            return "OpenRouter uses one billing account and one API key for hundreds of models. The model list below is fetched from OpenRouter's `/api/v1/models`; free models are marked as free, and cheap models show approximate input/output prices per 1M tokens. For short grammar fixes, free or tiny low-cost models are usually enough."
+        case .openAI:
+            return "LangFlip sends requests to OpenAI's chat-completions endpoint with Bearer auth. Your API key is stored in macOS Keychain, never in plain preferences."
+        case .custom:
+            return "Use any OpenAI-compatible chat-completions provider. LangFlip POSTs to `<Base URL>/chat/completions` with Bearer auth and the model string you enter."
+        }
+    }
+
+    private func applyCloudProviderDefaultsIfNeeded() {
+        let provider = selectedCloudProvider
+        guard provider != .custom else { return }
+        if openaiBaseURL.isEmpty ||
+           (provider == .openRouter && openaiBaseURL == AICloudProvider.openAI.defaultBaseURL) ||
+           (provider == .openAI && openaiBaseURL == AICloudProvider.openRouter.defaultBaseURL) {
+            openaiBaseURL = provider.defaultBaseURL
+        }
+        if openaiModel.isEmpty ||
+           (provider == .openRouter && openaiModel == AICloudProvider.openAI.defaultModel) ||
+           (provider == .openAI && openaiModel == AICloudProvider.openRouter.defaultModel) {
+            openaiModel = provider.defaultModel
+        }
+    }
+}
+
+private enum AICloudProvider: String, CaseIterable, Identifiable {
+    case openRouter
+    case openAI
+    case custom
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .openRouter: return "OpenRouter"
+        case .openAI:     return "OpenAI direct"
+        case .custom:     return "Custom compatible"
+        }
+    }
+
+    var defaultBaseURL: String {
+        switch self {
+        case .openRouter: return "https://openrouter.ai/api/v1"
+        case .openAI:     return "https://api.openai.com/v1"
+        case .custom:     return ""
+        }
+    }
+
+    var defaultModel: String {
+        switch self {
+        case .openRouter: return "openrouter/auto"
+        case .openAI:     return "gpt-5-nano"
+        case .custom:     return ""
+        }
+    }
+}
+
+private struct AIModelTestView: View {
+    private enum TestState: Equatable {
+        case idle
+        case running(Date)
+        case success(output: String, seconds: TimeInterval)
+        case unchanged(seconds: TimeInterval)
+        case failed(String)
+    }
+
+    private let sample = "World is wery gandgerous plsce to leave in!"
+
+    @State private var state: TestState = .idle
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(sample)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                    statusText
+                        .font(.caption)
+                        .foregroundColor(statusColor)
+                }
+                Spacer()
+                Button {
+                    runTest()
+                } label: {
+                    Image(systemName: isRunning ? "hourglass" : "play.fill")
+                }
+                .help("Run grammar test with the selected AI model")
+                .disabled(isRunning)
+            }
+
+            if let output {
+                Text(output)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(.top, 2)
+            }
+        }
+    }
+
+    private var isRunning: Bool {
+        if case .running = state { return true }
+        return false
+    }
+
+    @ViewBuilder
+    private var statusText: some View {
+        switch state {
+        case .idle:
+            Text("Runs the same grammar rewrite path used by Shift and sentence-end auto-fix.")
+        case .running:
+            Text("Running model test...")
+        case .success(_, let seconds):
+            Text(String(format: "Model replied in %.1f s.", seconds))
+        case .unchanged(let seconds):
+            Text(String(format: "Model replied in %.1f s and returned unchanged text.", seconds))
+        case .failed(let reason):
+            Text("Failed: \(reason)")
+        }
+    }
+
+    private var statusColor: Color {
+        switch state {
+        case .failed:
+            return .orange
+        case .success:
+            return .green
+        default:
+            return .secondary
+        }
+    }
+
+    private var output: String? {
+        switch state {
+        case .success(let output, _):
+            return output
+        default:
+            return nil
+        }
+    }
+
+    private func runTest() {
+        let started = Date()
+        state = .running(started)
+
+        let request = AIRewriteRequest(
+            text: sample,
+            preferredLayout: .en
+        )
+        AIAssistantManager.shared.current.rewriteSentence(request) { result in
+            DispatchQueue.main.async {
+                let seconds = Date().timeIntervalSince(started)
+                switch result {
+                case .rewritten(let output):
+                    state = .success(output: output, seconds: seconds)
+                case .unchanged:
+                    state = .unchanged(seconds: seconds)
+                case .unsupported:
+                    state = .failed("selected assistant does not support grammar rewrite")
+                case .failed(let reason):
+                    state = .failed(reason)
+                }
+            }
+        }
+    }
 }
 
 private struct OllamaModelPicker: View {
@@ -403,9 +630,11 @@ private struct OllamaModelPicker: View {
 
     private var dropdownModels: [String] {
         var models: [String] = []
-        for model in ["qwen2.5"] + installedModels + [selectedModel] {
+        for model in [selectedModel] + installedModels + ["qwen2.5"] {
             let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty && !models.contains(trimmed) {
+            let canonical = canonicalModelTag(trimmed)
+            let alreadyIncluded = models.contains { canonicalModelTag($0) == canonical }
+            if !trimmed.isEmpty && !alreadyIncluded {
                 models.append(trimmed)
             }
         }
@@ -428,6 +657,20 @@ private struct OllamaModelPicker: View {
                 }
                 .help("Refresh installed Ollama models")
                 .disabled(isLoading)
+
+                Button {
+                    NSWorkspace.shared.openApplication(
+                        at: URL(fileURLWithPath: "/Applications/Ollama.app"),
+                        configuration: NSWorkspace.OpenConfiguration()
+                    )
+                    Task {
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        await refreshInstalledModels()
+                    }
+                } label: {
+                    Image(systemName: "play.circle")
+                }
+                .help("Open Ollama")
             }
 
             TextField("Custom model tag", text: $selectedModel)
@@ -453,10 +696,18 @@ private struct OllamaModelPicker: View {
     }
 
     private func label(for model: String) -> String {
-        if model == "qwen2.5" {
+        if canonicalModelTag(model) == "qwen2.5" {
             return "Qwen 2.5 (recommended)"
         }
         return model
+    }
+
+    private func canonicalModelTag(_ model: String) -> String {
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasSuffix(":latest") {
+            return String(trimmed.dropLast(":latest".count))
+        }
+        return trimmed
     }
 
     @MainActor
@@ -465,7 +716,7 @@ private struct OllamaModelPicker: View {
         loadError = nil
         defer { isLoading = false }
 
-        guard let url = URL(string: "http://localhost:11434/api/tags") else { return }
+        guard let url = URL(string: "http://127.0.0.1:11434/api/tags") else { return }
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
             guard let http = response as? HTTPURLResponse,
@@ -477,7 +728,7 @@ private struct OllamaModelPicker: View {
             let decoded = try JSONDecoder().decode(OllamaTagsResponse.self, from: data)
             installedModels = decoded.models.map(\.name).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
         } catch {
-            loadError = "Ollama is not running, or no local model list is available."
+            loadError = "Ollama is not running. Open Ollama, then refresh."
             installedModels = []
         }
     }
@@ -489,6 +740,177 @@ private struct OllamaTagsResponse: Decodable {
     }
 
     let models: [Model]
+}
+
+private struct OpenRouterModelPicker: View {
+    @Binding var selectedModel: String
+
+    @State private var models: [OpenRouterModel] = []
+    @State private var isLoading = false
+    @State private var loadError: String?
+
+    private var dropdownModels: [OpenRouterModel] {
+        var result: [OpenRouterModel] = [
+            OpenRouterModel(
+                id: "openrouter/auto",
+                name: "OpenRouter Auto",
+                pricing: .init(prompt: nil, completion: nil),
+                architecture: nil
+            )
+        ]
+
+        for model in models {
+            if !result.contains(where: { $0.id == model.id }) {
+                result.append(model)
+            }
+        }
+
+        if !selectedModel.isEmpty && !result.contains(where: { $0.id == selectedModel }) {
+            result.insert(
+                OpenRouterModel(
+                    id: selectedModel,
+                    name: selectedModel,
+                    pricing: .init(prompt: nil, completion: nil),
+                    architecture: nil
+                ),
+                at: 0
+            )
+        }
+
+        return result
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Picker("Model", selection: $selectedModel) {
+                    ForEach(dropdownModels) { model in
+                        Text(label(for: model)).tag(model.id)
+                    }
+                }
+
+                Button {
+                    Task { await refreshModels() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Refresh OpenRouter models")
+                .disabled(isLoading)
+            }
+
+            TextField("Custom model id", text: $selectedModel)
+                .textFieldStyle(.roundedBorder)
+
+            if isLoading {
+                Text("Refreshing OpenRouter models...")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else if let loadError {
+                Text(loadError)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else if !models.isEmpty {
+                Text("Showing free models first, then the cheapest text models.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .task {
+            await refreshModels()
+        }
+    }
+
+    private func label(for model: OpenRouterModel) -> String {
+        let price = model.priceLabel
+        if price.isEmpty {
+            return "\(model.name) - \(model.id)"
+        }
+        return "\(model.name) - \(price)"
+    }
+
+    @MainActor
+    private func refreshModels() async {
+        isLoading = true
+        loadError = nil
+        defer { isLoading = false }
+
+        guard let url = URL(string: "https://openrouter.ai/api/v1/models?output_modalities=text") else { return }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else {
+                loadError = "OpenRouter returned an unexpected response."
+                models = []
+                return
+            }
+            let decoded = try JSONDecoder().decode(OpenRouterModelsResponse.self, from: data)
+            models = decoded.data
+                .filter { $0.supportsTextOutput }
+                .sorted(by: OpenRouterModel.isBetterForProofreading)
+                .prefix(80)
+                .map { $0 }
+        } catch {
+            loadError = "Could not load OpenRouter models. Check your internet connection."
+            models = []
+        }
+    }
+}
+
+private struct OpenRouterModelsResponse: Decodable {
+    let data: [OpenRouterModel]
+}
+
+private struct OpenRouterModel: Decodable, Identifiable {
+    struct Pricing: Decodable {
+        let prompt: String?
+        let completion: String?
+    }
+
+    struct Architecture: Decodable {
+        let outputModalities: [String]?
+
+        enum CodingKeys: String, CodingKey {
+            case outputModalities = "output_modalities"
+        }
+    }
+
+    let id: String
+    let name: String
+    let pricing: Pricing
+    let architecture: Architecture?
+
+    var supportsTextOutput: Bool {
+        architecture?.outputModalities?.contains("text") ?? true
+    }
+
+    var promptPrice: Double {
+        Double(pricing.prompt ?? "") ?? .infinity
+    }
+
+    var completionPrice: Double {
+        Double(pricing.completion ?? "") ?? .infinity
+    }
+
+    var isFree: Bool {
+        promptPrice == 0 && completionPrice == 0
+    }
+
+    var priceLabel: String {
+        if id == "openrouter/auto" { return "automatic routing" }
+        if isFree { return "free" }
+        guard promptPrice.isFinite, completionPrice.isFinite else { return "" }
+        let input = promptPrice * 1_000_000
+        let output = completionPrice * 1_000_000
+        return String(format: "$%.2f / $%.2f per 1M", input, output)
+    }
+
+    static func isBetterForProofreading(_ lhs: OpenRouterModel, _ rhs: OpenRouterModel) -> Bool {
+        if lhs.isFree != rhs.isFree { return lhs.isFree }
+        let lhsCost = lhs.promptPrice + lhs.completionPrice
+        let rhsCost = rhs.promptPrice + rhs.completionPrice
+        if lhsCost != rhsCost { return lhsCost < rhsCost }
+        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+    }
 }
 
 // MARK: - Apps

@@ -90,8 +90,12 @@ app: build
 	@codesign --force --deep --sign - $(APP_DIR) 2>/dev/null || true
 	@echo "✓ Built $(APP_DIR)"
 
-run: app
-	@open $(APP_DIR)
+# For this app, running the build/ copy is actively misleading during
+# development: macOS privacy permissions (Accessibility / Input
+# Monitoring) are tied to the signed installed bundle, while build/
+# gets ad-hoc-signed and can show stale or missing TCC state. Treat
+# `make run` as the daily signed install + launch path.
+run: dev
 
 install: app
 	@rm -rf /Applications/$(BUNDLE_NAME)
@@ -104,8 +108,8 @@ install: app
 # time), install into /Applications, kill any running instance, open.
 #
 # This is the target you want for "I just made a code change, let me
-# test it." `make run` keeps the build/ copy and works for one-off
-# experiments, but TCC will keep prompting on adhoc.
+# test it." `make run` aliases to this target too, because launching
+# the build/ copy is a TCC footgun for a keyboard-monitoring app.
 dev: sign
 	@echo "→ Replacing /Applications/$(BUNDLE_NAME)…"
 	@killall $(APP_NAME) 2>/dev/null || true
@@ -113,7 +117,7 @@ dev: sign
 	@rm -rf /Applications/$(BUNDLE_NAME)
 	@cp -R $(APP_DIR) /Applications/
 	@echo "✓ Installed Developer-ID-signed build to /Applications/$(BUNDLE_NAME)"
-	@open -a $(APP_NAME)
+	@open /Applications/$(BUNDLE_NAME)
 	@sleep 3
 	# Smoke test: did the process survive past startup? Crashes in
 	# applicationDidFinishLaunching die in <1 s, so a 3-second
@@ -137,7 +141,7 @@ dev: sign
 	# AppDelegate uses to pop Preferences — visual confirmation that
 	# the launch succeeded. Important for menubar-only apps where the
 	# icon hides behind the notch on MacBooks.
-	@open -a $(APP_NAME)
+	@open /Applications/$(BUNDLE_NAME)
 	@echo "✓ Launched and alive. Preferences window should be visible."
 
 # ─── Distribution: sign / dmg / notarize / release ────────────────

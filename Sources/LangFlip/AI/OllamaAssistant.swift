@@ -11,7 +11,7 @@ import Foundation
 ///   3. ollama pull gemma3   (or whatever model they want)
 ///   4. In LangFlip Preferences → AI: pick "Ollama (local)" + model name
 ///
-/// We hit `POST http://localhost:11434/api/generate` with a non-stream
+/// We hit `POST http://127.0.0.1:11434/api/generate` with a non-stream
 /// request and parse the single JSON response. Errors (daemon not
 /// running, model not pulled, timeout) all map to `.failed` with a
 /// short reason string so the EventTap can fall back gracefully.
@@ -24,10 +24,12 @@ final class OllamaAssistant: AIAssistant {
     /// less annoying than silent failures.
     private static let inferenceTimeout: TimeInterval = 30.0
 
-    /// Daemon endpoint. Hardcoded to localhost for security (the
+    /// Daemon endpoint. Hardcoded to loopback for security (the
     /// pipeline assumes everything stays on the user's machine — no
-    /// shipping their text to a remote box).
-    private static let endpoint = URL(string: "http://localhost:11434/api/generate")!
+    /// shipping their text to a remote box). Use 127.0.0.1 instead of
+    /// localhost so URLSession never tries ::1 when Ollama only bound
+    /// IPv4.
+    private static let endpoint = URL(string: "http://127.0.0.1:11434/api/generate")!
 
     /// User-configured model tag (e.g. "gemma3", "qwen2.5:1.5b",
     /// "llama3.2"). Captured at init so a runtime Settings change
@@ -57,7 +59,7 @@ final class OllamaAssistant: AIAssistant {
     }
 
     private func probeReady() -> Bool {
-        guard let url = URL(string: "http://localhost:11434/api/tags") else { return false }
+        guard let url = URL(string: "http://127.0.0.1:11434/api/tags") else { return false }
         var req = URLRequest(url: url)
         req.timeoutInterval = 1.0
         var ready = false
@@ -174,7 +176,7 @@ final class OllamaAssistant: AIAssistant {
 
     func translateSelection(_ input: AITranslateRequest, completion: @escaping (AITranslateResult) -> Void) {
         let target = input.target.displayName
-        let prompt = "Translate into \(target). Idiomatic, not literal. Output ONLY the translation.\n\(input.text)"
+        let prompt = "Translate the user's text into \(target). Do not answer, explain, or continue the text. Preserve meaning and formatting. Output ONLY the translation.\n\(input.text)"
         runInference(
             prompt: prompt,
             options: ["temperature": 0.2, "num_ctx": 4096, "num_predict": 1024]
@@ -237,34 +239,43 @@ final class OllamaAssistant: AIAssistant {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
+        let started = Date()
+        AppLog.write("ollama inference start model=\(model) promptLen=\(prompt.count) images=\(images.count)")
         URLSession.shared.dataTask(with: req) { data, response, error in
             if let error {
+                AppLog.write("ollama inference failed after \(String(format: "%.1f", Date().timeIntervalSince(started)))s: \(error.localizedDescription)")
                 completion(.failure("network: \(error.localizedDescription)"))
                 return
             }
             guard let http = response as? HTTPURLResponse else {
+                AppLog.write("ollama inference failed after \(String(format: "%.1f", Date().timeIntervalSince(started)))s: no response")
                 completion(.failure("no response"))
                 return
             }
             guard (200..<300).contains(http.statusCode) else {
+                AppLog.write("ollama inference failed after \(String(format: "%.1f", Date().timeIntervalSince(started)))s: HTTP \(http.statusCode)")
                 completion(.failure("HTTP \(http.statusCode)"))
                 return
             }
             guard let data,
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                AppLog.write("ollama inference failed after \(String(format: "%.1f", Date().timeIntervalSince(started)))s: invalid JSON")
                 completion(.failure("invalid JSON"))
                 return
             }
             // Ollama also returns an "error" field for things like
             // "model not found".
             if let err = obj["error"] as? String {
+                AppLog.write("ollama inference failed after \(String(format: "%.1f", Date().timeIntervalSince(started)))s: \(err)")
                 completion(.failure(err))
                 return
             }
             guard let text = obj["response"] as? String else {
+                AppLog.write("ollama inference failed after \(String(format: "%.1f", Date().timeIntervalSince(started)))s: no response field")
                 completion(.failure("no response field"))
                 return
             }
+            AppLog.write("ollama inference success after \(String(format: "%.1f", Date().timeIntervalSince(started)))s outputLen=\(text.count)")
             completion(.success(text))
         }.resume()
     }

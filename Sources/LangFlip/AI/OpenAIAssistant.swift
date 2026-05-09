@@ -127,7 +127,7 @@ final class OpenAIAssistant: AIAssistant {
         let target = input.target.displayName
         chatCompletion(
             messages: [
-                ["role": "system", "content": "Translate into \(target). Idiomatic, not literal. Output ONLY the translation, no quotes."],
+                ["role": "system", "content": "Translate the user's text into \(target). Do not answer, explain, or continue the text. Preserve meaning and formatting. Output ONLY the translation, no quotes."],
                 ["role": "user",   "content": input.text],
             ],
             options: ["temperature": 0.2, "max_tokens": 1024]
@@ -180,6 +180,10 @@ final class OpenAIAssistant: AIAssistant {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if authorize {
             req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+        if baseURL.host?.localizedCaseInsensitiveContains("openrouter.ai") == true {
+            req.setValue("LangFlip", forHTTPHeaderField: "X-Title")
+            req.setValue("https://github.com/MikeKorotych/lang-flip", forHTTPHeaderField: "HTTP-Referer")
         }
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
 

@@ -57,6 +57,11 @@ final class EventTap {
     /// when they eventually return (Task cancellation can't always reach
     /// the Foundation Models call once it's in flight).
     private var grammarToken: Int = 0
+    /// Separate token for sentence-end grammar. It intentionally does
+    /// not get bumped by every normal keyDown: after typing "." users
+    /// almost always type a space before the model returns, and that
+    /// should be preserved rather than cancelling the correction.
+    private var sentenceEndGrammarToken: Int = 0
     /// Set true on any non-watched keyDown event while a watched modifier
     /// is held — means the user used the modifier as a real shortcut
     /// modifier, not as a hotkey tap.
@@ -210,12 +215,16 @@ final class EventTap {
                 let endersInBatch = s.contains(where: { $0 == "." || $0 == "!" || $0 == "?" })
                 if endersInBatch {
                     if !Settings.shared.grammarCheckOnSentenceEnd {
+                        AppLog.write("sentence-end grammar skipped: feature off")
                         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end seen but feature off (grammarCheckOnSentenceEnd)\n".utf8)) }
                     } else if Settings.shared.aiMode == .off {
+                        AppLog.write("sentence-end grammar skipped: aiMode off")
                         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end seen but aiMode = off\n".utf8)) }
                     } else if suppression != nil {
+                        AppLog.write("sentence-end grammar skipped: suppressed context \(suppression!)")
                         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end seen but suppressed: \(suppression!)\n".utf8)) }
                     } else {
+                        AppLog.write("sentence-end grammar trigger seen: '\(s)' previousLen=\(sentenceBuffer.previous.count)")
                         maybeStartSentenceEndGrammar()
                     }
                 }
@@ -474,6 +483,7 @@ final class EventTap {
         if Settings.shared.grammarCheckOnSingleShift,
            AIAssistantManager.shared.isReady,
            AppContext.suppressionCause() == nil {
+            AppLog.write("single-shift grammar scheduled")
             let work = DispatchWorkItem { [weak self] in
                 guard let self else { return }
                 self.tapCount = 0
@@ -482,6 +492,8 @@ final class EventTap {
             }
             pendingFire = work
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.tapWindow, execute: work)
+        } else if tapCount == 1, Settings.shared.grammarCheckOnSingleShift {
+            AppLog.write("single-shift grammar not scheduled: ready=\(AIAssistantManager.shared.isReady) suppression=\(String(describing: AppContext.suppressionCause()))")
         }
         // Else: leave tapCount==1 dangling; if a second tap comes the
         // double-tap path takes over, otherwise it harmlessly resets on
@@ -762,9 +774,6 @@ final class EventTap {
                             }
                             pb.clearContents()
                             pb.setString(translated, forType: .string)
-                            // Hop the input source to the target so further
-                            // typing matches the new language. Cheap UX win.
-                            InputSource.switchTo(target)
                             self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
                             Sound.playFlip()
                             FlipOverlay.shared.show()
@@ -1009,6 +1018,7 @@ final class EventTap {
     /// fall back to the most recent sentence from SentenceBuffer.
     private func fireSingleShiftGrammarFix() {
         guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
+            AppLog.write("single-shift grammar fired but AI not ready")
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift grammar skipped: AI not ready\n".utf8)) }
             return
         }
@@ -1032,10 +1042,12 @@ final class EventTap {
                    let text = pb.string(forType: .string),
                    !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                    text.count >= 2 {
+                    AppLog.write("single-shift grammar using selection len=\(text.count)")
                     self.applySingleShiftAIFixToSelection(text: text, snapshot: snapshot)
                     return
                 }
 
+                AppLog.write("single-shift grammar found no selection; falling back to sentence")
                 snapshot.restore(to: pb)
                 self.fireSingleShiftSentenceGrammarFix()
             }
@@ -1050,22 +1062,27 @@ final class EventTap {
                 guard let self else { return }
                 switch result {
                 case .fixed(let corrected):
+                    AppLog.write("single-shift selection fixed \(text.count)->\(corrected.count)")
                     if self.debug {
                         FileHandle.standardError.write(Data("lang-flip[debug]: single-shift selection AI fix \(text.count)→\(corrected.count) chars\n".utf8))
                     }
                     pb.clearContents()
                     pb.setString(corrected, forType: .string)
                     self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+                    self.playRewriteFeedback()
                     DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
                         snapshot.restore(to: pb)
                     }
                 case .unchanged:
+                    AppLog.write("single-shift selection unchanged")
                     if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift selection grammar — unchanged\n".utf8)) }
                     snapshot.restore(to: pb)
                 case .unsupported:
+                    AppLog.write("single-shift selection unsupported")
                     if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift selection grammar — unsupported\n".utf8)) }
                     snapshot.restore(to: pb)
                 case .failed(let reason):
+                    AppLog.write("single-shift selection failed: \(reason)")
                     if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift selection grammar — failed: \(reason)\n".utf8)) }
                     snapshot.restore(to: pb)
                 }
@@ -1076,6 +1093,7 @@ final class EventTap {
     private func fireSingleShiftSentenceGrammarFix() {
         guard let sentence = sentenceBuffer.mostRecentSentence,
               sentence.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2 else {
+            AppLog.write("single-shift sentence skipped: no sentence")
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar skipped: no sentence\n".utf8)) }
             return
         }
@@ -1101,6 +1119,7 @@ final class EventTap {
                 )
             }
         }
+        AppLog.write("single-shift sentence started token=\(token) len=\(sentence.count)")
         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar started (token=\(token), len=\(sentence.count))\n".utf8)) }
     }
 
@@ -1111,9 +1130,11 @@ final class EventTap {
                 ? sentenceBuffer.current == originalSentence
                 : sentenceBuffer.current.isEmpty && sentenceBuffer.previous == originalSentence
             guard bufferStillMatches else {
+                AppLog.write("single-shift sentence dropped: buffer changed")
                 if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar dropped (buffer changed)\n".utf8)) }
                 return
             }
+            AppLog.write("single-shift sentence rewritten \(originalSentence.count)->\(corrected.count)")
             applyGrammarFix(original: originalSentence, corrected: corrected)
             if wasCurrent {
                 sentenceBuffer.replaceCurrent(with: corrected)
@@ -1121,18 +1142,21 @@ final class EventTap {
                 sentenceBuffer.replacePrevious(with: corrected)
             }
         case .unchanged:
+            AppLog.write("single-shift sentence unchanged")
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar — unchanged\n".utf8)) }
         case .unsupported:
+            AppLog.write("single-shift sentence unsupported")
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar — unsupported\n".utf8)) }
         case .failed(let reason):
+            AppLog.write("single-shift sentence failed: \(reason)")
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar — failed: \(reason)\n".utf8)) }
         }
     }
 
     /// Replace the just-typed sentence with the AI-corrected one.
     /// Backspaces over the original (in the focused app), retypes the
-    /// new text, leaves layout / sound / overlay alone — grammar fixes
-    /// are intentionally silent so users see only the diff in the text.
+    /// new text and emits the same optional sound / overlay feedback as
+    /// other LangFlip rewrites.
     private func applyGrammarFix(original: String, corrected: String) {
         guard original != corrected else { return }
         if debug {
@@ -1145,9 +1169,12 @@ final class EventTap {
         // Caller updates SentenceBuffer according to whether this was
         // the in-progress or previously-completed sentence.
         buffer.reset()
-        // Don't play sound or overlay — rewrites should be a quiet
-        // background fix, not a celebration. Different surface from
-        // layout flips.
+        playRewriteFeedback()
+    }
+
+    private func playRewriteFeedback() {
+        Sound.playFlip()
+        FlipOverlay.shared.show()
     }
 
     // MARK: - Sentence-end auto grammar (Sprint C.2)
@@ -1175,19 +1202,21 @@ final class EventTap {
         // real-world sentences. Earlier 4-word threshold was too tight
         // — typical 2-3 word phrases never triggered.
         guard words.count >= 2 else {
+            AppLog.write("sentence-end grammar skipped: only \(words.count) word(s)")
             if debug {
                 FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar skip: only \(words.count) words in '\(trimmed.prefix(40))'\n".utf8))
             }
             return
         }
         if !AIAssistantManager.shared.isReady {
+            AppLog.write("sentence-end grammar skipped: AI not ready")
             if debug {
                 FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar skip: AI not ready\n".utf8))
             }
             return
         }
-        grammarToken &+= 1
-        let token = grammarToken
+        sentenceEndGrammarToken &+= 1
+        let token = sentenceEndGrammarToken
         let request = AIRewriteRequest(
             text: prev,
             preferredLayout: InputSource.currentLayout()
@@ -1195,13 +1224,14 @@ final class EventTap {
         AIAssistantManager.shared.current.rewriteSentence(request) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
-                guard self.grammarToken == token else {
-                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar discarded (stale token=\(token), current=\(self.grammarToken))\n".utf8)) }
+                guard self.sentenceEndGrammarToken == token else {
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar discarded (stale token=\(token), current=\(self.sentenceEndGrammarToken))\n".utf8)) }
                     return
                 }
                 self.applySentenceEndGrammar(originalSentence: prev, result: result)
             }
         }
+        AppLog.write("sentence-end grammar started token=\(token) words=\(words.count) len=\(prev.count)")
         if debug {
             FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar started (token=\(token), \(words.count) words, \(prev.count) chars): '\(prev.prefix(60))'\n".utf8))
         }
@@ -1218,6 +1248,7 @@ final class EventTap {
         switch result {
         case .rewritten(let corrected):
             guard sentenceBuffer.previous == originalSentence else {
+                AppLog.write("sentence-end grammar dropped: buffer rolled over")
                 if debug {
                     FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar dropped (buffer rolled over)\n".utf8))
                     FileHandle.standardError.write(Data("lang-flip[debug]:   expected: '\(originalSentence.prefix(60))'\n".utf8))
@@ -1226,6 +1257,7 @@ final class EventTap {
                 return
             }
             guard corrected != originalSentence else {
+                AppLog.write("sentence-end grammar no-op: corrected equals original")
                 if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar — corrected == original, no-op\n".utf8)) }
                 return
             }
@@ -1239,12 +1271,17 @@ final class EventTap {
             postBackspaces(totalErase)
             postUnicode(corrected + typedSince)
             sentenceBuffer.replacePrevious(with: corrected)
+            playRewriteFeedback()
+            AppLog.write("sentence-end grammar applied \(originalSentence.count)->\(corrected.count), preservedTail=\(typedSince.count)")
             // current is intact — typedSince is back where it was.
         case .unchanged:
+            AppLog.write("sentence-end grammar unchanged")
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar — unchanged\n".utf8)) }
         case .unsupported:
+            AppLog.write("sentence-end grammar unsupported")
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar — unsupported\n".utf8)) }
         case .failed(let reason):
+            AppLog.write("sentence-end grammar failed: \(reason)")
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar — failed: \(reason)\n".utf8)) }
         }
     }

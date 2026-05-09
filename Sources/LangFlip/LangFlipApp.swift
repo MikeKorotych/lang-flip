@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 
 private func log(_ s: String) {
-    FileHandle.standardError.write(Data("lang-flip: \(s)\n".utf8))
+    AppLog.write(s)
 }
 
 @main
