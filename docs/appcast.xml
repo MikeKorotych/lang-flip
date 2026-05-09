@@ -26,6 +26,32 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.2.2</title>
+      <pubDate>Sat, 9 May 2026 13:00:00 +0000</pubDate>
+      <sparkle:version>0.2.2</sparkle:version>
+      <sparkle:shortVersionString>0.2.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Local AI grammar assist + screen-region OCR</h2>
+        <ul>
+          <li>Single-tap Shift is now the all-purpose AI fix gesture: rewrites the selection if any, else the most recent sentence. Double-tap stays purely mechanical.</li>
+          <li>Screen-region OCR via ⇧⌘S — pick a region, the active vision model drops the recognized text on your clipboard.</li>
+          <li>Auto-fix sentences when you finish a thought with . / ! / ?.</li>
+          <li>Translate selection (⇧Space hotkey + menubar submenu) into a configurable target.</li>
+          <li>OpenAI / OpenRouter / Together / Groq backend (BYOK) alongside Apple Intelligence and Ollama.</li>
+          <li>New onboarding window only appears when permissions are missing — fixes the "looks like the app didn't launch" race.</li>
+          <li>Re-clicking the dock / Applications icon now opens Preferences for an instant visual confirmation.</li>
+          <li>Faster word-flip events: bulk paste + sub-ms gap between backspaces fixes "only the tail of the word flipped" in Slack / Notion / Electron apps.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.2/LangFlip-0.2.2.dmg"
+        length="3936628"
+        type="application/octet-stream"
+        sparkle:edSignature="+C4Wrm0zTKR3yYu715mbonhIQhcgbCNh2Uczl1cQr9Tluw1I0Rea2L8RUNqt+n0tO9rT3ibe0ItlHq/30BQYDw==" />
+    </item>
+
+    <item>
       <title>v0.2.1</title>
       <pubDate>Fri, 8 May 2026 22:00:00 +0000</pubDate>
       <sparkle:version>0.2.1</sparkle:version>
