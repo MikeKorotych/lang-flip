@@ -160,11 +160,9 @@ final class EventTap {
 
         // Sprint G: translate-selection hotkey ⇧Space. Consume the event
         // so the underlying app never sees the rogue space. Only active
-        // when AI is on AND the user has opted in via
-        // Settings.translationHotkeyEnabled. Shift+Space is a near-zero-
-        // collision combo in normal typing — Shift is released between
-        // capital letter and the trailing space — so hijacking it is
-        // safe even with the toggle defaulting OFF.
+        // when AI is on and Settings.translationHotkeyEnabled allows it.
+        // For local Ollama setups the release default is on, because the
+        // action only applies to selected text and consumes the stray space.
         if Settings.shared.translationHotkeyEnabled,
            Settings.shared.aiMode != .off,
            keyCode == CGKeyCode(kVK_Space),

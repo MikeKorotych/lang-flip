@@ -405,7 +405,7 @@ private struct ModelsTab: View {
     private let releaseAIModes: [AIMode] = [.off, .appleFoundation, .ollama, .openai]
 
     @AppStorage("lf.aiMode") private var aiMode = AIMode.off.rawValue
-    @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = false
+    @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = true
     @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
     @AppStorage("lf.screenTextCaptureHotkeyEnabled") private var screenTextCaptureHotkeyEnabled = true
     @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
@@ -413,6 +413,8 @@ private struct ModelsTab: View {
     @AppStorage("lf.cloudProvider") private var cloudProvider = AICloudProvider.openRouter.rawValue
     @AppStorage("lf.openaiModel") private var openaiModel = "gpt-5-nano"
     @AppStorage("lf.openaiBaseURL") private var openaiBaseURL = "https://api.openai.com/v1"
+
+    @State private var aiReadyForHotkeys = false
 
     /// API key kept in Keychain (NOT @AppStorage). Mirror it through
     /// @State so SwiftUI re-renders the SecureField properly. We
@@ -437,7 +439,12 @@ private struct ModelsTab: View {
             // never realize a model selection was needed too.
             if AIMode(rawValue: aiMode) == .ollama {
                 Section("Ollama") {
-                    OllamaModelPicker(selectedModel: $ollamaModel)
+                    OllamaModelPicker(
+                        selectedModel: $ollamaModel,
+                        onSelectedModelAvailabilityChanged: { ready in
+                            syncAIHotkeyAvailability(assistantReady: ready)
+                        }
+                    )
                     helpText("Use a model already installed in Ollama, or download one here. Local AI stays on this Mac.")
                 }
             }
@@ -497,8 +504,14 @@ private struct ModelsTab: View {
             }
 
             Section("Features") {
-                Toggle("Fix selected text with single Shift", isOn: $grammarOnSingleShift)
-                helpText("A single clean Shift tap sends the selected text to the active AI model for typo, punctuation, and grammar cleanup. If nothing is selected, nothing happens.")
+                Toggle("Fix selected text with single Shift", isOn: Binding(
+                    get: { aiReadyForHotkeys && grammarOnSingleShift },
+                    set: { grammarOnSingleShift = $0 }
+                ))
+                .disabled(!aiReadyForHotkeys)
+                helpText(aiReadyForHotkeys
+                         ? "A single clean Shift tap sends the selected text to the active AI model for typo, punctuation, and grammar cleanup. If nothing is selected, nothing happens."
+                         : "Install and select a local model to enable this shortcut.")
             }
 
             Section("Translate selection") {
@@ -509,8 +522,14 @@ private struct ModelsTab: View {
                 }
                 helpText("Used by the menu bar Translate action and the optional Shift+Space hotkey.")
 
-                Toggle("Translate with Shift+Space", isOn: $translationHotkeyEnabled)
-                helpText("When AI is on, Shift+Space translates the current selection into the default target language.")
+                Toggle("Translate with Shift+Space", isOn: Binding(
+                    get: { aiReadyForHotkeys && translationHotkeyEnabled },
+                    set: { translationHotkeyEnabled = $0 }
+                ))
+                .disabled(!aiReadyForHotkeys)
+                helpText(aiReadyForHotkeys
+                         ? "When AI is on, Shift+Space translates the current selection into the default target language."
+                         : "Install and select a local model to enable this shortcut.")
             }
 
             if AIMode(rawValue: aiMode) == .ollama {
@@ -532,6 +551,13 @@ private struct ModelsTab: View {
             if aiMode == AIMode.bundledModel.rawValue {
                 aiMode = AIMode.ollama.rawValue
             }
+            refreshAIHotkeyAvailability()
+        }
+        .onChange(of: aiMode) { _ in
+            refreshAIHotkeyAvailability()
+        }
+        .onChange(of: ollamaModel) { _ in
+            refreshAIHotkeyAvailability()
         }
     }
 
@@ -611,6 +637,26 @@ private struct ModelsTab: View {
            (provider == .openRouter && openaiModel == AICloudProvider.openAI.defaultModel) ||
            (provider == .openAI && openaiModel == AICloudProvider.openRouter.defaultModel) {
             openaiModel = provider.defaultModel
+        }
+    }
+
+    private func refreshAIHotkeyAvailability() {
+        Task {
+            let ready = await Task.detached(priority: .userInitiated) {
+                AIAssistantManager.shared.isReady
+            }.value
+            await MainActor.run {
+                syncAIHotkeyAvailability(assistantReady: ready)
+            }
+        }
+    }
+
+    private func syncAIHotkeyAvailability(assistantReady: Bool) {
+        aiReadyForHotkeys = assistantReady
+        Settings.shared.applyRecommendedAIHotkeyDefaults(assistantReady: assistantReady)
+        grammarOnSingleShift = Settings.shared.grammarCheckOnSingleShift
+        if Settings.shared.hasStoredTranslationHotkeyPreference {
+            translationHotkeyEnabled = Settings.shared.translationHotkeyEnabled
         }
     }
 }
@@ -905,6 +951,7 @@ private struct OllamaModelPicker: View {
     private let visionModel = "qwen3.5:4b"
 
     @Binding var selectedModel: String
+    let onSelectedModelAvailabilityChanged: (Bool) -> Void
 
     @State private var installedModels: [String] = []
     @State private var isLoading = false
@@ -1009,6 +1056,9 @@ private struct OllamaModelPicker: View {
         .task {
             await refreshInstalledModels()
         }
+        .onChange(of: selectedModel) { _ in
+            notifySelectedModelAvailability()
+        }
     }
 
     private func installButtonTitle(for model: String) -> String {
@@ -1047,6 +1097,10 @@ private struct OllamaModelPicker: View {
     private func isModelInstalled(_ model: String) -> Bool {
         let canonical = canonicalModelTag(model)
         return installedModels.contains { canonicalModelTag($0) == canonical }
+    }
+
+    private func notifySelectedModelAvailability() {
+        onSelectedModelAvailabilityChanged(isModelInstalled(selectedModel))
     }
 
     private func canonicalModelTag(_ model: String) -> String {
@@ -1095,9 +1149,11 @@ private struct OllamaModelPicker: View {
             }
             let decoded = try JSONDecoder().decode(OllamaTagsResponse.self, from: data)
             installedModels = decoded.models.map(\.name).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+            notifySelectedModelAvailability()
         } catch {
             loadError = "Ollama is not running. Open Ollama, then refresh."
             installedModels = []
+            notifySelectedModelAvailability()
         }
     }
 

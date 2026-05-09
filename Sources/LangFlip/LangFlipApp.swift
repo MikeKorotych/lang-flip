@@ -110,7 +110,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // unsupported-region — easier to read here than to chase via
         // feature-trigger debug logs.
         let assistant = AIAssistantManager.shared.current
-        log("AI mode = \(Settings.shared.aiMode.rawValue), isReady = \(assistant.isReady)")
+        let assistantReady = assistant.isReady
+        Settings.shared.applyRecommendedAIHotkeyDefaults(assistantReady: assistantReady)
+        log("AI mode = \(Settings.shared.aiMode.rawValue), isReady = \(assistantReady)")
         if #available(macOS 26.0, *), Settings.shared.aiMode == .appleFoundation {
             if let fm = assistant as? FoundationModelsAssistant {
                 log("Foundation Models availability: \(fm.availabilityDescription)")

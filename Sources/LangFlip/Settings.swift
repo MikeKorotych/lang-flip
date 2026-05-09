@@ -146,24 +146,38 @@ final class Settings {
         set { defaults.set(newValue.rawValue, forKey: Keys.aiMode) }
     }
 
+    private init() {}
+
     /// When true, a single clean Shift tap (no other key in between, no
     /// second tap within the window) fires an AI grammar / typo pass on
-    /// the current selection and silently applies the result. Default
-    /// OFF — single Shift is too low-friction to ship enabled out of
-    /// the box.
+    /// the current selection and silently applies the result. LangFlip
+    /// enables this automatically after a local Ollama model is ready.
     var grammarCheckOnSingleShift: Bool {
         get { defaults.object(forKey: Keys.grammarCheckOnSingleShift) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.grammarCheckOnSingleShift) }
     }
 
     /// When true, ⇧Space (Shift+Space) translates the current text
-    /// selection into `translationTarget`. Off by default — the
-    /// menubar's "Translate selection →" submenu is always available
-    /// when AI is on, so users only need the hotkey when they want
-    /// muscle-memory speed.
+    /// selection into `translationTarget`. LangFlip enables this
+    /// automatically after a local Ollama model is ready. Users can
+    /// still turn it off and that choice sticks.
     var translationHotkeyEnabled: Bool {
         get { defaults.object(forKey: Keys.translationHotkeyEnabled) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.translationHotkeyEnabled) }
+    }
+
+    func applyRecommendedAIHotkeyDefaults(assistantReady: Bool) {
+        guard aiMode == .ollama, assistantReady else { return }
+        if defaults.object(forKey: Keys.grammarCheckOnSingleShift) == nil {
+            defaults.set(true, forKey: Keys.grammarCheckOnSingleShift)
+        }
+        if defaults.object(forKey: Keys.translationHotkeyEnabled) == nil {
+            defaults.set(true, forKey: Keys.translationHotkeyEnabled)
+        }
+    }
+
+    var hasStoredTranslationHotkeyPreference: Bool {
+        defaults.object(forKey: Keys.translationHotkeyEnabled) != nil
     }
 
     /// When true, ⇧⌘S starts the screen-region OCR flow for vision-capable
