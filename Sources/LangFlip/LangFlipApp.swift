@@ -28,6 +28,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// immediately. Held by the delegate so it lives for the app's lifetime.
     private let updater = Updater.shared
 
+    /// Called when the user re-launches a running instance — most often
+    /// by double-clicking /Applications/LangFlip.app while the app is
+    /// already in the menubar. With LSUIElement = true the default
+    /// behaviour is silent (no Dock icon to bounce, no main window to
+    /// raise), which looks identical to a launch failure. Open
+    /// Preferences instead so the click gets visible feedback and the
+    /// user can confirm the app is alive.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows {
+            PreferencesWindowController.shared.show()
+        }
+        return true
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Status-bar accessory: no Dock icon, no main menu.
         // OnboardingWindowController and PreferencesWindowController flip
