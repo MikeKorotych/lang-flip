@@ -26,6 +26,13 @@ enum AIMode: String, CaseIterable, Identifiable {
     /// model name lives in Settings.shared.ollamaModel.
     case ollama
 
+    /// A cloud LLM accessed via an OpenAI-compatible chat-completions
+    /// API. BYOK — user pastes their own key. Default endpoint is
+    /// OpenAI itself, but the same backend works for OpenRouter,
+    /// Together, Fireworks, Groq, Anthropic-via-proxy, etc. — the
+    /// user changes the base URL.
+    case openai
+
     var id: Self { self }
 
     var displayName: String {
@@ -34,6 +41,7 @@ enum AIMode: String, CaseIterable, Identifiable {
         case .appleFoundation:  return "Apple Intelligence (macOS 26+)"
         case .bundledModel:     return "Downloaded model (MLX)"
         case .ollama:           return "Ollama (local)"
+        case .openai:           return "OpenAI / compatible cloud (BYOK)"
         }
     }
 }

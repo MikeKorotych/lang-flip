@@ -250,6 +250,13 @@ private struct ModelsTab: View {
     @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
     @AppStorage("lf.ollamaModel") private var ollamaModel = "gemma4"
     @AppStorage("lf.tripleShiftAction") private var tripleShiftAction = TripleShiftAction.secondaryLanguage.rawValue
+    @AppStorage("lf.openaiModel") private var openaiModel = "gpt-5-nano"
+    @AppStorage("lf.openaiBaseURL") private var openaiBaseURL = "https://api.openai.com/v1"
+
+    /// API key kept in Keychain (NOT @AppStorage). Mirror it through
+    /// @State so SwiftUI re-renders the SecureField properly. We
+    /// write back on commit via .onSubmit / .onChange.
+    @State private var openaiKeyDraft: String = KeychainStore.getString(account: KeychainStore.openAIAPIKey) ?? ""
 
     var body: some View {
         Form {
@@ -300,6 +307,24 @@ private struct ModelsTab: View {
                 }
             }
 
+            if AIMode(rawValue: aiMode) == .openai {
+                Section("OpenAI / compatible cloud") {
+                    SecureField("API key (sk-…)", text: $openaiKeyDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: openaiKeyDraft) { newValue in
+                            KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
+                        }
+
+                    TextField("Model", text: $openaiModel)
+                        .textFieldStyle(.roundedBorder)
+
+                    TextField("Base URL", text: $openaiBaseURL)
+                        .textFieldStyle(.roundedBorder)
+
+                    helpText("LangFlip POSTs to <Base URL>/chat/completions with Bearer auth — works for any OpenAI-compatible provider. Examples:\n  • OpenAI direct: https://api.openai.com/v1 + `gpt-5-nano`\n  • OpenRouter: https://openrouter.ai/api/v1 + `openai/gpt-oss-120b` (single key, hundreds of models)\n  • Together AI: https://api.together.xyz/v1 + `gpt-oss-120b`\n  • Groq: https://api.groq.com/openai/v1 + `llama-3.1-70b-versatile` (very fast, free tier)\n\nGet an OpenAI key at platform.openai.com/api-keys. Your key is stored in macOS Keychain (encrypted at rest with your login key), never in plain config. Empty the field to remove.")
+                }
+            }
+
             if AIMode(rawValue: aiMode) == .bundledModel {
                 Section("Downloadable models") {
                     ForEach(ModelCatalog.all) { model in
@@ -328,7 +353,7 @@ private struct ModelsTab: View {
             }
 
             Section("Privacy") {
-                Text("Everything runs on your Mac. No text is ever sent to a server, with or without AI. Disable any time by switching the mode above to Off.")
+                Text(privacyDisclosure)
                     .font(.callout)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -343,6 +368,27 @@ private struct ModelsTab: View {
             .font(.callout)
             .foregroundColor(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Disclosure copy that matches the chosen AI backend. We're
+    /// explicit about the `.openai` cloud mode because it's the only
+    /// one that ever sends user text off-device — switching to it is
+    /// a meaningful trust trade-off and the UI shouldn't be coy about
+    /// it.
+    private var privacyDisclosure: String {
+        let mode = AIMode(rawValue: aiMode) ?? .off
+        switch mode {
+        case .off:
+            return "AI is off. The rules engine alone runs entirely on your Mac. No text leaves your machine."
+        case .appleFoundation:
+            return "Apple Intelligence runs on-device. Apple's Foundation Models execute locally — no text is sent over the network for AI inference. The rest of LangFlip is local too."
+        case .ollama:
+            return "Ollama runs on-device. The text you write is sent only to the daemon at localhost:11434, which lives on your Mac. Nothing leaves the machine for AI inference."
+        case .bundledModel:
+            return "Bundled MLX models run on-device once downloaded. (Downloader lands in a future sprint — for now this is UI scaffolding only.)"
+        case .openai:
+            return "Cloud mode: each AI feature you trigger sends the relevant text (a sentence, a selection, etc.) to the endpoint configured above. With the default Base URL, that's OpenAI in the US. Your API key is stored in macOS Keychain. Disable any time by switching back to Off, Apple Intelligence, or Ollama. The rules-based layout-flip core remains 100% local regardless of this setting."
+        }
     }
 }
 

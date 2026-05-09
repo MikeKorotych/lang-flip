@@ -79,5 +79,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if Settings.shared.aiMode == .ollama {
             log("Ollama model: '\(Settings.shared.ollamaModel)' (daemon expected at http://localhost:11434)")
         }
+        if Settings.shared.aiMode == .openai {
+            let hasKey = !(Settings.shared.openaiAPIKey?.isEmpty ?? true)
+            log("OpenAI mode: model='\(Settings.shared.openaiModel)' base='\(Settings.shared.openaiBaseURL)' key=\(hasKey ? "present" : "MISSING — set in Preferences")")
+        }
     }
 }

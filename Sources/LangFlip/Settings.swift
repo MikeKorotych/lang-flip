@@ -97,6 +97,8 @@ final class Settings {
         static let translationTarget = "lf.translationTarget"
         static let ollamaModel = "lf.ollamaModel"
         static let tripleShiftAction = "lf.tripleShiftAction"
+        static let openaiModel = "lf.openaiModel"
+        static let openaiBaseURL = "lf.openaiBaseURL"
     }
 
     var enabled: Bool {
@@ -252,6 +254,53 @@ final class Settings {
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespaces)
             defaults.set(trimmed, forKey: Keys.ollamaModel)
+        }
+    }
+
+    /// API key for the OpenAI-compatible cloud backend. Persisted in
+    /// Keychain (NOT UserDefaults) so it's encrypted at rest with the
+    /// user's login key. Setting nil deletes the entry. Setting an
+    /// empty string also deletes (so users can clear by erasing the
+    /// field in Preferences).
+    var openaiAPIKey: String? {
+        get { KeychainStore.getString(account: KeychainStore.openAIAPIKey) }
+        set { KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey) }
+    }
+
+    /// Model identifier sent in the chat-completions `model` field.
+    /// Default `gpt-5-nano` works on api.openai.com out of the box;
+    /// users on OpenRouter / Together / Groq paste their own value
+    /// (e.g. `gpt-oss-120b`, `meta-llama/llama-3.2-90b-vision`,
+    /// `anthropic/claude-3.7-sonnet`).
+    var openaiModel: String {
+        get {
+            let raw = defaults.string(forKey: Keys.openaiModel)?.trimmingCharacters(in: .whitespaces)
+            return (raw?.isEmpty == false) ? raw! : "gpt-5-nano"
+        }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+            defaults.set(trimmed, forKey: Keys.openaiModel)
+        }
+    }
+
+    /// Base URL of the OpenAI-compatible endpoint. Default points at
+    /// OpenAI direct. Common alternatives:
+    ///   - https://openrouter.ai/api/v1
+    ///   - https://api.together.xyz/v1
+    ///   - https://api.fireworks.ai/inference/v1
+    ///   - https://api.groq.com/openai/v1
+    /// LangFlip appends `/chat/completions` to whatever you set here.
+    var openaiBaseURL: String {
+        get {
+            let raw = defaults.string(forKey: Keys.openaiBaseURL)?.trimmingCharacters(in: .whitespaces)
+            return (raw?.isEmpty == false) ? raw! : "https://api.openai.com/v1"
+        }
+        set {
+            // Strip trailing slash to keep `<base>/chat/completions`
+            // joining clean across URLComponents implementations.
+            var trimmed = newValue.trimmingCharacters(in: .whitespaces)
+            while trimmed.hasSuffix("/") { trimmed.removeLast() }
+            defaults.set(trimmed, forKey: Keys.openaiBaseURL)
         }
     }
 

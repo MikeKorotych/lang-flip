@@ -15,10 +15,17 @@ import Foundation
 final class AIAssistantManager {
     static let shared = AIAssistantManager()
 
-    private var cachedMode: AIMode?
-    /// For Ollama we also key the cache on the model name so swapping
-    /// "gemma3" → "qwen2.5" rebuilds the assistant.
-    private var cachedOllamaModel: String?
+    /// We key the cache on every input that would change the
+    /// resolved assistant so Settings edits in Preferences propagate
+    /// without an app restart.
+    private struct CacheKey: Equatable {
+        let mode: AIMode
+        let ollamaModel: String?
+        let openaiModel: String?
+        let openaiBaseURL: String?
+        let openaiHasKey: Bool
+    }
+    private var cachedKey: CacheKey?
     private var cachedAssistant: AIAssistant = NoopAssistant()
     private let lock = NSLock()
 
@@ -28,14 +35,10 @@ final class AIAssistantManager {
     var current: AIAssistant {
         lock.lock()
         defer { lock.unlock() }
-        let mode = Settings.shared.aiMode
-        let ollamaModel = Settings.shared.ollamaModel
-        let modeChanged   = mode != cachedMode
-        let modelChanged  = (mode == .ollama) && (ollamaModel != cachedOllamaModel)
-        if modeChanged || modelChanged {
-            cachedAssistant = Self.makeAssistant(for: mode, ollamaModel: ollamaModel)
-            cachedMode = mode
-            cachedOllamaModel = ollamaModel
+        let key = currentKey()
+        if key != cachedKey {
+            cachedAssistant = Self.makeAssistant(for: key)
+            cachedKey = key
         }
         return cachedAssistant
     }
@@ -44,8 +47,19 @@ final class AIAssistantManager {
     /// EventTap consults this before bothering to assemble a prompt.
     var isReady: Bool { current.isReady }
 
-    private static func makeAssistant(for mode: AIMode, ollamaModel: String) -> AIAssistant {
-        switch mode {
+    private func currentKey() -> CacheKey {
+        let mode = Settings.shared.aiMode
+        return CacheKey(
+            mode:           mode,
+            ollamaModel:    mode == .ollama  ? Settings.shared.ollamaModel : nil,
+            openaiModel:    mode == .openai  ? Settings.shared.openaiModel : nil,
+            openaiBaseURL:  mode == .openai  ? Settings.shared.openaiBaseURL : nil,
+            openaiHasKey:   mode == .openai  ? !(Settings.shared.openaiAPIKey?.isEmpty ?? true) : false
+        )
+    }
+
+    private static func makeAssistant(for key: CacheKey) -> AIAssistant {
+        switch key.mode {
         case .off:
             return NoopAssistant()
         case .appleFoundation:
@@ -58,7 +72,19 @@ final class AIAssistantManager {
             // Sprint D will wire MLXAssistant here.
             return NoopAssistant()
         case .ollama:
-            return OllamaAssistant(model: ollamaModel)
+            return OllamaAssistant(model: key.ollamaModel ?? "gemma4")
+        case .openai:
+            // No API key → no point building an assistant that will
+            // 401 on every call. NoopAssistant short-circuits the
+            // whole pipeline so the EventTap stays silent.
+            guard let apiKey = Settings.shared.openaiAPIKey, !apiKey.isEmpty else {
+                return NoopAssistant()
+            }
+            return OpenAIAssistant(
+                apiKey: apiKey,
+                model: key.openaiModel ?? "gpt-5-nano",
+                baseURLString: key.openaiBaseURL ?? "https://api.openai.com/v1"
+            )
         }
     }
 }
