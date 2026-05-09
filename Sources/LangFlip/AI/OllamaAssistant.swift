@@ -109,12 +109,10 @@ final class OllamaAssistant: AIAssistant {
 
     func rewriteSentence(_ input: AIRewriteRequest, completion: @escaping (AIRewriteResult) -> Void) {
         let lang = input.preferredLayout?.displayName ?? "input language"
-        // Lean prompt: every token of overhead costs ~75 ms of
-        // prompt-eval on Gemma-class models. Old verbose version added
-        // ~3 s of latency per keystroke for no quality win.
-        let prompt = "Fix typos and grammar. Output ONLY the corrected text. Language: \(lang).\n\(input.text)"
+        let system = Self.rewriteSystemPrompt(language: lang, allowLayoutRepair: false)
         runInference(
-            prompt: prompt,
+            system: system,
+            prompt: input.text,
             options: ["temperature": 0.1, "num_ctx": 2048, "num_predict": 256]
         ) { result in
             switch result {
@@ -133,9 +131,10 @@ final class OllamaAssistant: AIAssistant {
 
     func fixSelection(_ input: AIFixRequest, completion: @escaping (AIFixResult) -> Void) {
         let lang = input.activeLayout?.displayName ?? "user's language"
-        let prompt = "Fix typos, grammar, and wrong-keyboard-layout gibberish. Preserve meaning. Output ONLY the corrected text. Language: \(lang).\n\(input.text)"
+        let system = Self.rewriteSystemPrompt(language: lang, allowLayoutRepair: true)
         runInference(
-            prompt: prompt,
+            system: system,
+            prompt: input.text,
             options: ["temperature": 0.2, "num_ctx": 4096, "num_predict": 1024]
         ) { result in
             switch result {
@@ -216,6 +215,7 @@ final class OllamaAssistant: AIAssistant {
     /// cost again. 30 min is a sweet spot: model evicts when truly idle
     /// but stays warm for typical typing sessions.
     private func runInference(
+        system: String? = nil,
         prompt: String,
         options: [String: Any],
         images: [String] = [],
@@ -232,6 +232,9 @@ final class OllamaAssistant: AIAssistant {
             "think":      false,
             "keep_alive": "30m"
         ]
+        if let system, !system.isEmpty {
+            body["system"] = system
+        }
         if !options.isEmpty {
             body["options"] = options
         }
@@ -284,6 +287,20 @@ final class OllamaAssistant: AIAssistant {
             AppLog.write("ollama inference success after \(String(format: "%.1f", Date().timeIntervalSince(started)))s outputLen=\(text.count)")
             completion(.success(text))
         }.resume()
+    }
+
+    private static func rewriteSystemPrompt(language: String, allowLayoutRepair: Bool) -> String {
+        let layoutRule = allowLayoutRepair
+            ? "If part of the text is obvious wrong-keyboard-layout gibberish, repair it into \(language)."
+            : "Do not translate or change the language. Treat the current keyboard layout as the intended output language: \(language)."
+        return """
+        You edit user text inside a macOS typing assistant.
+        Current keyboard layout / intended output language: \(language).
+        \(layoutRule)
+        Fix only typos, grammar, punctuation, capitalization, and small wording issues.
+        Preserve meaning, tone, names, code, URLs, markdown, line breaks, and formatting.
+        Output ONLY the corrected text. No quotes, no explanation.
+        """
     }
 
     /// Strip leading/trailing whitespace, surrounding quotes, code

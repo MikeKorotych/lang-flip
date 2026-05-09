@@ -1,18 +1,37 @@
 # LangFlip
 
-Free, open-source keyboard layout corrector for macOS. Type a word in the wrong layout,
-**LangFlip** fixes it on the fly and switches the system input source. Inspired by
-[Caramba Switcher](https://caramba-switcher.com/).
+LangFlip is a free, open-source macOS writing assistant for people who constantly
+switch between languages. It fixes wrong-keyboard-layout text, corrects small
+typing mistakes, polishes grammar, translates selected text, and can copy text
+from a selected screen region.
+
+The core layout fixer works locally with rules and dictionaries. The AI features
+are optional and can run on-device through Ollama, with **Qwen 3.5 4B** as the
+current default local model. The practical goal is simple: type naturally, make
+fewer manual corrections, and spend less time cleaning up text in every app on
+your Mac.
 
 Supports **EN ↔ UK ↔ RU** out of the box.
-
-<p align="center">
-  <img src="docs/media/hero-autoflip.gif" alt="LangFlip auto-flip in action" width="720" />
-</p>
 
 > Repo / package / build directory is named `lang-flip` (kebab-case);
 > the user-facing app is **LangFlip** (CamelCase). Bundle ID is
 > `com.antonpinkevych.lang-flip`.
+
+## Current state
+
+LangFlip is already useful as a daily macOS menu-bar app:
+
+- automatic wrong-layout correction works for English, Ukrainian, and Russian;
+- selected text can be fixed with the keyboard instead of copy/paste gymnastics;
+- Ollama integration works with local models, including Qwen 2.5 and Qwen 3.5;
+- grammar correction can run on single Shift or after sentence-ending punctuation;
+- screen text capture works with a vision-capable local model and copies OCR text
+  to the clipboard;
+- onboarding, Preferences, signing, DMG, notarization, and Sparkle update plumbing
+  exist in the repo and are being polished for release.
+
+The next product focus is first-session UX: clearer onboarding, cleaner menu
+structure, better model/dictionary installation flows, and release packaging.
 
 ## Install
 
@@ -34,98 +53,127 @@ That's it. After the wizard you'll see a small `⌥` icon in the menu bar.
 
 ## Features
 
-- **Auto-flip on the fly.** Type `руддщ` on a Ukrainian layout when you meant `hello`,
-  hit space → LangFlip rewrites it as `hello ` and switches you to ABC. The opposite
-  direction (latin gibberish → cyrillic) works too.
-- **Selection mode.** Just realised a whole paragraph is in the wrong layout? Select it,
-  double-tap Shift, done — Cmd+C / convert / Cmd+V under the hood, with your original
-  clipboard restored.
+- **Auto-flip on word boundary.** Type `руддщ` on a Ukrainian layout when you
+  meant `hello`, hit Space, and LangFlip rewrites it as `hello ` while switching
+  the system input source back to ABC. The reverse direction works too.
 
-  <p align="center"><img src="docs/media/selection-flip.gif" alt="Selection-mode flip" width="640" /></p>
+- **Manual selection fix.** If a word, sentence, or paragraph was typed in the
+  wrong layout, select it and use the configured hotkey. LangFlip copies the
+  selection, converts it, pastes the fixed text, and restores your original
+  clipboard.
 
 - **Smart hotkeys** (à la Caramba):
-  - **⇧⇧** swap with the primary language
-  - **⇧⇧⇧** swap with the secondary (if configured)
-  - **Both ⇧ at once** — pause / resume the whole app
-- **Self-learning.** Got a flip you didn't want? Hit Backspace and LangFlip both undoes
-  it and remembers never to flip that exact word again. No exception list to manage by
-  hand — one Backspace teaches it.
+  - **⇧⇧** flips the last word or selection;
+  - **⇧⇧⇧** switches to a secondary language, or can be repurposed for AI fix;
+  - **both ⇧ keys at once** pause or resume the whole app;
+  - **⇧Space** can translate selected text;
+  - **⇧⌘S** captures text from a selected screen region.
 
-  <p align="center"><img src="docs/media/backspace-learner.gif" alt="Backspace teaches an exception" width="640" /></p>
+- **Local AI grammar correction.** With Ollama enabled, a single clean Shift tap
+  can rewrite the selected text or the most recent sentence. LangFlip passes the
+  current keyboard layout as context, so the model treats that layout as the
+  intended output language instead of randomly translating your text.
+
+- **Sentence-end auto-fix.** When enabled, typing `.`, `!`, or `?` sends the
+  completed sentence through the selected AI model. The fix preserves the
+  sentence boundary and any text you typed while the model was thinking.
+
+- **Screen text capture.** With `qwen3.5:4b` or another vision-capable Ollama
+  model, press **⇧⌘S**, select a region on screen, and LangFlip extracts visible
+  text into the clipboard. This is useful for screenshots, images, video frames,
+  app UIs, PDFs, or any text that is hard to select normally.
+
+- **Translation.** Select text and translate it into English, Ukrainian, or
+  Russian from the menu, or with the optional **⇧Space** hotkey.
+
+- **Self-learning.** Got a flip you did not want? Hit Backspace and LangFlip both
+  undoes it and remembers never to flip that exact word again. No exception list
+  to manage by hand - one Backspace teaches it.
 
 - **Sticky-shift fix.** `WOrld` → `World`, `ПРивет` → `Привет`. Only fires when the
   corrected form is a real dictionary word, so acronyms like `OAuth` stay intact.
+
 - **Context-aware.** Auto-flip stays silent in terminals (Terminal, iTerm2, Warp,
   Ghostty, …) and password managers (1Password, LastPass, Bitwarden, …) — anywhere a
   bad rewrite would do real damage. Optional: pause in fullscreen apps (off by default).
+
 - **Per-app override.** From the menubar, disable auto-flip in any specific app you don't
   want it touching.
-- **Visual confirmation.** A bouncy 180° icon flip pops up at the bottom of the screen
-  on every rewrite. Off by default; opt in via Preferences > Behavior. Same animation
-  reused below:
 
-  <p align="center"><img src="docs/media/overlay-animation.gif" alt="Bouncy icon flip" width="160" /></p>
+- **Visual confirmation.** A bouncy 180° icon flip pops up at the bottom of the screen
+  on every rewrite. Off by default; opt in via Preferences > Behavior.
 
 - **Sound feedback.** Quiet system tick on every rewrite. Off by default.
-- **Local AI assist.** With Ollama + Qwen, LangFlip can fix grammar on Shift,
-  auto-fix completed sentences, translate selected text, and capture text from
-  a selected screen region with **⇧⌘S**.
+
 - **Launch at login.** One toggle in Preferences.
-- **Bundled UK / RU dictionaries.** ~45 k words each, frequency-ordered (from the
-  OpenSubtitles 2018 corpus). The English dictionary is the system one at
-  `/usr/share/dict/words`.
+
+- **Bundled UK / RU dictionaries.** Ukrainian and Russian dictionaries are built
+  from frequency lists, cleaned for duplicates and cross-language contamination.
+  English uses the system dictionary at `/usr/share/dict/words`.
+
+## Why It Helps
+
+LangFlip removes a surprisingly common tax from daily computer work:
+
+- fewer layout-switching mistakes while typing in multiple languages;
+- fewer copy/paste trips through browser-only tools like Grammarly;
+- fast grammar cleanup in native macOS apps, chats, documents, IDE-adjacent
+  writing, and office tools;
+- local AI processing when using Ollama, so the text stays on your Mac;
+- OCR for text that is visible but not selectable.
+
+The app is especially useful for programmers, office workers, founders, support
+teams, writers, and anyone who writes in more than one language all day.
+
+## Local AI Setup
+
+AI features are optional. The simplest local setup today is Ollama:
+
+1. Install and open [Ollama](https://ollama.com/).
+2. In LangFlip, open **Preferences → AI**.
+3. Choose **Ollama (local)**.
+4. Install or select **Qwen 3.5 4B** for grammar fixes and screen text capture.
+5. Use the built-in grammar and OCR test buttons to confirm the model works.
+
+LangFlip talks only to `127.0.0.1:11434` in Ollama mode. Text and screenshots are
+sent to the local Ollama daemon on your Mac, not to LangFlip servers.
 
 ## Screens
 
 The app is a menubar utility with a separate Preferences window and a small
-onboarding wizard on first launch.
+onboarding wizard on first launch. Fresh screenshots and short demo GIFs are part
+of the release polish pass.
 
-<table>
-  <tr>
-    <td align="center">
-      <img src="docs/media/menubar.png" alt="Menubar dropdown" width="280" /><br/>
-      <sub>Menubar — quick toggles + entry to Preferences</sub>
-    </td>
-    <td align="center">
-      <img src="docs/media/preferences-general.png" alt="Preferences > General" width="380" /><br/>
-      <sub>Preferences — General</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <img src="docs/media/preferences-behavior.png" alt="Preferences > Behavior" width="380" /><br/>
-      <sub>Preferences — Behavior (toggles + hotkey picker)</sub>
-    </td>
-    <td align="center">
-      <img src="docs/media/onboarding-step1.png" alt="Onboarding wizard" width="380" /><br/>
-      <sub>First-launch wizard — one permission at a time</sub>
-    </td>
-  </tr>
-</table>
+Current visual asset:
+
+<p align="center"><img src="docs/media/overlay-animation.gif" alt="Bouncy icon flip" width="160" /></p>
 
 ## Project layout
 
 ```
 Sources/LangFlip/
   LangFlipApp.swift         — @main App + AppDelegate
-  MenubarController.swift   — NSStatusItem (Enabled / Auto-flip / Preferences… / Quit)
+  MenubarController.swift   — NSStatusItem menu, translate, OCR, updates, Preferences
   OnboardingWindow.swift    — first-launch permissions wizard
   PreferencesWindow.swift   — Preferences window controller
-  PreferencesView.swift     — five-section SwiftUI layout
+  PreferencesView.swift     — SwiftUI preferences, model install/test UI, app settings
   Settings.swift            — UserDefaults toggles
-  EventTap.swift            — CGEventTap + key synthesis
+  EventTap.swift            — CGEventTap, hotkeys, text rewrites, OCR trigger
   WordBuffer.swift          — current-word buffer
+  SentenceBuffer.swift      — sentence tracking for AI grammar fixes
   Layouts.swift             — physical-key char maps + layout detection
   InputSource.swift         — TIS API wrapper (language-property based)
   AutoFlip.swift            — score / suggest flip + password entropy filter
   AppContext.swift          — context blacklist + fullscreen detection
   BackspaceLearner.swift    — undo + exception list state machine
   DoubleCapsFix.swift       — sticky-shift correction
-  PermissionStatus.swift    — Accessibility + Input Monitoring read/prompt
+  PermissionStatus.swift    — Accessibility, Input Monitoring, Screen Recording helpers
   LaunchAtLogin.swift       — SMAppService.mainApp wrapper
   Sound.swift               — NSSound feedback
+  FlipOverlay.swift         — optional visual rewrite animation
   Pasteboard.swift          — capture + restore round-trip
   Notifications.swift       — internal NotificationCenter names
+  AI/                       — Ollama, OpenAI-compatible, Apple Foundation adapters
   Dictionaries/             — bundled uk-words.txt + ru-words.txt
 Resources/
   Info.plist                — bundle metadata, LSUIElement, version
@@ -270,6 +318,11 @@ Useful for sharing with friends; not recommended for general distribution.
 - Some apps (terminals, password fields, some IME-driven editors) reject synthesized
   unicode keystrokes — auto-flip stays silent there by default. Manual hotkey still
   works in most.
+- Screen text capture needs macOS Screen Recording permission. The Preferences OCR
+  test does not need that permission because it sends a generated test image directly
+  to the model.
+- Local AI quality and latency depend on the selected Ollama model and your Mac.
+  Qwen 3.5 4B is the default because it is compact and supports the screen OCR path.
 - If your installed input sources don't expose a primary language code (rare), the
   app may not recognize them. Edit `InputSource.swift` if you hit this.
 - Backspace-learning is keyed on the lowercased word; case-sensitive jargon "Foo" and
@@ -279,8 +332,10 @@ Useful for sharing with friends; not recommended for general distribution.
 
 See [ROADMAP.md](ROADMAP.md) for the long list. Highlights still ahead:
 
-- Sparkle auto-updater
-- More language pairs (PL / DE / FR by demand)
+- Polish onboarding, menu structure, and the first-session AI setup flow
+- Downloadable dictionary packs for more Slavic and European languages
+- Customizable hotkeys for OCR, translation, grammar fixes, and layout flipping
+- App Store feasibility investigation
 - Anonymous opt-in telemetry to tune the dictionaries
 - iCloud sync of settings + learned exception list
 

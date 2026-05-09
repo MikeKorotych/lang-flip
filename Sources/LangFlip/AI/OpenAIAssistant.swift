@@ -79,7 +79,7 @@ final class OpenAIAssistant: AIAssistant {
         let lang = input.preferredLayout?.displayName ?? "input language"
         chatCompletion(
             messages: [
-                ["role": "system", "content": "Fix typos and grammar. Output ONLY the corrected text, no quotes or explanation. Language: \(lang)."],
+                ["role": "system", "content": Self.rewriteSystemPrompt(language: lang, allowLayoutRepair: false)],
                 ["role": "user",   "content": input.text],
             ],
             options: ["temperature": 0.1, "max_tokens": 256]
@@ -102,7 +102,7 @@ final class OpenAIAssistant: AIAssistant {
         let lang = input.activeLayout?.displayName ?? "user's language"
         chatCompletion(
             messages: [
-                ["role": "system", "content": "Fix typos, grammar, and wrong-keyboard-layout gibberish. Preserve meaning and formatting. Output ONLY the corrected text. Language: \(lang)."],
+                ["role": "system", "content": Self.rewriteSystemPrompt(language: lang, allowLayoutRepair: true)],
                 ["role": "user",   "content": input.text],
             ],
             options: ["temperature": 0.2, "max_tokens": 1024]
@@ -154,6 +154,20 @@ final class OpenAIAssistant: AIAssistant {
     // before quietly burning through the user's quota.
 
     // MARK: - HTTP
+
+    private static func rewriteSystemPrompt(language: String, allowLayoutRepair: Bool) -> String {
+        let layoutRule = allowLayoutRepair
+            ? "If part of the text is obvious wrong-keyboard-layout gibberish, repair it into \(language)."
+            : "Do not translate or change the language. Treat the current keyboard layout as the intended output language: \(language)."
+        return """
+        You edit user text inside a macOS typing assistant.
+        Current keyboard layout / intended output language: \(language).
+        \(layoutRule)
+        Fix only typos, grammar, punctuation, capitalization, and small wording issues.
+        Preserve meaning, tone, names, code, URLs, markdown, line breaks, and formatting.
+        Output ONLY the corrected text. No quotes, no explanation.
+        """
+    }
 
     private enum InferenceResult {
         case success(String)
