@@ -26,6 +26,32 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.2.3</title>
+      <pubDate>Sat, 9 May 2026 17:16:08 +0000</pubDate>
+      <sparkle:version>0.2.3</sparkle:version>
+      <sparkle:shortVersionString>0.2.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>First-session polish + installable dictionaries</h2>
+        <ul>
+          <li>Cleaner onboarding with a direct path to permissions, dictionaries, and local AI setup.</li>
+          <li>Simpler menu with direct actions for selected text: flip, fix, translate, and capture text from screen.</li>
+          <li>Installable extended dictionaries for English, Ukrainian, and Russian.</li>
+          <li>Dictionary status now shows active word counts clearly, with update and reset actions.</li>
+          <li>Preferences copy is shorter, calmer, and closer to release quality.</li>
+          <li>Local AI shortcuts enable automatically when the selected Ollama model is installed and ready.</li>
+          <li>Single Shift fixes selected text by default once local AI is ready.</li>
+          <li>Shift+Space translation turns on automatically for a ready local model unless disabled manually.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.3/LangFlip-0.2.3.dmg"
+        length="3973600"
+        type="application/octet-stream"
+        sparkle:edSignature="JzVjms3LpdimCjm8SuHbHoUKJ4AFbDPeq9/3MQR/J2K0oxkiSUMgZ4O5eiQTiHVRxbzt2C/BVfhGZrrZ+VczDw==" />
+    </item>
+
+    <item>
       <title>v0.2.2</title>
       <pubDate>Sat, 9 May 2026 13:00:00 +0000</pubDate>
       <sparkle:version>0.2.2</sparkle:version>
