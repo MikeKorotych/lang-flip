@@ -114,7 +114,13 @@ dev: sign
 	@cp -R $(APP_DIR) /Applications/
 	@echo "✓ Installed Developer-ID-signed build to /Applications/$(BUNDLE_NAME)"
 	@open -a $(APP_NAME)
-	@echo "✓ Launched. Look for the icon in your menubar."
+	@sleep 1
+	# Second `open` triggers applicationShouldHandleReopen, which our
+	# AppDelegate uses to pop Preferences. This gives an unmistakable
+	# visual confirmation that the launch succeeded — important for
+	# menubar-only apps where the icon can hide behind a MacBook notch.
+	@open -a $(APP_NAME)
+	@echo "✓ Launched. Preferences should be visible; the menubar icon is the ⌥ glyph (may be hidden behind the notch — install Ice or scoot icons left with ⌘+drag)."
 
 # ─── Distribution: sign / dmg / notarize / release ────────────────
 
