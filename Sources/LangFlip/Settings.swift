@@ -94,6 +94,7 @@ final class Settings {
         static let grammarCheckOnSentenceEnd = "lf.grammarCheckOnSentenceEnd"
         static let smartSelectionFix = "lf.smartSelectionFix"
         static let translationHotkeyEnabled = "lf.translationHotkeyEnabled"
+        static let screenTextCaptureHotkeyEnabled = "lf.screenTextCaptureHotkeyEnabled"
         static let translationTarget = "lf.translationTarget"
         static let ollamaModel = "lf.ollamaModel"
         static let tripleShiftAction = "lf.tripleShiftAction"
@@ -220,6 +221,15 @@ final class Settings {
         set { defaults.set(newValue, forKey: Keys.translationHotkeyEnabled) }
     }
 
+    /// When true, ⇧⌘S starts the screen-region OCR flow for vision-capable
+    /// local models. On by default because it is explicit and fast, but
+    /// users can disable it if it conflicts with Save As / Duplicate in
+    /// their day-to-day apps.
+    var screenTextCaptureHotkeyEnabled: Bool {
+        get { defaults.object(forKey: Keys.screenTextCaptureHotkeyEnabled) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.screenTextCaptureHotkeyEnabled) }
+    }
+
     /// Default target language for the translate-selection feature.
     /// Used both by the hotkey and as the highlighted entry in the
     /// menubar submenu. Defaults to English — most non-English users
@@ -249,16 +259,15 @@ final class Settings {
         set { defaults.set(newValue.rawValue, forKey: Keys.tripleShiftAction) }
     }
 
-    /// Ollama model tag (e.g. "qwen2.5", "qwen2.5:1.5b", "gemma3",
-    /// "llama3.2"). Used only when `aiMode == .ollama`. Default
-    /// `qwen2.5` — compact, multilingual, and usually much quicker
-    /// to warm than larger Gemma-class local models. Users can switch
-    /// to any pulled Ollama model in Preferences and it picks up
-    /// immediately.
+    /// Ollama model tag (e.g. "qwen3.5:4b", "qwen2.5", "llama3.2").
+    /// Used only when `aiMode == .ollama`. Default `qwen3.5:4b` so
+    /// new users get one compact model that can handle both grammar
+    /// fixes and screen-text OCR. Users can switch to any pulled
+    /// Ollama model in Preferences and it picks up immediately.
     var ollamaModel: String {
         get {
             let raw = defaults.string(forKey: Keys.ollamaModel)?.trimmingCharacters(in: .whitespaces)
-            return (raw?.isEmpty == false) ? raw! : "qwen2.5"
+            return (raw?.isEmpty == false) ? raw! : "qwen3.5:4b"
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespaces)

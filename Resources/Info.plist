@@ -2,59 +2,44 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key>
-    <string>LangFlip</string>
-    <key>CFBundleDisplayName</key>
-    <string>LangFlip</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.antonpinkevych.lang-flip</string>
-    <key>CFBundleVersion</key>
-    <string>0.2.1</string>
-    <key>CFBundleShortVersionString</key>
-    <string>0.2.1</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleExecutable</key>
-    <string>LangFlip</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundleIconName</key>
-    <string>AppIcon</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
-    <!-- Status-bar accessory: no Dock icon, no menu bar of its own. -->
-    <key>LSUIElement</key>
-    <true/>
-    <key>NSHumanReadableCopyright</key>
-    <string>Open source — MIT.</string>
-
-    <!-- Sparkle auto-update settings.
-         SUFeedURL: appcast.xml served from GitHub Pages (/docs folder
-         on main, enabled in repo Settings → Pages).
-         SUPublicEDKey: paired with the private signing key in our
-         Keychain login keychain (created by Sparkle's generate_keys).
-         Updates whose `sparkle:edSignature` doesn't match this key are
-         rejected even if their notarization is valid. -->
-    <key>SUFeedURL</key>
-    <string>https://mikekorotych.github.io/lang-flip/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string>ztKlXAVsoeyWLxCX0oC8qklvfFb4ic/Vvo3aA6uBqGA=</string>
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
-    <key>SUScheduledCheckInterval</key>
-    <integer>86400</integer>
-    <key>SUAutomaticallyUpdate</key>
-    <false/>
-
-    <!-- App Transport Security: allow plaintext HTTP only to localhost
-         so we can reach the Ollama daemon at http://localhost:11434
-         (Sprint G+ AI backend choice). All non-localhost traffic still
-         requires HTTPS. NSAllowsLocalNetworking is the narrow opt-in
-         Apple recommends for local-only services. -->
-    <key>NSAppTransportSecurity</key>
-    <dict>
-        <key>NSAllowsLocalNetworking</key>
-        <true/>
-    </dict>
+	<key>CFBundleDisplayName</key>
+	<string>LangFlip</string>
+	<key>CFBundleExecutable</key>
+	<string>LangFlip</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.antonpinkevych.lang-flip</string>
+	<key>CFBundleName</key>
+	<string>LangFlip</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.2.2</string>
+	<key>CFBundleVersion</key>
+	<string>0.2.2</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSHumanReadableCopyright</key>
+	<string>Open source — MIT.</string>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://mikekorotych.github.io/lang-flip/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>ztKlXAVsoeyWLxCX0oC8qklvfFb4ic/Vvo3aA6uBqGA=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>

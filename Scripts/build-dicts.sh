@@ -3,7 +3,7 @@
 # cleaned versions next to the Swift sources. The output files are committed
 # to the repo so end-users don't need network access to build the app.
 #
-# Sources (both MIT-style permissive licences):
+# Source:
 #   - hermitdave/FrequencyWords — top 50k from OpenSubtitles 2018, one word
 #     per line followed by frequency count
 #
@@ -51,24 +51,38 @@ clean_dict () {
   # $1 = own freq tsv, $2 = other freq tsv, $3 = allowed-letter regex,
   # $4 = output file, $5 = label
   local own="$1" other="$2" regex="$3" out="$4" label="$5"
-  awk -v other="$other" -v ratio="$CROSS_RATIO" -v regex="$regex" '
-    BEGIN {
-      while ((getline line < other) > 0) {
-        n = split(line, f, "\t")
-        if (n >= 2) other_freq[f[1]] = f[2] + 0
-      }
-      close(other)
-    }
-    {
-      word = $1
-      own_f = $2 + 0
-      if (length(word) < 3) next
-      if (word !~ regex) next
-      o = (word in other_freq) ? other_freq[word] : 0
-      if (own_f > 0 && o >= own_f * ratio) next  # contamination
-      if (!seen[word]++) print word
-    }
-  ' "$own" > "$out"
+  perl -CSDA -Mutf8 - "$own" "$other" "$CROSS_RATIO" "$regex" > "$out" <<'PERL'
+use strict;
+use warnings;
+use utf8;
+
+my ($own_path, $other_path, $ratio, $regex) = @ARGV;
+my %other_freq;
+my %seen;
+
+open my $other_fh, '<:encoding(UTF-8)', $other_path or die "open $other_path: $!";
+while (my $line = <$other_fh>) {
+    chomp $line;
+    my ($word, $freq) = split /\t/, $line;
+    next unless defined $word && defined $freq;
+    $other_freq{$word} = 0 + $freq;
+}
+close $other_fh;
+
+open my $own_fh, '<:encoding(UTF-8)', $own_path or die "open $own_path: $!";
+while (my $line = <$own_fh>) {
+    chomp $line;
+    my ($word, $own_f) = split /\t/, $line;
+    next unless defined $word && defined $own_f;
+    next if length($word) < 3;
+    next unless $word =~ /$regex/;
+    my $other_f = $other_freq{$word} // 0;
+    next if $own_f > 0 && $other_f >= $own_f * $ratio;
+    next if $seen{$word}++;
+    print "$word\n";
+}
+close $own_fh;
+PERL
   local count
   count=$(wc -l < "$out" | tr -d ' ')
   echo "  ✓ $(basename "$out") — $count words ($label)"

@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import IOKit.hid
 import ApplicationServices
+import CoreGraphics
 
 /// Snapshot of the two macOS privacy approvals our event tap relies on.
 /// Re-read on demand — both APIs are cheap and reflect the current state.
@@ -42,6 +43,20 @@ struct PermissionStatus: Equatable {
 
     static func openInputMonitoringPane() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    static func hasScreenRecording() -> Bool {
+        CGPreflightScreenCaptureAccess()
+    }
+
+    static func requestScreenRecording() {
+        _ = CGRequestScreenCaptureAccess()
+    }
+
+    static func openScreenRecordingPane() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
             NSWorkspace.shared.open(url)
         }
     }

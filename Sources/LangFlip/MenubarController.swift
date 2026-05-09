@@ -78,6 +78,8 @@ final class MenubarController: NSObject {
         menu.addItem(translateMenuItem)
 
         ocrMenuItem.target = self
+        ocrMenuItem.keyEquivalent = "S"
+        ocrMenuItem.keyEquivalentModifierMask = [.command, .shift]
         menu.addItem(ocrMenuItem)
 
         menu.addItem(.separator())
@@ -112,10 +114,10 @@ final class MenubarController: NSObject {
         // wouldn't do anything useful and risks confusing users who
         // haven't opted into AI yet.
         translateMenuItem.isHidden = (Settings.shared.aiMode == .off)
-        // OCR needs a multimodal backend; only Ollama qualifies today.
-        // Foundation Models is text-only, so we hide the entry there
-        // to avoid a "press button → unsupported toast" UX pothole.
-        ocrMenuItem.isHidden = (Settings.shared.aiMode != .ollama)
+        // OCR only belongs in the quick menu when the selected local
+        // model can actually see images. Keep it hidden for text-only
+        // models so release users don't hit a dead-end button.
+        ocrMenuItem.isHidden = !Self.isVisionOllamaModel(Settings.shared.ollamaModel)
         // Bullet the configured default target so users know which
         // entry the ⌃⌥T hotkey maps to.
         if let sub = translateMenuItem.submenu {
@@ -184,5 +186,17 @@ extension MenubarController: NSMenuDelegate {
         // Pull live state in case the both-Shifts gesture or the
         // Preferences window changed something while the menu was closed.
         refresh()
+    }
+}
+
+private extension MenubarController {
+    static func isVisionOllamaModel(_ model: String) -> Bool {
+        guard Settings.shared.aiMode == .ollama else { return false }
+        let tag = model.lowercased()
+        return tag.contains("qwen3.5")
+            || tag.contains("-vl")
+            || tag.contains(":vl")
+            || tag.contains("llava")
+            || tag.contains("gemma4")
     }
 }

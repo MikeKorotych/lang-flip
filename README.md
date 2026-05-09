@@ -67,6 +67,9 @@ That's it. After the wizard you'll see a small `⌥` icon in the menu bar.
   <p align="center"><img src="docs/media/overlay-animation.gif" alt="Bouncy icon flip" width="160" /></p>
 
 - **Sound feedback.** Quiet system tick on every rewrite. Off by default.
+- **Local AI assist.** With Ollama + Qwen, LangFlip can fix grammar on Shift,
+  auto-fix completed sentences, translate selected text, and capture text from
+  a selected screen region with **⇧⌘S**.
 - **Launch at login.** One toggle in Preferences.
 - **Bundled UK / RU dictionaries.** ~45 k words each, frequency-ordered (from the
   OpenSubtitles 2018 corpus). The English dictionary is the system one at
@@ -141,12 +144,15 @@ ROADMAP.md                  — future plans
 
 ```sh
 make app                  # → build/LangFlip.app (ad-hoc signed, Gatekeeper will warn)
-make run                  # build + open the .app
+make run                  # signed install to /Applications + launch (same as make dev)
+make dev                  # daily development loop; preserves the real TCC permission identity
 make install              # copies build/LangFlip.app → /Applications/
 make clean                # nuke .build and build/
 ```
 
-`make app` is enough for local development. For distribution, see below.
+Use `make dev` / `make run` for local testing. Launching the ad-hoc `build/` copy can
+confuse macOS Accessibility / Input Monitoring permissions because TCC tracks the
+installed signed app separately. For distribution, see below.
 
 ## Distribution
 

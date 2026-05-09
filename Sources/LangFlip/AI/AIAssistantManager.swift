@@ -72,7 +72,7 @@ final class AIAssistantManager {
             // Sprint D will wire MLXAssistant here.
             return NoopAssistant()
         case .ollama:
-            return OllamaAssistant(model: key.ollamaModel ?? "qwen2.5")
+            return OllamaAssistant(model: key.ollamaModel ?? "qwen3.5:4b")
         case .openai:
             // No API key → no point building an assistant that will
             // 401 on every call. NoopAssistant short-circuits the

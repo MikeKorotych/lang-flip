@@ -241,13 +241,15 @@ private struct BehaviorTab: View {
 // MARK: - Models (AI)
 
 private struct ModelsTab: View {
+    private let releaseAIModes: [AIMode] = [.off, .appleFoundation, .ollama, .openai]
+
     @AppStorage("lf.aiMode") private var aiMode = AIMode.off.rawValue
-    @AppStorage("lf.activeModelID") private var activeModelID = ""
     @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = false
     @AppStorage("lf.grammarCheckOnSentenceEnd") private var grammarOnSentenceEnd = false
     @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
+    @AppStorage("lf.screenTextCaptureHotkeyEnabled") private var screenTextCaptureHotkeyEnabled = true
     @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
-    @AppStorage("lf.ollamaModel") private var ollamaModel = "qwen2.5"
+    @AppStorage("lf.ollamaModel") private var ollamaModel = "qwen3.5:4b"
     @AppStorage("lf.tripleShiftAction") private var tripleShiftAction = TripleShiftAction.secondaryLanguage.rawValue
     @AppStorage("lf.cloudProvider") private var cloudProvider = AICloudProvider.openRouter.rawValue
     @AppStorage("lf.openaiModel") private var openaiModel = "gpt-5-nano"
@@ -262,11 +264,11 @@ private struct ModelsTab: View {
         Form {
             Section("Mode") {
                 Picker("AI assistant", selection: $aiMode) {
-                    ForEach(AIMode.allCases) { mode in
+                    ForEach(releaseAIModes) { mode in
                         Text(mode.displayName).tag(mode.rawValue)
                     }
                 }
-                helpText("AI is opt-in. When enabled, the rules engine asks an on-device model for a second opinion before auto-flipping. Apple Intelligence requires macOS 26 or later; on older systems it falls back to off until you pick a downloadable model.")
+                    helpText("AI is opt-in. For most Macs today, Ollama with Qwen 3.5 4B is the easiest local setup: it stays on-device, works on current macOS versions, and can handle both grammar fixes and screen text capture.")
             }
 
             // Backend-specific config sits directly under Mode — that's
@@ -277,7 +279,7 @@ private struct ModelsTab: View {
             if AIMode(rawValue: aiMode) == .ollama {
                 Section("Ollama") {
                     OllamaModelPicker(selectedModel: $ollamaModel)
-                    helpText("Pick a model already pulled in Ollama. LangFlip refreshes this list from `http://127.0.0.1:11434/api/tags`; if Ollama is closed, use the Open Ollama button above and refresh. Qwen 2.5 is the default because it is usually a better latency/quality trade-off for short grammar fixes than heavier Gemma variants.")
+                    helpText("Pick a model already pulled in Ollama, or download Qwen 2.5 for grammar and Qwen 3.5 4B for screen text capture. LangFlip talks only to `127.0.0.1:11434`, so local AI stays on this Mac.")
                 }
             }
 
@@ -325,36 +327,13 @@ private struct ModelsTab: View {
                 }
             }
 
-            if AIMode(rawValue: aiMode) == .bundledModel {
-                Section("Downloadable models") {
-                    ForEach(ModelCatalog.all) { model in
-                        HStack(alignment: .firstTextBaseline) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(model.displayName).font(.body)
-                                Text(model.summary)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Text(activeModelID == model.id ? "Active" : "Available")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Button(activeModelID == model.id ? "Active" : "Download") {
-                                // Sprint D will wire this to ModelDownloader.
-                                activeModelID = model.id
-                            }
-                            .controlSize(.small)
-                            .disabled(activeModelID == model.id)
-                        }
-                        .padding(.vertical, 2)
-                    }
-                    helpText("Models live in ~/Library/Application Support/LangFlip/Models/. Download is verified against an EdDSA signature before installation. (Downloader lands in Sprint D — for now this is UI scaffolding only.)")
-                }
-            }
-
             if AIMode(rawValue: aiMode) != .off {
                 Section("Test") {
                     AIModelTestView()
+                    if AIMode(rawValue: aiMode) == .ollama {
+                        Divider()
+                        AIOCRTestView()
+                    }
                 }
             }
 
@@ -385,6 +364,13 @@ private struct ModelsTab: View {
                 helpText("When this is on AND AI is on, pressing Shift + Space translates the current text selection into the default target above. Shift+Space is rare in normal typing (you release Shift before the trailing space), so hijacking it is generally safe — but disable here if you find a conflict. The menubar's Translate selection → submenu always works regardless of this toggle.")
             }
 
+            if AIMode(rawValue: aiMode) == .ollama {
+                Section("Screen text capture") {
+                    Toggle("Enable ⇧⌘S hotkey to capture text from screen", isOn: $screenTextCaptureHotkeyEnabled)
+                    helpText("Uses the selected vision-capable Ollama model to read text from a selected screen region and copy it to the clipboard. Disable this if ⇧⌘S conflicts with Save As or Duplicate in apps you use often.")
+                }
+            }
+
             Section("Privacy") {
                 Text(privacyDisclosure)
                     .font(.callout)
@@ -393,6 +379,11 @@ private struct ModelsTab: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            if aiMode == AIMode.bundledModel.rawValue {
+                aiMode = AIMode.ollama.rawValue
+            }
+        }
     }
 
     @ViewBuilder
@@ -416,9 +407,9 @@ private struct ModelsTab: View {
         case .appleFoundation:
             return "Apple Intelligence runs on-device. Apple's Foundation Models execute locally — no text is sent over the network for AI inference. The rest of LangFlip is local too."
         case .ollama:
-            return "Ollama runs on-device. The text you write is sent only to the daemon at localhost:11434, which lives on your Mac. Nothing leaves the machine for AI inference."
+            return "Ollama runs on-device. The text you write is sent only to the daemon at 127.0.0.1:11434, which lives on your Mac. Nothing leaves the machine for AI inference."
         case .bundledModel:
-            return "Bundled MLX models run on-device once downloaded. (Downloader lands in a future sprint — for now this is UI scaffolding only.)"
+            return "Bundled MLX models are not part of this release. Use Ollama with Qwen 2.5 for local grammar fixes."
         case .openai:
             return "Cloud mode: each AI feature you trigger sends the relevant text (a sentence, a selection, etc.) to the endpoint configured above. With the default Base URL, that's OpenAI in the US. Your API key is stored in macOS Keychain. Disable any time by switching back to Off, Apple Intelligence, or Ollama. The rules-based layout-flip core remains 100% local regardless of this setting."
         }
@@ -621,16 +612,165 @@ private struct AIModelTestView: View {
     }
 }
 
+private struct AIOCRTestView: View {
+    private enum TestState: Equatable {
+        case idle
+        case running(Date)
+        case success(output: String, seconds: TimeInterval)
+        case failed(String)
+    }
+
+    private let sample = "LangFlip OCR test"
+
+    @State private var state: TestState = .idle
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(sample)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                    statusText
+                        .font(.caption)
+                        .foregroundColor(statusColor)
+                }
+                Spacer()
+                Button {
+                    runTest()
+                } label: {
+                    Image(systemName: isRunning ? "hourglass" : "viewfinder")
+                }
+                .help("Run OCR test with the selected Ollama model")
+                .disabled(isRunning)
+            }
+
+            if let output {
+                Text(output)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(.top, 2)
+            }
+        }
+    }
+
+    private var isRunning: Bool {
+        if case .running = state { return true }
+        return false
+    }
+
+    @ViewBuilder
+    private var statusText: some View {
+        switch state {
+        case .idle:
+            Text("Tests the image-to-text path without using screen capture permissions.")
+        case .running:
+            Text("Running OCR model test...")
+        case .success(_, let seconds):
+            Text(String(format: "OCR replied in %.1f s.", seconds))
+        case .failed(let reason):
+            Text("Failed: \(reason)")
+        }
+    }
+
+    private var statusColor: Color {
+        switch state {
+        case .failed:
+            return .orange
+        case .success:
+            return .green
+        default:
+            return .secondary
+        }
+    }
+
+    private var output: String? {
+        switch state {
+        case .success(let output, _):
+            return output
+        default:
+            return nil
+        }
+    }
+
+    private func runTest() {
+        guard let imageBase64 = makeOCRSampleImageBase64() else {
+            state = .failed("could not create test image")
+            return
+        }
+
+        let started = Date()
+        state = .running(started)
+
+        AIAssistantManager.shared.current.extractTextFromImage(
+            AIOcrRequest(imageBase64: imageBase64)
+        ) { result in
+            DispatchQueue.main.async {
+                let seconds = Date().timeIntervalSince(started)
+                switch result {
+                case .extracted(let output):
+                    state = .success(
+                        output: output.trimmingCharacters(in: .whitespacesAndNewlines),
+                        seconds: seconds
+                    )
+                case .unsupported:
+                    state = .failed("selected model does not support image input")
+                case .failed(let reason):
+                    state = .failed(reason)
+                }
+            }
+        }
+    }
+
+    private func makeOCRSampleImageBase64() -> String? {
+        let image = NSImage(size: NSSize(width: 720, height: 180))
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSRect(x: 0, y: 0, width: 720, height: 180).fill()
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 34, weight: .regular),
+            .foregroundColor: NSColor.black,
+        ]
+        sample.draw(
+            in: NSRect(x: 36, y: 72, width: 650, height: 60),
+            withAttributes: attrs
+        )
+        image.unlockFocus()
+
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:])
+        else {
+            return nil
+        }
+        return png.base64EncodedString()
+    }
+}
+
 private struct OllamaModelPicker: View {
+    private enum InstallState: Equatable {
+        case idle
+        case installing
+        case finished
+        case failed
+    }
+
+    private let grammarModel = "qwen2.5"
+    private let visionModel = "qwen3.5:4b"
+
     @Binding var selectedModel: String
 
     @State private var installedModels: [String] = []
     @State private var isLoading = false
     @State private var loadError: String?
+    @State private var installState: InstallState = .idle
+    @State private var installingModel: String?
+    @State private var installMessage: String?
 
     private var dropdownModels: [String] {
         var models: [String] = []
-        for model in [selectedModel] + installedModels + ["qwen2.5"] {
+        for model in [selectedModel] + installedModels + [grammarModel, visionModel] {
             let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
             let canonical = canonicalModelTag(trimmed)
             let alreadyIncluded = models.contains { canonicalModelTag($0) == canonical }
@@ -639,6 +779,10 @@ private struct OllamaModelPicker: View {
             }
         }
         return models
+    }
+
+    private var isInstalling: Bool {
+        installingModel != nil
     }
 
     var body: some View {
@@ -659,10 +803,7 @@ private struct OllamaModelPicker: View {
                 .disabled(isLoading)
 
                 Button {
-                    NSWorkspace.shared.openApplication(
-                        at: URL(fileURLWithPath: "/Applications/Ollama.app"),
-                        configuration: NSWorkspace.OpenConfiguration()
-                    )
+                    openOllamaOrDownloadPage()
                     Task {
                         try? await Task.sleep(nanoseconds: 1_500_000_000)
                         await refreshInstalledModels()
@@ -671,6 +812,32 @@ private struct OllamaModelPicker: View {
                     Image(systemName: "play.circle")
                 }
                 .help("Open Ollama")
+            }
+
+            HStack(spacing: 8) {
+                Button(installButtonTitle(for: grammarModel)) {
+                    Task { await installModel(grammarModel) }
+                }
+                .disabled(isModelInstalled(grammarModel) || isInstalling)
+
+                Button(installButtonTitle(for: visionModel)) {
+                    Task { await installModel(visionModel) }
+                }
+                .disabled(isModelInstalled(visionModel) || isInstalling)
+
+                if isModelInstalled(grammarModel), isModelInstalled(visionModel) {
+                    Text("Ready for grammar and screen text capture.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else if isModelInstalled(grammarModel) {
+                    Text("Ready for local grammar fixes.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else if isModelInstalled(visionModel) {
+                    Text("Ready for local grammar and OCR tests.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
 
             TextField("Custom model tag", text: $selectedModel)
@@ -684,6 +851,10 @@ private struct OllamaModelPicker: View {
                 Text(loadError)
                     .font(.caption)
                     .foregroundColor(.secondary)
+            } else if let installMessage {
+                Text(installMessage)
+                    .font(.caption)
+                    .foregroundColor(installState == .failed ? .red : .secondary)
             } else if !installedModels.isEmpty {
                 Text("Found \(installedModels.count) local model\(installedModels.count == 1 ? "" : "s").")
                     .font(.caption)
@@ -695,11 +866,42 @@ private struct OllamaModelPicker: View {
         }
     }
 
+    private func installButtonTitle(for model: String) -> String {
+        if isModelInstalled(model) {
+            return "\(displayName(for: model)) installed"
+        }
+        if installingModel == model {
+            return "Downloading \(displayName(for: model))..."
+        }
+        switch installState {
+        case .failed: return "Try \(displayName(for: model)) again"
+        case .idle, .installing, .finished: return "Download \(displayName(for: model))"
+        }
+    }
+
     private func label(for model: String) -> String {
-        if canonicalModelTag(model) == "qwen2.5" {
+        if canonicalModelTag(model) == grammarModel {
             return "Qwen 2.5 (recommended)"
         }
+        if canonicalModelTag(model) == visionModel {
+            return "Qwen 3.5 4B (vision)"
+        }
         return model
+    }
+
+    private func displayName(for model: String) -> String {
+        if canonicalModelTag(model) == grammarModel {
+            return "Qwen 2.5"
+        }
+        if canonicalModelTag(model) == visionModel {
+            return "Qwen 3.5 4B"
+        }
+        return model
+    }
+
+    private func isModelInstalled(_ model: String) -> Bool {
+        let canonical = canonicalModelTag(model)
+        return installedModels.contains { canonicalModelTag($0) == canonical }
     }
 
     private func canonicalModelTag(_ model: String) -> String {
@@ -708,6 +910,27 @@ private struct OllamaModelPicker: View {
             return String(trimmed.dropLast(":latest".count))
         }
         return trimmed
+    }
+
+    @MainActor
+    private func installModel(_ model: String) async {
+        selectedModel = model
+        installState = .installing
+        installingModel = model
+        loadError = nil
+        installMessage = "Opening Ollama and downloading \(displayName(for: model)). This can take a few minutes the first time."
+        defer { installingModel = nil }
+        openOllamaOrDownloadPage()
+
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        if let failure = await Self.pullOllamaModel(model) {
+            installState = .failed
+            installMessage = failure
+        } else {
+            installState = .finished
+            installMessage = "\(displayName(for: model)) is ready."
+            await refreshInstalledModels()
+        }
     }
 
     @MainActor
@@ -731,6 +954,69 @@ private struct OllamaModelPicker: View {
             loadError = "Ollama is not running. Open Ollama, then refresh."
             installedModels = []
         }
+    }
+
+    private func openOllamaOrDownloadPage() {
+        let appURL = URL(fileURLWithPath: "/Applications/Ollama.app")
+        if FileManager.default.fileExists(atPath: appURL.path) {
+            NSWorkspace.shared.openApplication(
+                at: appURL,
+                configuration: NSWorkspace.OpenConfiguration()
+            )
+            return
+        }
+
+        if let downloadURL = URL(string: "https://ollama.com/download/mac") {
+            NSWorkspace.shared.open(downloadURL)
+        }
+    }
+
+    nonisolated private static func pullOllamaModel(_ model: String) async -> String? {
+        await Task.detached(priority: .userInitiated) {
+            guard let executableURL = ollamaExecutableURL() else {
+                return "Ollama command-line tool was not found. Install Ollama from ollama.com, open it once, then try again."
+            }
+
+            let process = Process()
+            let pipe = Pipe()
+            process.executableURL = executableURL
+            process.arguments = ["pull", model]
+            process.standardOutput = pipe
+            process.standardError = pipe
+
+            do {
+                try process.run()
+            } catch {
+                return "Could not start Ollama: \(error.localizedDescription)"
+            }
+
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            let output = String(data: data, encoding: .utf8)?
+                .replacingOccurrences(of: "\r", with: "\n")
+                .split(separator: "\n")
+                .map(String.init)
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .suffix(2)
+                .joined(separator: " ")
+
+            guard process.terminationStatus == 0 else {
+                let detail = output?.isEmpty == false ? " \(output!)" : ""
+                return "Ollama could not download \(model).\(detail)"
+            }
+            return nil
+        }.value
+    }
+
+    nonisolated private static func ollamaExecutableURL() -> URL? {
+        let candidates = [
+            "/usr/local/bin/ollama",
+            "/opt/homebrew/bin/ollama",
+            "/Applications/Ollama.app/Contents/Resources/ollama",
+        ]
+        return candidates
+            .map(URL.init(fileURLWithPath:))
+            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 }
 

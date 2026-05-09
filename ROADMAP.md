@@ -21,6 +21,8 @@ without configuration screens.
 - [x] Auto-flip on word boundary (off by default until dicts grow)
 - [x] Cached char-map lookup (hot path no longer rebuilds the map each call)
 - [x] Hardened pasteboard restore delay (300 ms) for slow editors
+- [x] Local AI assist via Ollama for grammar fixes, sentence-end cleanup,
+  translation, and screen-region OCR
 
 ---
 
@@ -193,12 +195,26 @@ end
 
 `brew install --cask lang-flip` becomes the standard install.
 
+### 4.4 App Store investigation
+Decide whether the App Store is worth the extra sandboxing and review work:
+- global keyboard monitoring requires Accessibility / Input Monitoring, which
+  may not fit App Store expectations cleanly
+- screen OCR needs Screen Recording permission and clear user-facing purpose
+- Ollama model downloads are external tooling, so onboarding must explain what
+  is installed locally and what stays outside the app bundle
+- if App Store is too restrictive, ship notarized DMG + Homebrew first
+
 ---
 
 ## Phase 5 — Long-term
 
 - [ ] **Sparkle** auto-updater
-- [ ] **More language pairs** (PL, DE, FR, by demand)
+- [ ] **More language pairs** — start with Slavic and common European
+  languages (PL, CZ, SK, BG, SR/HR, DE, FR, ES, IT by demand)
+- [ ] **Downloadable dictionary packs** — language dropdown with install/remove
+  actions so users only keep the dictionaries they need locally
+- [ ] **Customizable hotkeys** — remap OCR, translate, grammar fix, pause, and
+  layout-flip gestures from Preferences
 - [ ] **Anonymous opt-in telemetry** — counts of flips, top words, helps tune dicts
 - [ ] **iCloud sync** of settings + Backspace-learned exception list
 - [ ] **Inline conversion hint** — small floating label "руддщ → hello?" before the user even presses hotkey, on auto-detect confidence

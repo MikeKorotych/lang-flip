@@ -144,6 +144,25 @@ final class EventTap {
             FileHandle.standardError.write(Data("lang-flip[debug]: keyDown keyCode=\(keyCode) flags=\(String(masked.rawValue, radix: 16))\n".utf8))
         }
 
+        // Screen text capture hotkey: Shift+Command+S. Only intercept it
+        // when the selected local model can actually handle images; this
+        // avoids stealing Save As / Duplicate shortcuts when OCR is not
+        // available.
+        if Settings.shared.screenTextCaptureHotkeyEnabled,
+           Settings.shared.aiMode == .ollama,
+           Self.isVisionOllamaModel(Settings.shared.ollamaModel),
+           keyCode == CGKeyCode(kVK_ANSI_S),
+           flags.contains(.maskShift),
+           flags.contains(.maskCommand),
+           !flags.contains(.maskAlternate),
+           !flags.contains(.maskControl) {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: screen OCR hotkey ⇧⌘S fired\n".utf8)) }
+            DispatchQueue.main.async { [weak self] in
+                self?.captureScreenTextWithAI()
+            }
+            return nil
+        }
+
         // Sprint G: translate-selection hotkey ⇧Space. Consume the event
         // so the underlying app never sees the rogue space. Only active
         // when AI is on AND the user has opted in via
@@ -802,13 +821,20 @@ final class EventTap {
     ///
     /// Public so the menubar's "Capture text from screen…" item can
     /// invoke it. Requires a multimodal AI backend — currently only
-    /// Ollama with a vision-capable model (Gemma 4, Qwen 2.5-VL,
+    /// Ollama with a vision-capable model (Qwen 3.5, Qwen-VL,
     /// LLaVA). Apple Foundation Models is text-only and will return
     /// `.unsupported`.
     func captureScreenTextWithAI() {
         guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: AI not ready\n".utf8)) }
             Notifications.show(title: "LangFlip", body: "AI is off or not ready — enable Ollama (or another vision-capable backend) in Preferences.")
+            return
+        }
+        guard PermissionStatus.hasScreenRecording() else {
+            AppLog.write("ocr skipped: screen recording permission missing")
+            PermissionStatus.requestScreenRecording()
+            PermissionStatus.openScreenRecordingPane()
+            Notifications.show(title: "LangFlip", body: "Screen text capture needs Screen Recording permission. Toggle LangFlip on, then try again.")
             return
         }
 
@@ -852,14 +878,14 @@ final class EventTap {
                             if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: extracted \(text.count) chars\n".utf8)) }
                             let pb = NSPasteboard.general
                             pb.clearContents()
-                            pb.setString(text, forType: .string)
+                            pb.setString(text.trimmingCharacters(in: .whitespacesAndNewlines), forType: .string)
                             Sound.playFlip()
                             FlipOverlay.shared.show()
                             let preview = String(text.prefix(60)).replacingOccurrences(of: "\n", with: " ")
                             Notifications.show(title: "Text copied", body: text.count > 60 ? "\(preview)…" : preview)
                         case .unsupported:
                             if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: assistant doesn't support OCR\n".utf8)) }
-                            Notifications.show(title: "LangFlip", body: "OCR needs a vision-capable model. Switch to Ollama with gemma4 / qwen2.5-vl / llava in Preferences.")
+                            Notifications.show(title: "LangFlip", body: "OCR needs a vision-capable model. Switch to Ollama with qwen3.5:4b in Preferences.")
                         case .failed(let reason):
                             if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: failed: \(reason)\n".utf8)) }
                             Notifications.show(title: "OCR failed", body: reason)
@@ -1125,7 +1151,11 @@ final class EventTap {
 
     private func applySingleShiftSentenceGrammar(originalSentence: String, wasCurrent: Bool, result: AIRewriteResult) {
         switch result {
-        case .rewritten(let corrected):
+        case .rewritten(let rawCorrected):
+            let corrected = normalizeSentenceEndRewrite(
+                original: originalSentence,
+                corrected: rawCorrected
+            )
             let bufferStillMatches = wasCurrent
                 ? sentenceBuffer.current == originalSentence
                 : sentenceBuffer.current.isEmpty && sentenceBuffer.previous == originalSentence
@@ -1247,6 +1277,10 @@ final class EventTap {
     private func applySentenceEndGrammar(originalSentence: String, result: AIRewriteResult) {
         switch result {
         case .rewritten(let corrected):
+            let corrected = normalizeSentenceEndRewrite(
+                original: originalSentence,
+                corrected: corrected
+            )
             guard sentenceBuffer.previous == originalSentence else {
                 AppLog.write("sentence-end grammar dropped: buffer rolled over")
                 if debug {
@@ -1284,6 +1318,30 @@ final class EventTap {
             AppLog.write("sentence-end grammar failed: \(reason)")
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: sentence-end grammar — failed: \(reason)\n".utf8)) }
         }
+    }
+
+    /// Models are allowed to fix grammar, but the event-tap replacement
+    /// math assumes sentence boundaries stay structurally sane. Preserve
+    /// leading whitespace (usually the space before the next sentence)
+    /// and keep the original final punctuation if the model drops it.
+    private func normalizeSentenceEndRewrite(original: String, corrected raw: String) -> String {
+        let leading = String(original.prefix { $0.isWhitespace })
+        var corrected = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !leading.isEmpty, !corrected.hasPrefix(leading) {
+            corrected = leading + corrected
+        }
+
+        let originalTrimmed = original.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let originalEnd = originalTrimmed.last,
+           ".!?".contains(originalEnd) {
+            let correctedTrimmed = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
+            if correctedTrimmed.last.map({ ".!?".contains($0) }) != true {
+                corrected += String(originalEnd)
+            }
+        }
+
+        return corrected
     }
 
     // MARK: - Posting synthesized events
@@ -1356,5 +1414,16 @@ final class EventTap {
             stamp(up)
             up.post(tap: .cghidEventTap)
         }
+    }
+}
+
+private extension EventTap {
+    static func isVisionOllamaModel(_ model: String) -> Bool {
+        let tag = model.lowercased()
+        return tag.contains("qwen3.5")
+            || tag.contains("-vl")
+            || tag.contains(":vl")
+            || tag.contains("llava")
+            || tag.contains("gemma4")
     }
 }

@@ -18,11 +18,12 @@ import Foundation
 final class OllamaAssistant: AIAssistant {
 
     /// Hard wall-clock timeout per inference. Tuned for Gemma-class
-    /// open-weight models on Apple Silicon: cold-start can hit 20 s
-    /// (load + prompt encode), hot calls are 1-5 s. We give 30 s of
-    /// headroom because a one-time delay on the first AI call is much
-    /// less annoying than silent failures.
-    private static let inferenceTimeout: TimeInterval = 30.0
+    /// open-weight models on Apple Silicon: cold-start can hit 20-30 s
+    /// for multimodal calls (load + image prompt encode), hot text calls
+    /// are usually 1-5 s. We give 45 s of headroom because a one-time
+    /// delay on the first AI call is much less annoying than a silent
+    /// failure right after the user selects a screen region.
+    private static let inferenceTimeout: TimeInterval = 45.0
 
     /// Daemon endpoint. Hardcoded to loopback for security (the
     /// pipeline assumes everything stays on the user's machine — no
@@ -224,6 +225,11 @@ final class OllamaAssistant: AIAssistant {
             "model":      model,
             "prompt":     prompt,
             "stream":     false,
+            // Thinking-capable models such as Qwen 3 / 3.5 enable a
+            // separate reasoning trace by default in Ollama's API.
+            // LangFlip needs fast action text, so keep local calls in
+            // direct-answer mode.
+            "think":      false,
             "keep_alive": "30m"
         ]
         if !options.isEmpty {
