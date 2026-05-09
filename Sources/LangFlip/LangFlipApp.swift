@@ -37,18 +37,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         log("startup, pid=\(getpid())")
 
-        let perms = PermissionStatus.current(prompt: true)
+        // Cheap, prompt-free permission read. We deliberately do NOT
+        // pass prompt=true here, and we do NOT call
+        // requestInputMonitoring() yet. Either of those would surface
+        // a system modal ("LangFlip would like to control this
+        // computer…") that would race our onboarding window. The
+        // onboarding window's per-step "Open System Settings" buttons
+        // open the right Privacy & Security pane and the IOHID
+        // request fires from there.
+        let perms = PermissionStatus.current(prompt: false)
         log("Accessibility permission: \(perms.accessibility ? "GRANTED" : "MISSING")")
         log("Input Monitoring permission: \(perms.inputMonitoring ? "GRANTED" : "MISSING / NOT YET REQUESTED")")
-        if !perms.inputMonitoring {
-            PermissionStatus.requestInputMonitoring()
-        }
 
         if !Settings.shared.onboardingDone || !perms.allGranted {
-            log("showing onboarding window")
-            OnboardingWindowController.shared.show()
+            log("showing onboarding window — deferring tap/menubar startup until Continue")
+            OnboardingWindowController.shared.show(onComplete: { [weak self] in
+                self?.startServices()
+            })
+            return
         }
 
+        startServices()
+    }
+
+    /// Spin up the parts of the app that depend on system permissions.
+    /// Called either directly when permissions were already granted at
+    /// launch, or from the onboarding window's Continue callback after
+    /// the user has finished granting them.
+    ///
+    /// Splitting this out is what stops macOS from showing its built-in
+    /// "would like to control your computer" dialog on top of our
+    /// onboarding window — CGEvent.tapCreate() is the call that
+    /// triggers that dialog, and we now postpone it until the user has
+    /// already toggled the right switches in System Settings.
+    private func startServices() {
         let tap = EventTap()
         do {
             try tap.start()

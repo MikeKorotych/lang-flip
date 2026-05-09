@@ -57,10 +57,6 @@ final class EventTap {
     /// when they eventually return (Task cancellation can't always reach
     /// the Foundation Models call once it's in flight).
     private var grammarToken: Int = 0
-    /// Result of the most recent speculative inference, ready for the
-    /// fire timer to apply. nil means the model hasn't returned yet.
-    private var grammarResult: AIRewriteResult?
-
     /// Set true on any non-watched keyDown event while a watched modifier
     /// is held — means the user used the modifier as a real shortcut
     /// modifier, not as a hotkey tap.
@@ -471,21 +467,18 @@ final class EventTap {
         }
 
         // tapCount == 1.
-        // If grammar-on-single-Shift is enabled and an AI is ready, kick
-        // off speculative inference NOW (so it has the whole tap window
-        // to complete) and schedule the apply for after the window. If
-        // a second tap arrives meanwhile we cancel above.
+        // If grammar-on-single-Shift is enabled, wait out the tap window
+        // so double/triple Shift still wins. Once it expires, try the
+        // selected text first; if nothing is selected, fix the most
+        // recent sentence.
         if Settings.shared.grammarCheckOnSingleShift,
            AIAssistantManager.shared.isReady,
-           AppContext.suppressionCause() == nil,
-           let sentence = sentenceBuffer.mostRecentSentence,
-           sentence.trimmingCharacters(in: .whitespaces).count >= 2 {
-            startSpeculativeGrammar(sentence: sentence)
+           AppContext.suppressionCause() == nil {
             let work = DispatchWorkItem { [weak self] in
                 guard let self else { return }
                 self.tapCount = 0
                 self.lastShiftReleaseTime = nil
-                self.fireGrammarFix(originalSentence: sentence)
+                self.fireSingleShiftGrammarFix()
             }
             pendingFire = work
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.tapWindow, execute: work)
@@ -1104,16 +1097,94 @@ final class EventTap {
 
     // MARK: - Single-Shift grammar fix (Sprint C)
 
-    /// Kick off an AI sentence rewrite the moment the user releases Shift
-    /// for the first time. The result lands in `grammarResult` if it
-    /// arrives before the tap window closes; the fire timer then picks
-    /// it up. Token-based cancellation makes stale results from
-    /// superseded requests safe to drop.
-    private func startSpeculativeGrammar(sentence: String) {
+    /// Cancel an in-flight grammar request. The actual inference task
+    /// may still complete asynchronously; the bumped token discards its
+    /// result on arrival.
+    private func cancelSpeculativeGrammar() {
+        grammarToken &+= 1
+    }
+
+    /// Tap window expired without a second tap arriving — the user did
+    /// in fact want grammar correction. Selection gets priority because
+    /// it is the most explicit target: Shift over selected text should
+    /// fix exactly that chunk. If Cmd+C doesn't produce a usable string,
+    /// fall back to the most recent sentence from SentenceBuffer.
+    private func fireSingleShiftGrammarFix() {
+        guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift grammar skipped: AI not ready\n".utf8)) }
+            return
+        }
+
+        let pb = NSPasteboard.general
+        let snapshot = PasteboardSnapshot.capture(pb)
+        let countBefore = pb.changeCount
+
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift grammar: posting Cmd+C to check selection\n".utf8)) }
+        postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_C))
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
+            while Date() < deadline && pb.changeCount == countBefore {
+                Thread.sleep(forTimeInterval: Self.copyPollInterval)
+            }
+
+            DispatchQueue.main.async {
+                if pb.changeCount > countBefore,
+                   let text = pb.string(forType: .string),
+                   !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   text.count >= 2 {
+                    self.applySingleShiftAIFixToSelection(text: text, snapshot: snapshot)
+                    return
+                }
+
+                snapshot.restore(to: pb)
+                self.fireSingleShiftSentenceGrammarFix()
+            }
+        }
+    }
+
+    private func applySingleShiftAIFixToSelection(text: String, snapshot: PasteboardSnapshot) {
+        let pb = NSPasteboard.general
+        let request = AIFixRequest(text: text, activeLayout: InputSource.currentLayout())
+        AIAssistantManager.shared.current.fixSelection(request) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .fixed(let corrected):
+                    if self.debug {
+                        FileHandle.standardError.write(Data("lang-flip[debug]: single-shift selection AI fix \(text.count)→\(corrected.count) chars\n".utf8))
+                    }
+                    pb.clearContents()
+                    pb.setString(corrected, forType: .string)
+                    self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
+                        snapshot.restore(to: pb)
+                    }
+                case .unchanged:
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift selection grammar — unchanged\n".utf8)) }
+                    snapshot.restore(to: pb)
+                case .unsupported:
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift selection grammar — unsupported\n".utf8)) }
+                    snapshot.restore(to: pb)
+                case .failed(let reason):
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift selection grammar — failed: \(reason)\n".utf8)) }
+                    snapshot.restore(to: pb)
+                }
+            }
+        }
+    }
+
+    private func fireSingleShiftSentenceGrammarFix() {
+        guard let sentence = sentenceBuffer.mostRecentSentence,
+              sentence.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2 else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar skipped: no sentence\n".utf8)) }
+            return
+        }
+
         grammarToken &+= 1
         let token = grammarToken
-        grammarResult = nil
-
+        let wasCurrent = sentenceBuffer.current == sentence
         let request = AIRewriteRequest(
             text: sentence,
             preferredLayout: InputSource.currentLayout()
@@ -1122,42 +1193,41 @@ final class EventTap {
             DispatchQueue.main.async {
                 guard let self else { return }
                 guard self.grammarToken == token else {
-                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: grammar result discarded (stale token)\n".utf8)) }
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar discarded (stale token)\n".utf8)) }
                     return
                 }
-                self.grammarResult = result
+                self.applySingleShiftSentenceGrammar(
+                    originalSentence: sentence,
+                    wasCurrent: wasCurrent,
+                    result: result
+                )
             }
         }
-        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: grammar speculative inference started (token=\(token), len=\(sentence.count))\n".utf8)) }
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar started (token=\(token), len=\(sentence.count))\n".utf8)) }
     }
 
-    /// Cancel an in-flight speculative grammar request. The actual
-    /// inference task may still complete asynchronously; the bumped
-    /// token discards its result on arrival.
-    private func cancelSpeculativeGrammar() {
-        grammarToken &+= 1
-        grammarResult = nil
-    }
-
-    /// Tap window expired without a second tap arriving — the user did
-    /// in fact want grammar correction. Apply whatever speculative
-    /// result we have (or nothing, if the model is still thinking or
-    /// declined to rewrite).
-    private func fireGrammarFix(originalSentence: String) {
-        defer { grammarResult = nil }
-        guard let result = grammarResult else {
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: grammar fire — no result yet, skipping\n".utf8)) }
-            return
-        }
+    private func applySingleShiftSentenceGrammar(originalSentence: String, wasCurrent: Bool, result: AIRewriteResult) {
         switch result {
         case .rewritten(let corrected):
+            let bufferStillMatches = wasCurrent
+                ? sentenceBuffer.current == originalSentence
+                : sentenceBuffer.current.isEmpty && sentenceBuffer.previous == originalSentence
+            guard bufferStillMatches else {
+                if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar dropped (buffer changed)\n".utf8)) }
+                return
+            }
             applyGrammarFix(original: originalSentence, corrected: corrected)
+            if wasCurrent {
+                sentenceBuffer.replaceCurrent(with: corrected)
+            } else {
+                sentenceBuffer.replacePrevious(with: corrected)
+            }
         case .unchanged:
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: grammar — model returned unchanged\n".utf8)) }
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar — unchanged\n".utf8)) }
         case .unsupported:
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: grammar — assistant doesn't support rewrite\n".utf8)) }
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar — unsupported\n".utf8)) }
         case .failed(let reason):
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: grammar — failed: \(reason)\n".utf8)) }
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift sentence grammar — failed: \(reason)\n".utf8)) }
         }
     }
 
@@ -1174,9 +1244,8 @@ final class EventTap {
         }
         postBackspaces(original.count)
         postUnicode(corrected)
-        // Update both buffers so subsequent typing / boundaries reflect
-        // the corrected text.
-        sentenceBuffer.replaceCurrent(with: corrected)
+        // Caller updates SentenceBuffer according to whether this was
+        // the in-progress or previously-completed sentence.
         buffer.reset()
         // Don't play sound or overlay — rewrites should be a quiet
         // background fix, not a celebration. Different surface from

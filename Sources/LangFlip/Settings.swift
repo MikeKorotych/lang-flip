@@ -224,13 +224,16 @@ final class Settings {
     /// Used both by the hotkey and as the highlighted entry in the
     /// menubar submenu. Defaults to English — most non-English users
     /// most often translate INTO English for shared communication.
-    /// Ollama model tag (e.g. "gemma4", "gemma4:e4b", "qwen2.5:1.5b",
-    /// "llama3.2"). Used only when `aiMode == .ollama`. Default
-    /// `gemma4` — Google's latest open multilingual model with strong
-    /// 140-language support including UK/RU/EN and a long context
-    /// window. The E4B (~9.6 GB) "edge" variant runs comfortably on
-    /// Apple Silicon. Users who pull a different one just type its
-    /// name here and it picks up immediately.
+    var translationTarget: Layout {
+        get {
+            guard let raw = defaults.string(forKey: Keys.translationTarget),
+                  let layout = Layout(rawValue: raw)
+            else { return .en }
+            return layout
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.translationTarget) }
+    }
+
     /// What triple-tap Shift does. Default keeps the historical
     /// "switch to secondary language" behaviour; users who don't have
     /// a secondary configured can flip this to .aiSelectionFix to
@@ -246,10 +249,16 @@ final class Settings {
         set { defaults.set(newValue.rawValue, forKey: Keys.tripleShiftAction) }
     }
 
+    /// Ollama model tag (e.g. "qwen2.5", "qwen2.5:1.5b", "gemma3",
+    /// "llama3.2"). Used only when `aiMode == .ollama`. Default
+    /// `qwen2.5` — compact, multilingual, and usually much quicker
+    /// to warm than larger Gemma-class local models. Users can switch
+    /// to any pulled Ollama model in Preferences and it picks up
+    /// immediately.
     var ollamaModel: String {
         get {
             let raw = defaults.string(forKey: Keys.ollamaModel)?.trimmingCharacters(in: .whitespaces)
-            return (raw?.isEmpty == false) ? raw! : "gemma4"
+            return (raw?.isEmpty == false) ? raw! : "qwen2.5"
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespaces)
@@ -302,16 +311,6 @@ final class Settings {
             while trimmed.hasSuffix("/") { trimmed.removeLast() }
             defaults.set(trimmed, forKey: Keys.openaiBaseURL)
         }
-    }
-
-    var translationTarget: Layout {
-        get {
-            guard let raw = defaults.string(forKey: Keys.translationTarget),
-                  let layout = Layout(rawValue: raw)
-            else { return .en }
-            return layout
-        }
-        set { defaults.set(newValue.rawValue, forKey: Keys.translationTarget) }
     }
 
     /// When `aiMode == .bundledModel`, identifies which catalog entry to

@@ -248,7 +248,7 @@ private struct ModelsTab: View {
     @AppStorage("lf.smartSelectionFix") private var smartSelectionFix = false
     @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
     @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
-    @AppStorage("lf.ollamaModel") private var ollamaModel = "gemma4"
+    @AppStorage("lf.ollamaModel") private var ollamaModel = "qwen2.5"
     @AppStorage("lf.tripleShiftAction") private var tripleShiftAction = TripleShiftAction.secondaryLanguage.rawValue
     @AppStorage("lf.openaiModel") private var openaiModel = "gpt-5-nano"
     @AppStorage("lf.openaiBaseURL") private var openaiBaseURL = "https://api.openai.com/v1"
@@ -269,41 +269,15 @@ private struct ModelsTab: View {
                 helpText("AI is opt-in. When enabled, the rules engine asks an on-device model for a second opinion before auto-flipping. Apple Intelligence requires macOS 26 or later; on older systems it falls back to off until you pick a downloadable model.")
             }
 
-            Section("Features") {
-                Toggle("Grammar fix on single Shift tap", isOn: $grammarOnSingleShift)
-                helpText("When the AI is on, a single clean tap of Shift (no other key in between, no second tap within ~350 ms) rewrites the most recent sentence to fix typos and grammar. Off by default — single Shift is a low-friction gesture and accidental fixes would be annoying. Only fires when the assistant is ready, so safe to leave on if you have Apple Intelligence enabled. The rewrite is silent: no overlay, no sound, just the diff in your text.")
-
-                Toggle("Auto-fix sentences when you type . ! or ?", isOn: $grammarOnSentenceEnd)
-                helpText("Each time you finish a sentence with a period, exclamation mark, or question mark, the AI rewrites it in place to fix typos and grammar. The fix lands silently a moment later. If you keep typing past the next sentence boundary while the model is thinking, the fix is dropped to avoid disrupting fast typing. Off by default — silent rewrites are powerful and you should opt in only when you trust the model.")
-
-                Toggle("Smart selection fix (AI fixes everything)", isOn: $smartSelectionFix)
-                helpText("Select any text, then double-tap Shift. With this on, the AI rewrites the selection to fix typos, grammar, wrong-keyboard-layout gibberish, and mid-sentence script flips — anything it can repair while preserving meaning. Without this toggle, the same gesture only does a mechanical layout flip. Falls back to the mechanical flip if the AI is unavailable or declines.")
-
-                Picker("Triple-tap Shift action", selection: $tripleShiftAction) {
-                    ForEach(TripleShiftAction.allCases) { a in
-                        Text(a.displayName).tag(a.rawValue)
-                    }
-                }
-                helpText("If you don't use a secondary language, repurpose triple-tap-Shift as a non-conflicting AI gesture. Select text, triple-tap Shift, the AI rewrites it. Same fix-everything pipeline as the smart selection fix toggle above — bind it to whichever gesture fits your muscle memory better.")
-            }
-
-            Section("Translate selection") {
-                Picker("Default target", selection: $translationTarget) {
-                    ForEach(Layout.allCases, id: \.self) { layout in
-                        Text(layout.displayName).tag(layout.rawValue)
-                    }
-                }
-                helpText("Used by the menubar's Translate submenu (highlights this entry) and the ⌃⌥T hotkey below.")
-
-                Toggle("Enable ⇧Space hotkey to translate selection", isOn: $translationHotkeyEnabled)
-                helpText("When this is on AND AI is on, pressing Shift + Space translates the current text selection into the default target above. Shift+Space is rare in normal typing (you release Shift before the trailing space), so hijacking it is generally safe — but disable here if you find a conflict. The menubar's Translate selection → submenu always works regardless of this toggle.")
-            }
-
+            // Backend-specific config sits directly under Mode — that's
+            // where the eye lands after switching modes. Burying these
+            // blocks at the bottom of the form (where they were
+            // initially placed) made it easy to pick e.g. Ollama and
+            // never realize a model selection was needed too.
             if AIMode(rawValue: aiMode) == .ollama {
                 Section("Ollama") {
-                    TextField("Model name", text: $ollamaModel)
-                        .textFieldStyle(.roundedBorder)
-                    helpText("Type the model tag you've already pulled with `ollama pull`. Examples: `gemma4`, `gemma4:e4b`, `qwen2.5:1.5b`, `llama3.2`. LangFlip talks to Ollama on http://localhost:11434 — make sure the daemon is running (it auto-starts after `brew install ollama` or installing the .app from ollama.com). Smaller models (1-2 GB) feel responsive; bigger ones add cold-load delay on the first inference.")
+                    OllamaModelPicker(selectedModel: $ollamaModel)
+                    helpText("Pick a model already pulled in Ollama. LangFlip refreshes this list from `http://localhost:11434/api/tags`; if Ollama is closed, the recommended fallback stays available. Qwen 2.5 is the default because it is usually a better latency/quality trade-off for short grammar fixes than heavier Gemma variants.")
                 }
             }
 
@@ -321,7 +295,9 @@ private struct ModelsTab: View {
                     TextField("Base URL", text: $openaiBaseURL)
                         .textFieldStyle(.roundedBorder)
 
-                    helpText("LangFlip POSTs to <Base URL>/chat/completions with Bearer auth — works for any OpenAI-compatible provider. Examples:\n  • OpenAI direct: https://api.openai.com/v1 + `gpt-5-nano`\n  • OpenRouter: https://openrouter.ai/api/v1 + `openai/gpt-oss-120b` (single key, hundreds of models)\n  • Together AI: https://api.together.xyz/v1 + `gpt-oss-120b`\n  • Groq: https://api.groq.com/openai/v1 + `llama-3.1-70b-versatile` (very fast, free tier)\n\nGet an OpenAI key at platform.openai.com/api-keys. Your key is stored in macOS Keychain (encrypted at rest with your login key), never in plain config. Empty the field to remove.")
+                    Link("Open OpenAI API keys...", destination: URL(string: "https://platform.openai.com/api-keys")!)
+
+                    helpText("LangFlip POSTs to <Base URL>/chat/completions with Bearer auth — works for any OpenAI-compatible provider. Examples:\n  • OpenAI direct: https://api.openai.com/v1 + `gpt-5-nano`\n  • OpenRouter: https://openrouter.ai/api/v1 + `openai/gpt-oss-120b` (single key, hundreds of models)\n  • Together AI: https://api.together.xyz/v1 + `gpt-oss-120b`\n  • Groq: https://api.groq.com/openai/v1 + `llama-3.1-70b-versatile` (very fast, free tier)\n\nOpenAI API access uses an API key from your OpenAI account. Your key is stored in macOS Keychain (encrypted at rest with your login key), never in plain config. Empty the field to remove.")
                 }
             }
 
@@ -350,6 +326,36 @@ private struct ModelsTab: View {
                     }
                     helpText("Models live in ~/Library/Application Support/LangFlip/Models/. Download is verified against an EdDSA signature before installation. (Downloader lands in Sprint D — for now this is UI scaffolding only.)")
                 }
+            }
+
+            Section("Features") {
+                Toggle("Grammar fix on single Shift tap", isOn: $grammarOnSingleShift)
+                helpText("When the AI is on, a single clean tap of Shift (no other key in between, no second tap within ~350 ms) fixes selected text first; if nothing is selected, it rewrites the most recent sentence to fix typos and grammar. Off by default — single Shift is a low-friction gesture and accidental fixes would be annoying. The rewrite is silent: no overlay, no sound, just the diff in your text.")
+
+                Toggle("Auto-fix sentences when you type . ! or ?", isOn: $grammarOnSentenceEnd)
+                helpText("Each time you finish a sentence with a period, exclamation mark, or question mark, the AI rewrites it in place to fix typos and grammar. The fix lands silently a moment later. If you keep typing past the next sentence boundary while the model is thinking, the fix is dropped to avoid disrupting fast typing. Off by default — silent rewrites are powerful and you should opt in only when you trust the model.")
+
+                Toggle("Smart selection fix (AI fixes everything)", isOn: $smartSelectionFix)
+                helpText("Select any text, then double-tap Shift. With this on, the AI rewrites the selection to fix typos, grammar, wrong-keyboard-layout gibberish, and mid-sentence script flips — anything it can repair while preserving meaning. Without this toggle, the same gesture only does a mechanical layout flip. Falls back to the mechanical flip if the AI is unavailable or declines.")
+
+                Picker("Triple-tap Shift action", selection: $tripleShiftAction) {
+                    ForEach(TripleShiftAction.allCases) { a in
+                        Text(a.displayName).tag(a.rawValue)
+                    }
+                }
+                helpText("If you don't use a secondary language, repurpose triple-tap-Shift as a non-conflicting AI gesture. Select text, triple-tap Shift, the AI rewrites it. Same fix-everything pipeline as the smart selection fix toggle above — bind it to whichever gesture fits your muscle memory better.")
+            }
+
+            Section("Translate selection") {
+                Picker("Default target", selection: $translationTarget) {
+                    ForEach(Layout.allCases, id: \.self) { layout in
+                        Text(layout.displayName).tag(layout.rawValue)
+                    }
+                }
+                helpText("Used by the menubar's Translate submenu (highlights this entry) and the ⌃⌥T hotkey below.")
+
+                Toggle("Enable ⇧Space hotkey to translate selection", isOn: $translationHotkeyEnabled)
+                helpText("When this is on AND AI is on, pressing Shift + Space translates the current text selection into the default target above. Shift+Space is rare in normal typing (you release Shift before the trailing space), so hijacking it is generally safe — but disable here if you find a conflict. The menubar's Translate selection → submenu always works regardless of this toggle.")
             }
 
             Section("Privacy") {
@@ -390,6 +396,103 @@ private struct ModelsTab: View {
             return "Cloud mode: each AI feature you trigger sends the relevant text (a sentence, a selection, etc.) to the endpoint configured above. With the default Base URL, that's OpenAI in the US. Your API key is stored in macOS Keychain. Disable any time by switching back to Off, Apple Intelligence, or Ollama. The rules-based layout-flip core remains 100% local regardless of this setting."
         }
     }
+}
+
+private struct OllamaModelPicker: View {
+    @Binding var selectedModel: String
+
+    @State private var installedModels: [String] = []
+    @State private var isLoading = false
+    @State private var loadError: String?
+
+    private var dropdownModels: [String] {
+        var models: [String] = []
+        for model in ["qwen2.5"] + installedModels + [selectedModel] {
+            let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty && !models.contains(trimmed) {
+                models.append(trimmed)
+            }
+        }
+        return models
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Picker("Model", selection: $selectedModel) {
+                    ForEach(dropdownModels, id: \.self) { model in
+                        Text(label(for: model)).tag(model)
+                    }
+                }
+
+                Button {
+                    Task { await refreshInstalledModels() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Refresh installed Ollama models")
+                .disabled(isLoading)
+            }
+
+            TextField("Custom model tag", text: $selectedModel)
+                .textFieldStyle(.roundedBorder)
+
+            if isLoading {
+                Text("Refreshing local Ollama models...")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else if let loadError {
+                Text(loadError)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else if !installedModels.isEmpty {
+                Text("Found \(installedModels.count) local model\(installedModels.count == 1 ? "" : "s").")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .task {
+            await refreshInstalledModels()
+        }
+    }
+
+    private func label(for model: String) -> String {
+        if model == "qwen2.5" {
+            return "Qwen 2.5 (recommended)"
+        }
+        return model
+    }
+
+    @MainActor
+    private func refreshInstalledModels() async {
+        isLoading = true
+        loadError = nil
+        defer { isLoading = false }
+
+        guard let url = URL(string: "http://localhost:11434/api/tags") else { return }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else {
+                loadError = "Ollama is reachable, but returned an unexpected response."
+                installedModels = []
+                return
+            }
+            let decoded = try JSONDecoder().decode(OllamaTagsResponse.self, from: data)
+            installedModels = decoded.models.map(\.name).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        } catch {
+            loadError = "Ollama is not running, or no local model list is available."
+            installedModels = []
+        }
+    }
+}
+
+private struct OllamaTagsResponse: Decodable {
+    struct Model: Decodable {
+        let name: String
+    }
+
+    let models: [Model]
 }
 
 // MARK: - Apps

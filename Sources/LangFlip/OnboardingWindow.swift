@@ -12,8 +12,15 @@ final class OnboardingWindowController: NSObject {
     static let shared = OnboardingWindowController()
 
     private var window: NSWindow?
+    /// Closure fired after the user clicks Continue with all
+    /// permissions granted. AppDelegate uses this to start the event
+    /// tap and bring up the menubar — they were deliberately deferred
+    /// so the system's "would like to control this computer" alert
+    /// doesn't fire while the user is still on the onboarding screen.
+    private var onComplete: (() -> Void)?
 
-    func show() {
+    func show(onComplete: (() -> Void)? = nil) {
+        self.onComplete = onComplete
         if window == nil {
             let view = OnboardingView(onContinue: { [weak self] in
                 self?.markDoneAndClose()
@@ -51,6 +58,9 @@ final class OnboardingWindowController: NSObject {
         Settings.shared.onboardingDone = true
         window?.close()
         NSApp.setActivationPolicy(.accessory)
+        let cb = onComplete
+        onComplete = nil
+        cb?()
     }
 }
 
