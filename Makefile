@@ -33,7 +33,7 @@ NOTARY_PROFILE := lang-flip-notarize
 
 ENTITLEMENTS := Resources/lang-flip.entitlements
 
-.PHONY: all build app clean run install dicts icon \
+.PHONY: all build app clean run install dev dicts icon \
         sign dmg notarize-app notarize-dmg staple staple-app release version \
         sign-update
 
@@ -97,6 +97,24 @@ install: app
 	@rm -rf /Applications/$(BUNDLE_NAME)
 	@cp -R $(APP_DIR) /Applications/
 	@echo "✓ Installed to /Applications/$(BUNDLE_NAME)"
+
+# Daily dev cycle: sign with Developer ID (so TCC entries persist
+# across rebuilds — adhoc-signed binaries get a new TCC identity on
+# every change and ask for Accessibility/Input-Monitoring perms each
+# time), install into /Applications, kill any running instance, open.
+#
+# This is the target you want for "I just made a code change, let me
+# test it." `make run` keeps the build/ copy and works for one-off
+# experiments, but TCC will keep prompting on adhoc.
+dev: sign
+	@echo "→ Replacing /Applications/$(BUNDLE_NAME)…"
+	@killall $(APP_NAME) 2>/dev/null || true
+	@sleep 1
+	@rm -rf /Applications/$(BUNDLE_NAME)
+	@cp -R $(APP_DIR) /Applications/
+	@echo "✓ Installed Developer-ID-signed build to /Applications/$(BUNDLE_NAME)"
+	@open -a $(APP_NAME)
+	@echo "✓ Launched. Look for the icon in your menubar."
 
 # ─── Distribution: sign / dmg / notarize / release ────────────────
 
