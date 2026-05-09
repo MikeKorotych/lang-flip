@@ -49,7 +49,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         log("Accessibility permission: \(perms.accessibility ? "GRANTED" : "MISSING")")
         log("Input Monitoring permission: \(perms.inputMonitoring ? "GRANTED" : "MISSING / NOT YET REQUESTED")")
 
-        if !Settings.shared.onboardingDone || !perms.allGranted {
+        // Only show onboarding when permissions are actually missing.
+        // Earlier versions also gated on `onboardingDone == false` so
+        // first-launch users would see a welcome screen, but that
+        // backfired: a user who'd granted perms before flipping the
+        // onboarding flag was forced into a window they could miss
+        // behind other apps, and the rest of the app sat idle waiting
+        // on a Continue click. Permissions-driven gating is enough.
+        if !perms.allGranted {
             log("showing onboarding window — deferring tap/menubar startup until Continue")
             OnboardingWindowController.shared.show(onComplete: { [weak self] in
                 self?.startServices()
@@ -57,6 +64,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Quietly mark onboarding as done if we got here with all perms
+        // already granted — keeps Settings consistent so reopening
+        // Preferences > General doesn't show stale "needs setup" hints.
+        if !Settings.shared.onboardingDone {
+            Settings.shared.onboardingDone = true
+        }
         startServices()
     }
 
