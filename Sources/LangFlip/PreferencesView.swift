@@ -245,7 +245,6 @@ private struct ModelsTab: View {
     @AppStorage("lf.activeModelID") private var activeModelID = ""
     @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = false
     @AppStorage("lf.grammarCheckOnSentenceEnd") private var grammarOnSentenceEnd = false
-    @AppStorage("lf.smartSelectionFix") private var smartSelectionFix = false
     @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
     @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
     @AppStorage("lf.ollamaModel") private var ollamaModel = "qwen2.5"
@@ -329,21 +328,18 @@ private struct ModelsTab: View {
             }
 
             Section("Features") {
-                Toggle("Grammar fix on single Shift tap", isOn: $grammarOnSingleShift)
-                helpText("When the AI is on, a single clean tap of Shift (no other key in between, no second tap within ~350 ms) fixes selected text first; if nothing is selected, it rewrites the most recent sentence to fix typos and grammar. Off by default — single Shift is a low-friction gesture and accidental fixes would be annoying. The rewrite is silent: no overlay, no sound, just the diff in your text.")
+                Toggle("AI fix on single Shift tap", isOn: $grammarOnSingleShift)
+                helpText("Single clean tap of Shift (no other key in between, no second tap within ~350 ms) is the all-purpose AI fix gesture. If you have text selected, the AI rewrites the selection — typos, grammar, wrong-keyboard-layout gibberish, mid-sentence script flips. If nothing is selected, it rewrites the most recent sentence. Double-tap Shift stays purely mechanical (layout flip), so the two gestures don't fight. Off by default — opt in once you trust the model on your text.")
 
                 Toggle("Auto-fix sentences when you type . ! or ?", isOn: $grammarOnSentenceEnd)
                 helpText("Each time you finish a sentence with a period, exclamation mark, or question mark, the AI rewrites it in place to fix typos and grammar. The fix lands silently a moment later. If you keep typing past the next sentence boundary while the model is thinking, the fix is dropped to avoid disrupting fast typing. Off by default — silent rewrites are powerful and you should opt in only when you trust the model.")
-
-                Toggle("Smart selection fix (AI fixes everything)", isOn: $smartSelectionFix)
-                helpText("Select any text, then double-tap Shift. With this on, the AI rewrites the selection to fix typos, grammar, wrong-keyboard-layout gibberish, and mid-sentence script flips — anything it can repair while preserving meaning. Without this toggle, the same gesture only does a mechanical layout flip. Falls back to the mechanical flip if the AI is unavailable or declines.")
 
                 Picker("Triple-tap Shift action", selection: $tripleShiftAction) {
                     ForEach(TripleShiftAction.allCases) { a in
                         Text(a.displayName).tag(a.rawValue)
                     }
                 }
-                helpText("If you don't use a secondary language, repurpose triple-tap-Shift as a non-conflicting AI gesture. Select text, triple-tap Shift, the AI rewrites it. Same fix-everything pipeline as the smart selection fix toggle above — bind it to whichever gesture fits your muscle memory better.")
+                helpText("Triple-tap is the secondary-language gesture by default. If you don't use a secondary language, repurpose it for AI fix on selection — useful as a stronger or more-deliberate alternative to single-tap when you've already trained the muscle memory.")
             }
 
             Section("Translate selection") {
