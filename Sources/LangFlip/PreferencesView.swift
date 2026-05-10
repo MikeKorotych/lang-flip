@@ -824,10 +824,7 @@ private struct VoiceTab: View {
     private func settingLabel(_ title: String, help: String) -> some View {
         HStack(spacing: 5) {
             Text(title)
-            Image(systemName: "questionmark.circle")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .help(help)
+            HelpPopoverButton(text: help)
         }
         .help(help)
     }
@@ -930,6 +927,36 @@ private struct VoiceTab: View {
             .font(.callout)
             .foregroundColor(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct HelpPopoverButton: View {
+    let text: String
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            Image(systemName: "questionmark.circle")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .help(text)
+        .onHover { hovering in
+            isPresented = hovering
+        }
+        .popover(isPresented: $isPresented, arrowEdge: .trailing) {
+            Text(text)
+                .font(.callout)
+                .foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 260, alignment: .leading)
+                .padding(12)
+        }
     }
 }
 
