@@ -378,25 +378,6 @@ private struct VoiceTab: View {
                         .lineLimit(1)
                 }
 
-                HStack {
-                    Text("Whisper")
-                    Spacer()
-                    Text(whisperStatusLabel)
-                        .foregroundColor(whisperAvailability.isReady ? .green : .orange)
-                        .lineLimit(1)
-                    Button("Choose Model") {
-                        chooseWhisperModel()
-                    }
-                    .controlSize(.small)
-                }
-
-                if !whisperModelPath.isEmpty {
-                    Text(whisperModelPath)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-
                 ForEach(WhisperTranscriber.Model.allCases) { model in
                     HStack {
                         Image(systemName: isSelectedWhisperModel(model) ? "checkmark.circle.fill" : "circle")
@@ -540,7 +521,7 @@ private struct VoiceTab: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                helpText("Push-to-talk dictation is the next voice step: record locally, transcribe with Whisper/Qwen ASR, insert text, then run LangFlip cleanup.")
+                helpText("Hold Shift to dictate while pressed. Press Command+Shift to toggle hands-free dictation. The selected speech model transcribes the last recording here for testing.")
             }
         }
         .formStyle(.grouped)
@@ -595,12 +576,6 @@ private struct VoiceTab: View {
         return String(format: "%d:%02d", total / 60, total % 60)
     }
 
-    private var whisperStatusLabel: String {
-        if whisperAvailability.executableURL == nil { return "CLI missing" }
-        if whisperAvailability.modelURL == nil { return "Model missing" }
-        return whisperAvailability.modelURL?.lastPathComponent ?? "Ready"
-    }
-
     private var activeSpeechBackend: SpeechRecognitionBackend {
         SpeechRecognitionBackend(rawValue: speechRecognitionBackend) ?? .whisper
     }
@@ -643,20 +618,6 @@ private struct VoiceTab: View {
         let selected = whisperAvailability.modelURL?.standardizedFileURL.path
             ?? URL(fileURLWithPath: NSString(string: whisperModelPath).expandingTildeInPath).standardizedFileURL.path
         return selected == model.localURL.standardizedFileURL.path
-    }
-
-    private func chooseWhisperModel() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.data]
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.prompt = "Choose"
-        if panel.runModal() == .OK, let url = panel.url {
-            speechRecognitionBackend = SpeechRecognitionBackend.whisper.rawValue
-            whisperModelPath = url.path
-            whisperAvailability = WhisperTranscriber.availability()
-        }
     }
 
     private func transcribeLastRecording() {

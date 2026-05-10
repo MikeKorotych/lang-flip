@@ -85,6 +85,16 @@ final class EventTap {
     private var leftShiftDownTime: Date?
     private var rightShiftDownTime: Date?
 
+    // MARK: - Voice dictation gestures
+
+    private static let speechHoldDelay: TimeInterval = 0.45
+    private static let commandShiftToggleDelay: TimeInterval = 0.35
+
+    private var speechHoldWork: DispatchWorkItem?
+    private var speechPushToTalkActive = false
+    private var commandShiftSpeechWork: DispatchWorkItem?
+    private var commandShiftSpeechTriggered = false
+
     func start() throws {
         let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.flagsChanged.rawValue)
         let opaque = Unmanaged.passUnretained(self).toOpaque()
@@ -182,6 +192,7 @@ final class EventTap {
         // Any keypress while a hotkey-watched modifier is held means the
         // user pressed it as a real shortcut modifier, not as a hotkey
         // tap — disqualify the current sequence.
+        cancelSpeechModifierCandidates()
         if hotkeyCurrentlyHeld {
             hotkeyUsedAsModifier = true
         }
@@ -320,6 +331,10 @@ final class EventTap {
             updateBothShiftsGesture(flags: flags)
         }
 
+        if handleSpeechModifierGesture(keyCode: keyCode, flags: flags) {
+            return
+        }
+
         // Now route the event through the configurable hotkey-tap counter.
         let preset = Settings.shared.hotkeyPreset
         let isWatchedKey = preset.watchedKeys.contains { $0.keyCode == keyCode }
@@ -399,6 +414,83 @@ final class EventTap {
     private func handleBothShiftsToggle() {
         Settings.shared.enabled.toggle()
         NotificationCenter.default.post(name: .langFlipEnabledChanged, object: nil)
+    }
+
+    private func handleSpeechModifierGesture(keyCode: CGKeyCode, flags: CGEventFlags) -> Bool {
+        let isShiftKey = keyCode == CGKeyCode(kVK_Shift) || keyCode == CGKeyCode(kVK_RightShift)
+        let isCommandKey = keyCode == CGKeyCode(kVK_Command) || keyCode == CGKeyCode(kVK_RightCommand)
+        let shiftHeld = flags.contains(.maskShift)
+        let commandHeld = flags.contains(.maskCommand)
+        let hasOtherModifiers = flags.contains(.maskAlternate) || flags.contains(.maskControl)
+
+        if commandShiftSpeechTriggered {
+            if !shiftHeld && !commandHeld {
+                commandShiftSpeechTriggered = false
+            }
+            return true
+        }
+
+        if shiftHeld && commandHeld && !hasOtherModifiers && (isShiftKey || isCommandKey) {
+            speechHoldWork?.cancel()
+            speechHoldWork = nil
+            if commandShiftSpeechWork == nil {
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self else { return }
+                    self.commandShiftSpeechWork = nil
+                    self.commandShiftSpeechTriggered = true
+                    self.hotkeyUsedAsModifier = true
+                    self.cancelPendingTaps()
+                    VoiceDictationController.shared.toggleRecording()
+                }
+                commandShiftSpeechWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.commandShiftToggleDelay, execute: work)
+            }
+            return false
+        }
+        commandShiftSpeechWork?.cancel()
+        commandShiftSpeechWork = nil
+
+        guard isShiftKey, !commandHeld, !hasOtherModifiers else {
+            if !shiftHeld {
+                speechHoldWork?.cancel()
+                speechHoldWork = nil
+            }
+            return false
+        }
+
+        if shiftHeld {
+            if speechHoldWork == nil, !speechPushToTalkActive {
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self else { return }
+                    self.speechHoldWork = nil
+                    self.speechPushToTalkActive = true
+                    self.hotkeyUsedAsModifier = true
+                    self.cancelPendingTaps()
+                    VoiceDictationController.shared.start(mode: .pushToTalk)
+                }
+                speechHoldWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.speechHoldDelay, execute: work)
+            }
+            return false
+        }
+
+        speechHoldWork?.cancel()
+        speechHoldWork = nil
+        if speechPushToTalkActive {
+            speechPushToTalkActive = false
+            hotkeyUsedAsModifier = true
+            cancelPendingTaps()
+            VoiceDictationController.shared.stopAndTranscribe()
+            return true
+        }
+        return false
+    }
+
+    private func cancelSpeechModifierCandidates() {
+        speechHoldWork?.cancel()
+        speechHoldWork = nil
+        commandShiftSpeechWork?.cancel()
+        commandShiftSpeechWork = nil
     }
 
     // MARK: - Tap counting
