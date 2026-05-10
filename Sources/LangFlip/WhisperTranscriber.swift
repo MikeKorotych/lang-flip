@@ -61,34 +61,6 @@ enum WhisperTranscriber {
         }
     }
 
-    enum QwenASR {
-        static let displayName = "Qwen3-ASR-1.7B"
-        static let approximateSize = "4.7 GB"
-        static let repoURL = URL(string: "https://huggingface.co/Qwen/Qwen3-ASR-1.7B")!
-        static let directory = modelsDirectory.appendingPathComponent("Qwen3-ASR-1.7B", isDirectory: true)
-
-        static let files: [(name: String, size: Int64)] = [
-            ("chat_template.json", 1_161),
-            ("config.json", 6_194),
-            ("generation_config.json", 142),
-            ("preprocessor_config.json", 330),
-            ("tokenizer_config.json", 12_487),
-            ("vocab.json", 2_776_833),
-            ("merges.txt", 1_671_853),
-            ("model.safetensors.index.json", 64_821),
-            ("model-00001-of-00002.safetensors", 4_220_320_824),
-            ("model-00002-of-00002.safetensors", 478_200_688),
-        ]
-
-        static var isInstalled: Bool {
-            files.allSatisfy { FileManager.default.fileExists(atPath: directory.appendingPathComponent($0.name).path) }
-        }
-
-        static func fileURL(_ filename: String) -> URL {
-            URL(string: "https://huggingface.co/Qwen/Qwen3-ASR-1.7B/resolve/main/\(filename)")!
-        }
-    }
-
     struct Availability {
         let executableURL: URL?
         let modelURL: URL?
@@ -175,47 +147,6 @@ enum WhisperTranscriber {
             displayName: model.filename,
             progress: progress
         )
-    }
-
-    static func downloadQwenASR(progress: @escaping @MainActor (DownloadProgress) -> Void = { _ in }) async throws -> URL {
-        try FileManager.default.createDirectory(at: QwenASR.directory, withIntermediateDirectories: true)
-        let totalBytes = QwenASR.files.reduce(Int64(0)) { $0 + $1.size }
-        var completedBytes: Int64 = 0
-
-        for file in QwenASR.files {
-            let destination = QwenASR.directory.appendingPathComponent(file.name)
-            if FileManager.default.fileExists(atPath: destination.path) {
-                completedBytes += file.size
-                continue
-            }
-
-            _ = try await FileDownloader.download(
-                from: QwenASR.fileURL(file.name),
-                to: destination,
-                displayName: file.name
-            ) { fileProgress in
-                let currentWritten = fileProgress.bytesWritten
-                let aggregateWritten = completedBytes + currentWritten
-                let aggregateFraction = totalBytes > 0 ? Double(aggregateWritten) / Double(totalBytes) : fileProgress.fraction
-                Task { @MainActor in
-                    progress(DownloadProgress(
-                        fraction: min(1, max(0, aggregateFraction)),
-                        bytesWritten: aggregateWritten,
-                        bytesExpected: totalBytes,
-                        currentFile: file.name
-                    ))
-                }
-            }
-            completedBytes += file.size
-        }
-
-        await progress(DownloadProgress(
-            fraction: 1,
-            bytesWritten: totalBytes,
-            bytesExpected: totalBytes,
-            currentFile: "done"
-        ))
-        return QwenASR.directory
     }
 
     static func executableCandidates() -> [URL] {

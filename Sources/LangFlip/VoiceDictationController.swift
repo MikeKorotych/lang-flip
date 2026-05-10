@@ -75,13 +75,10 @@ final class VoiceDictationController {
     }
 
     private static func transcribe(audioURL: URL) async throws -> String {
-        let language = Settings.shared.whisperLanguage
-        switch Settings.shared.speechRecognitionBackend {
-        case .whisper:
-            return try await WhisperTranscriber.transcribe(audioURL: audioURL, language: language)
-        case .qwenASR:
-            return try await QwenASRTranscriber.transcribe(audioURL: audioURL, language: language)
-        }
+        try await WhisperTranscriber.transcribe(
+            audioURL: audioURL,
+            language: Settings.shared.whisperLanguage
+        )
     }
 
     private func insert(_ text: String) {
