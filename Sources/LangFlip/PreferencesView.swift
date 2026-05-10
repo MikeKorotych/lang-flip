@@ -296,7 +296,7 @@ private struct VoiceTab: View {
                         }
                     }
 
-                    Toggle("Whisper style", isOn: $omniVoiceWhisper)
+                    Toggle("Whispered voice", isOn: $omniVoiceWhisper)
 
                     if let omniVoiceMessage {
                         Text(omniVoiceMessage)
@@ -343,8 +343,8 @@ private struct VoiceTab: View {
             }
 
             Section("Read aloud shortcut") {
-                Toggle("Read selected text with Control+Option+R", isOn: $readSelectionHotkeyEnabled)
-                helpText("Select text in any app and press Control+Option+R. LangFlip copies the selection briefly, restores your clipboard, and reads it with the selected text-to-speech backend.")
+                Toggle("Read selected text with Control+Option+X", isOn: $readSelectionHotkeyEnabled)
+                helpText("Select text in any app and press Control+Option+X. LangFlip copies the selection briefly, restores your clipboard, and reads it with the selected text-to-speech backend.")
             }
 
             Section("Dictation") {

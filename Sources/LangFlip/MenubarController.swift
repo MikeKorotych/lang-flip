@@ -87,7 +87,7 @@ final class MenubarController: NSObject {
         translateMenuItem.submenu = translateSub
         menu.addItem(.separator())
         menu.addItem(translateMenuItem)
-        readSelectionItem.keyEquivalent = "r"
+        readSelectionItem.keyEquivalent = "x"
         readSelectionItem.keyEquivalentModifierMask = [.control, .option]
         menu.addItem(readSelectionItem)
         menu.addItem(stopReadingItem)

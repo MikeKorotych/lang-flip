@@ -169,15 +169,15 @@ final class EventTap {
             return nil
         }
 
-        // Read selected text aloud: Control+Option+R. This is global and
+        // Read selected text aloud: Control+Option+X. This is global and
         // intentionally avoids Command-based browser/editor shortcuts.
         if Settings.shared.readSelectionHotkeyEnabled,
-           keyCode == CGKeyCode(kVK_ANSI_R),
+           keyCode == CGKeyCode(kVK_ANSI_X),
            flags.contains(.maskControl),
            flags.contains(.maskAlternate),
            !flags.contains(.maskShift),
            !flags.contains(.maskCommand) {
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: read-aloud hotkey ⌃⌥R fired\n".utf8)) }
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: read-aloud hotkey ⌃⌥X fired\n".utf8)) }
             DispatchQueue.main.async { [weak self] in
                 self?.readSelectedTextAloud()
             }
@@ -809,6 +809,8 @@ final class EventTap {
         let snapshot = PasteboardSnapshot.capture(pb)
         let countBefore = pb.changeCount
 
+        Sound.playFlip()
+        FlipOverlay.shared.show()
         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: speech: posting Cmd+C\n".utf8)) }
         postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_C))
 
@@ -827,8 +829,10 @@ final class EventTap {
                       !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 else {
                     if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: speech: no selected text\n".utf8)) }
+                    Notifications.show(title: "LangFlip", body: "Select text first, then press Control+Option+X.")
                     return
                 }
+                Notifications.show(title: "Reading selected text", body: String(text.prefix(80)))
                 SpeechReader.shared.speak(text)
             }
         }
