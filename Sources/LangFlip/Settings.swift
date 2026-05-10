@@ -212,6 +212,18 @@ final class Settings {
         static let omniVoicePitch = "lf.omniVoicePitch"
         static let omniVoiceAccent = "lf.omniVoiceAccent"
         static let omniVoiceWhisper = "lf.omniVoiceWhisper"
+        static let omniVoiceSpeed = "lf.omniVoiceSpeed"
+        static let omniVoiceDuration = "lf.omniVoiceDuration"
+        static let omniVoiceNumSteps = "lf.omniVoiceNumSteps"
+        static let omniVoiceGuidanceScale = "lf.omniVoiceGuidanceScale"
+        static let omniVoiceDenoise = "lf.omniVoiceDenoise"
+        static let omniVoicePostprocessOutput = "lf.omniVoicePostprocessOutput"
+        static let omniVoiceTShift = "lf.omniVoiceTShift"
+        static let omniVoiceLayerPenaltyFactor = "lf.omniVoiceLayerPenaltyFactor"
+        static let omniVoicePositionTemperature = "lf.omniVoicePositionTemperature"
+        static let omniVoiceClassTemperature = "lf.omniVoiceClassTemperature"
+        static let omniVoiceReferenceAudioPath = "lf.omniVoiceReferenceAudioPath"
+        static let omniVoiceReferenceText = "lf.omniVoiceReferenceText"
         static let readSelectionHotkeyEnabled = "lf.readSelectionHotkeyEnabled"
         static let microphoneDeviceID = "lf.microphoneDeviceID"
         static let whisperModelPath = "lf.whisperModelPath"
@@ -351,6 +363,81 @@ final class Settings {
     var omniVoiceWhisper: Bool {
         get { defaults.object(forKey: Keys.omniVoiceWhisper) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.omniVoiceWhisper) }
+    }
+
+    var omniVoiceSpeed: Double {
+        get { defaults.object(forKey: Keys.omniVoiceSpeed) as? Double ?? 1.0 }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceSpeed) }
+    }
+
+    /// 0 means "let OmniVoice estimate duration". Positive values are
+    /// passed as --duration and override speed, matching OmniVoice's CLI.
+    var omniVoiceDuration: Double {
+        get { defaults.object(forKey: Keys.omniVoiceDuration) as? Double ?? 0.0 }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceDuration) }
+    }
+
+    var omniVoiceNumSteps: Int {
+        get { defaults.object(forKey: Keys.omniVoiceNumSteps) as? Int ?? 32 }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceNumSteps) }
+    }
+
+    var omniVoiceGuidanceScale: Double {
+        get { defaults.object(forKey: Keys.omniVoiceGuidanceScale) as? Double ?? 2.0 }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceGuidanceScale) }
+    }
+
+    var omniVoiceDenoise: Bool {
+        get { defaults.object(forKey: Keys.omniVoiceDenoise) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceDenoise) }
+    }
+
+    var omniVoicePostprocessOutput: Bool {
+        get { defaults.object(forKey: Keys.omniVoicePostprocessOutput) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.omniVoicePostprocessOutput) }
+    }
+
+    var omniVoiceTShift: Double {
+        get { defaults.object(forKey: Keys.omniVoiceTShift) as? Double ?? 0.1 }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceTShift) }
+    }
+
+    var omniVoiceLayerPenaltyFactor: Double {
+        get { defaults.object(forKey: Keys.omniVoiceLayerPenaltyFactor) as? Double ?? 5.0 }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceLayerPenaltyFactor) }
+    }
+
+    var omniVoicePositionTemperature: Double {
+        get { defaults.object(forKey: Keys.omniVoicePositionTemperature) as? Double ?? 5.0 }
+        set { defaults.set(newValue, forKey: Keys.omniVoicePositionTemperature) }
+    }
+
+    var omniVoiceClassTemperature: Double {
+        get { defaults.object(forKey: Keys.omniVoiceClassTemperature) as? Double ?? 0.0 }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceClassTemperature) }
+    }
+
+    func resetOmniVoiceGenerationSettings() {
+        defaults.set(1.0, forKey: Keys.omniVoiceSpeed)
+        defaults.set(0.0, forKey: Keys.omniVoiceDuration)
+        defaults.set(32, forKey: Keys.omniVoiceNumSteps)
+        defaults.set(2.0, forKey: Keys.omniVoiceGuidanceScale)
+        defaults.set(true, forKey: Keys.omniVoiceDenoise)
+        defaults.set(true, forKey: Keys.omniVoicePostprocessOutput)
+        defaults.set(0.1, forKey: Keys.omniVoiceTShift)
+        defaults.set(5.0, forKey: Keys.omniVoiceLayerPenaltyFactor)
+        defaults.set(5.0, forKey: Keys.omniVoicePositionTemperature)
+        defaults.set(0.0, forKey: Keys.omniVoiceClassTemperature)
+    }
+
+    var omniVoiceReferenceAudioPath: String {
+        get { defaults.string(forKey: Keys.omniVoiceReferenceAudioPath) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceReferenceAudioPath) }
+    }
+
+    var omniVoiceReferenceText: String {
+        get { defaults.string(forKey: Keys.omniVoiceReferenceText) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceReferenceText) }
     }
 
     var readSelectionHotkeyEnabled: Bool {

@@ -141,13 +141,37 @@ final class OmniVoiceSynthesizer {
     }
 
     private static func arguments(text: String, outputURL: URL) -> [String] {
+        let settings = Settings.shared
         var args = [
             "--model", "k2-fsa/OmniVoice",
             "--text", text,
             "--output", outputURL.path,
             "--device", "mps",
-            "--num_step", "16"
+            "--num_step", "\(settings.omniVoiceNumSteps)",
+            "--guidance_scale", String(format: "%.2f", settings.omniVoiceGuidanceScale),
+            "--denoise", settings.omniVoiceDenoise ? "true" : "false",
+            "--postprocess_output", settings.omniVoicePostprocessOutput ? "true" : "false",
+            "--t_shift", String(format: "%.2f", settings.omniVoiceTShift),
+            "--layer_penalty_factor", String(format: "%.2f", settings.omniVoiceLayerPenaltyFactor),
+            "--position_temperature", String(format: "%.2f", settings.omniVoicePositionTemperature),
+            "--class_temperature", String(format: "%.2f", settings.omniVoiceClassTemperature)
         ]
+        if settings.omniVoiceDuration > 0 {
+            args += ["--duration", String(format: "%.2f", settings.omniVoiceDuration)]
+        } else if abs(settings.omniVoiceSpeed - 1.0) > 0.001 {
+            args += ["--speed", String(format: "%.2f", settings.omniVoiceSpeed)]
+        }
+        let referenceAudioPath = settings.omniVoiceReferenceAudioPath
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !referenceAudioPath.isEmpty,
+           FileManager.default.fileExists(atPath: referenceAudioPath) {
+            args += ["--ref_audio", referenceAudioPath]
+            let referenceText = settings.omniVoiceReferenceText
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !referenceText.isEmpty {
+                args += ["--ref_text", referenceText]
+            }
+        }
         if let language = languageValue(for: text) {
             args += ["--language", language]
         }

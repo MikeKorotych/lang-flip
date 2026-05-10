@@ -199,6 +199,18 @@ private struct VoiceTab: View {
     @AppStorage("lf.omniVoicePitch") private var omniVoicePitch = OmniVoicePitchStyle.none.rawValue
     @AppStorage("lf.omniVoiceAccent") private var omniVoiceAccent = OmniVoiceAccentStyle.none.rawValue
     @AppStorage("lf.omniVoiceWhisper") private var omniVoiceWhisper = false
+    @AppStorage("lf.omniVoiceSpeed") private var omniVoiceSpeed = 1.0
+    @AppStorage("lf.omniVoiceDuration") private var omniVoiceDuration = 0.0
+    @AppStorage("lf.omniVoiceNumSteps") private var omniVoiceNumSteps = 32
+    @AppStorage("lf.omniVoiceGuidanceScale") private var omniVoiceGuidanceScale = 2.0
+    @AppStorage("lf.omniVoiceDenoise") private var omniVoiceDenoise = true
+    @AppStorage("lf.omniVoicePostprocessOutput") private var omniVoicePostprocessOutput = true
+    @AppStorage("lf.omniVoiceTShift") private var omniVoiceTShift = 0.1
+    @AppStorage("lf.omniVoiceLayerPenaltyFactor") private var omniVoiceLayerPenaltyFactor = 5.0
+    @AppStorage("lf.omniVoicePositionTemperature") private var omniVoicePositionTemperature = 5.0
+    @AppStorage("lf.omniVoiceClassTemperature") private var omniVoiceClassTemperature = 0.0
+    @AppStorage("lf.omniVoiceReferenceAudioPath") private var omniVoiceReferenceAudioPath = ""
+    @AppStorage("lf.omniVoiceReferenceText") private var omniVoiceReferenceText = ""
     @AppStorage("lf.readSelectionHotkeyEnabled") private var readSelectionHotkeyEnabled = true
     @AppStorage("lf.whisperModelPath") private var whisperModelPath = ""
     @AppStorage("lf.whisperLanguage") private var whisperLanguage = "auto"
@@ -297,6 +309,92 @@ private struct VoiceTab: View {
                     }
 
                     Toggle("Whispered voice", isOn: $omniVoiceWhisper)
+
+                    Divider()
+
+                    HStack {
+                        Text("Reference voice")
+                        Spacer()
+                        Text(omniVoiceReferenceAudioLabel)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                        Button("Choose Audio") {
+                            chooseOmniVoiceReferenceAudio()
+                        }
+                        .controlSize(.small)
+                        Button("Clear") {
+                            omniVoiceReferenceAudioPath = ""
+                            omniVoiceReferenceText = ""
+                        }
+                        .disabled(omniVoiceReferenceAudioPath.isEmpty)
+                        .controlSize(.small)
+                    }
+
+                    TextField("Reference transcript (optional)", text: $omniVoiceReferenceText)
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.small)
+                        .disabled(omniVoiceReferenceAudioPath.isEmpty)
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Speed")
+                            Slider(value: $omniVoiceSpeed, in: 0.5...1.5, step: 0.05)
+                            Text(String(format: "%.2fx", omniVoiceSpeed))
+                                .foregroundColor(.secondary)
+                                .frame(width: 48, alignment: .trailing)
+                        }
+                        .disabled(omniVoiceDuration > 0)
+
+                        HStack {
+                            Text("Duration")
+                            Slider(value: $omniVoiceDuration, in: 0...60, step: 0.5)
+                            Text(omniVoiceDuration > 0 ? String(format: "%.1fs", omniVoiceDuration) : "Auto")
+                                .foregroundColor(.secondary)
+                                .frame(width: 48, alignment: .trailing)
+                        }
+
+                        HStack {
+                            Text("Inference steps")
+                            Slider(
+                                value: Binding(
+                                    get: { Double(omniVoiceNumSteps) },
+                                    set: { omniVoiceNumSteps = Int($0.rounded()) }
+                                ),
+                                in: 4...64,
+                                step: 1
+                            )
+                            Text("\(omniVoiceNumSteps)")
+                                .foregroundColor(.secondary)
+                                .frame(width: 48, alignment: .trailing)
+                        }
+
+                        HStack {
+                            Text("Guidance")
+                            Slider(value: $omniVoiceGuidanceScale, in: 0...4, step: 0.1)
+                            Text(String(format: "%.1f", omniVoiceGuidanceScale))
+                                .foregroundColor(.secondary)
+                                .frame(width: 48, alignment: .trailing)
+                        }
+                    }
+
+                    DisclosureGroup("Advanced generation") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Toggle("Denoise", isOn: $omniVoiceDenoise)
+                            Toggle("Postprocess output", isOn: $omniVoicePostprocessOutput)
+                            advancedOmniVoiceSlider("T-shift", value: $omniVoiceTShift, range: 0...2, step: 0.05)
+                            advancedOmniVoiceSlider("Layer penalty", value: $omniVoiceLayerPenaltyFactor, range: 0...10, step: 0.5)
+                            advancedOmniVoiceSlider("Position temperature", value: $omniVoicePositionTemperature, range: 0...10, step: 0.5)
+                            advancedOmniVoiceSlider("Class temperature", value: $omniVoiceClassTemperature, range: 0...2, step: 0.05)
+                            Button("Reset generation settings") {
+                                Settings.shared.resetOmniVoiceGenerationSettings()
+                                syncOmniVoiceGenerationSettingsFromDefaults()
+                            }
+                            .controlSize(.small)
+                        }
+                        .padding(.top, 6)
+                    }
 
                     if let omniVoiceMessage {
                         Text(omniVoiceMessage)
@@ -639,9 +737,25 @@ private struct VoiceTab: View {
         return "Ready"
     }
 
+    private var omniVoiceReferenceAudioLabel: String {
+        guard !omniVoiceReferenceAudioPath.isEmpty else { return "None" }
+        return URL(fileURLWithPath: omniVoiceReferenceAudioPath).lastPathComponent
+    }
+
     private func refreshOmniVoiceState() {
         omniVoiceAvailability = OmniVoiceSynthesizer.availability()
         omniVoiceOutputURL = OmniVoiceSynthesizer.shared.lastOutputURL
+    }
+
+    private func chooseOmniVoiceReferenceAudio() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.audio]
+        if panel.runModal() == .OK, let url = panel.url {
+            omniVoiceReferenceAudioPath = url.path
+        }
     }
 
     private func readTTSSample() {
@@ -668,6 +782,35 @@ private struct VoiceTab: View {
                     omniVoiceMessage = "OmniVoice failed: \(error.localizedDescription)"
                 }
             }
+        }
+    }
+
+    private func syncOmniVoiceGenerationSettingsFromDefaults() {
+        omniVoiceSpeed = Settings.shared.omniVoiceSpeed
+        omniVoiceDuration = Settings.shared.omniVoiceDuration
+        omniVoiceNumSteps = Settings.shared.omniVoiceNumSteps
+        omniVoiceGuidanceScale = Settings.shared.omniVoiceGuidanceScale
+        omniVoiceDenoise = Settings.shared.omniVoiceDenoise
+        omniVoicePostprocessOutput = Settings.shared.omniVoicePostprocessOutput
+        omniVoiceTShift = Settings.shared.omniVoiceTShift
+        omniVoiceLayerPenaltyFactor = Settings.shared.omniVoiceLayerPenaltyFactor
+        omniVoicePositionTemperature = Settings.shared.omniVoicePositionTemperature
+        omniVoiceClassTemperature = Settings.shared.omniVoiceClassTemperature
+    }
+
+    @ViewBuilder
+    private func advancedOmniVoiceSlider(
+        _ title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double
+    ) -> some View {
+        HStack {
+            Text(title)
+            Slider(value: value, in: range, step: step)
+            Text(String(format: "%.2f", value.wrappedValue))
+                .foregroundColor(.secondary)
+                .frame(width: 48, alignment: .trailing)
         }
     }
 
