@@ -148,11 +148,45 @@ final class OmniVoiceSynthesizer {
             "--device", "mps",
             "--num_step", "16"
         ]
-        let instruct = Settings.shared.omniVoiceInstruct.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let language = languageValue(for: text) {
+            args += ["--language", language]
+        }
+        let instruct = styleInstruction()
         if !instruct.isEmpty {
             args += ["--instruct", instruct]
         }
         return args
+    }
+
+    private static func languageValue(for text: String) -> String? {
+        let configured = Settings.shared.omniVoiceLanguage
+        if let explicit = configured.cliValue {
+            return explicit
+        }
+        if text.range(of: #"[іїєґІЇЄҐ]"#, options: .regularExpression) != nil {
+            return "Ukrainian"
+        }
+        if text.range(of: #"[а-яА-ЯёЁ]"#, options: .regularExpression) != nil {
+            return "Russian"
+        }
+        if text.range(of: #"[A-Za-z]"#, options: .regularExpression) != nil {
+            return "English"
+        }
+        return nil
+    }
+
+    private static func styleInstruction() -> String {
+        let settings = Settings.shared
+        var items = [
+            settings.omniVoiceGender.rawValue,
+            settings.omniVoiceAge.rawValue,
+            settings.omniVoicePitch.rawValue,
+            settings.omniVoiceAccent.rawValue
+        ].filter { !$0.isEmpty }
+        if settings.omniVoiceWhisper {
+            items.append("whisper")
+        }
+        return items.joined(separator: ", ")
     }
 
     private static func processEnvironment() -> [String: String] {

@@ -56,6 +56,123 @@ enum TextToSpeechBackend: String, CaseIterable, Identifiable {
     }
 }
 
+enum OmniVoiceLanguage: String, CaseIterable, Identifiable {
+    case auto
+    case english
+    case ukrainian
+    case russian
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .auto: return "Auto"
+        case .english: return "English"
+        case .ukrainian: return "Українська"
+        case .russian: return "Русский"
+        }
+    }
+
+    var cliValue: String? {
+        switch self {
+        case .auto: return nil
+        case .english: return "English"
+        case .ukrainian: return "Ukrainian"
+        case .russian: return "Russian"
+        }
+    }
+}
+
+enum OmniVoiceGenderStyle: String, CaseIterable, Identifiable {
+    case none = ""
+    case female
+    case male
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .none: return "Default"
+        case .female: return "Female"
+        case .male: return "Male"
+        }
+    }
+}
+
+enum OmniVoiceAgeStyle: String, CaseIterable, Identifiable {
+    case none = ""
+    case child
+    case teenager
+    case youngAdult = "young adult"
+    case middleAged = "middle-aged"
+    case elderly
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .none: return "Default"
+        case .child: return "Child"
+        case .teenager: return "Teenager"
+        case .youngAdult: return "Young adult"
+        case .middleAged: return "Middle-aged"
+        case .elderly: return "Elderly"
+        }
+    }
+}
+
+enum OmniVoicePitchStyle: String, CaseIterable, Identifiable {
+    case none = ""
+    case veryLow = "very low pitch"
+    case low = "low pitch"
+    case moderate = "moderate pitch"
+    case high = "high pitch"
+    case veryHigh = "very high pitch"
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .none: return "Default"
+        case .veryLow: return "Very low"
+        case .low: return "Low"
+        case .moderate: return "Moderate"
+        case .high: return "High"
+        case .veryHigh: return "Very high"
+        }
+    }
+}
+
+enum OmniVoiceAccentStyle: String, CaseIterable, Identifiable {
+    case none = ""
+    case american = "american accent"
+    case british = "british accent"
+    case australian = "australian accent"
+    case canadian = "canadian accent"
+    case indian = "indian accent"
+    case japanese = "japanese accent"
+    case korean = "korean accent"
+    case russian = "russian accent"
+    case portuguese = "portuguese accent"
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .none: return "Default"
+        case .american: return "American"
+        case .british: return "British"
+        case .australian: return "Australian"
+        case .canadian: return "Canadian"
+        case .indian: return "Indian"
+        case .japanese: return "Japanese"
+        case .korean: return "Korean"
+        case .russian: return "Russian"
+        case .portuguese: return "Portuguese"
+        }
+    }
+}
+
 /// User-facing toggles persisted in UserDefaults. Read by EventTap on each event,
 /// so changes from the menubar take effect immediately without restart.
 final class Settings {
@@ -89,7 +206,13 @@ final class Settings {
         static let ttsBackend = "lf.ttsBackend"
         static let speechVoiceIdentifier = "lf.speechVoiceIdentifier"
         static let speechRate = "lf.speechRate"
-        static let omniVoiceInstruct = "lf.omniVoiceInstruct"
+        static let omniVoiceLanguage = "lf.omniVoiceLanguage"
+        static let omniVoiceGender = "lf.omniVoiceGender"
+        static let omniVoiceAge = "lf.omniVoiceAge"
+        static let omniVoicePitch = "lf.omniVoicePitch"
+        static let omniVoiceAccent = "lf.omniVoiceAccent"
+        static let omniVoiceWhisper = "lf.omniVoiceWhisper"
+        static let readSelectionHotkeyEnabled = "lf.readSelectionHotkeyEnabled"
         static let microphoneDeviceID = "lf.microphoneDeviceID"
         static let whisperModelPath = "lf.whisperModelPath"
         static let whisperLanguage = "lf.whisperLanguage"
@@ -175,9 +298,64 @@ final class Settings {
         set { defaults.set(newValue, forKey: Keys.speechRate) }
     }
 
-    var omniVoiceInstruct: String {
-        get { defaults.string(forKey: Keys.omniVoiceInstruct) ?? "" }
-        set { defaults.set(newValue, forKey: Keys.omniVoiceInstruct) }
+    var omniVoiceLanguage: OmniVoiceLanguage {
+        get {
+            guard let raw = defaults.string(forKey: Keys.omniVoiceLanguage),
+                  let value = OmniVoiceLanguage(rawValue: raw)
+            else { return .auto }
+            return value
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.omniVoiceLanguage) }
+    }
+
+    var omniVoiceGender: OmniVoiceGenderStyle {
+        get {
+            guard let raw = defaults.string(forKey: Keys.omniVoiceGender),
+                  let value = OmniVoiceGenderStyle(rawValue: raw)
+            else { return .none }
+            return value
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.omniVoiceGender) }
+    }
+
+    var omniVoiceAge: OmniVoiceAgeStyle {
+        get {
+            guard let raw = defaults.string(forKey: Keys.omniVoiceAge),
+                  let value = OmniVoiceAgeStyle(rawValue: raw)
+            else { return .none }
+            return value
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.omniVoiceAge) }
+    }
+
+    var omniVoicePitch: OmniVoicePitchStyle {
+        get {
+            guard let raw = defaults.string(forKey: Keys.omniVoicePitch),
+                  let value = OmniVoicePitchStyle(rawValue: raw)
+            else { return .none }
+            return value
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.omniVoicePitch) }
+    }
+
+    var omniVoiceAccent: OmniVoiceAccentStyle {
+        get {
+            guard let raw = defaults.string(forKey: Keys.omniVoiceAccent),
+                  let value = OmniVoiceAccentStyle(rawValue: raw)
+            else { return .none }
+            return value
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.omniVoiceAccent) }
+    }
+
+    var omniVoiceWhisper: Bool {
+        get { defaults.object(forKey: Keys.omniVoiceWhisper) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceWhisper) }
+    }
+
+    var readSelectionHotkeyEnabled: Bool {
+        get { defaults.object(forKey: Keys.readSelectionHotkeyEnabled) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.readSelectionHotkeyEnabled) }
     }
 
     var microphoneDeviceID: String {

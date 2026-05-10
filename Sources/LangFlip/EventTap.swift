@@ -169,6 +169,21 @@ final class EventTap {
             return nil
         }
 
+        // Read selected text aloud: Control+Option+R. This is global and
+        // intentionally avoids Command-based browser/editor shortcuts.
+        if Settings.shared.readSelectionHotkeyEnabled,
+           keyCode == CGKeyCode(kVK_ANSI_R),
+           flags.contains(.maskControl),
+           flags.contains(.maskAlternate),
+           !flags.contains(.maskShift),
+           !flags.contains(.maskCommand) {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: read-aloud hotkey ⌃⌥R fired\n".utf8)) }
+            DispatchQueue.main.async { [weak self] in
+                self?.readSelectedTextAloud()
+            }
+            return nil
+        }
+
         // Sprint G: translate-selection hotkey ⇧Space. Consume the event
         // so the underlying app never sees the rogue space. Only active
         // when AI is on and Settings.translationHotkeyEnabled allows it.

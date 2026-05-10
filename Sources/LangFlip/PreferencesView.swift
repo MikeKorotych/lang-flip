@@ -193,7 +193,13 @@ private struct VoiceTab: View {
     @AppStorage("lf.ttsBackend") private var ttsBackend = TextToSpeechBackend.system.rawValue
     @AppStorage("lf.speechVoiceIdentifier") private var speechVoiceIdentifier = ""
     @AppStorage("lf.speechRate") private var speechRate = 190.0
-    @AppStorage("lf.omniVoiceInstruct") private var omniVoiceInstruct = ""
+    @AppStorage("lf.omniVoiceLanguage") private var omniVoiceLanguage = OmniVoiceLanguage.auto.rawValue
+    @AppStorage("lf.omniVoiceGender") private var omniVoiceGender = OmniVoiceGenderStyle.none.rawValue
+    @AppStorage("lf.omniVoiceAge") private var omniVoiceAge = OmniVoiceAgeStyle.none.rawValue
+    @AppStorage("lf.omniVoicePitch") private var omniVoicePitch = OmniVoicePitchStyle.none.rawValue
+    @AppStorage("lf.omniVoiceAccent") private var omniVoiceAccent = OmniVoiceAccentStyle.none.rawValue
+    @AppStorage("lf.omniVoiceWhisper") private var omniVoiceWhisper = false
+    @AppStorage("lf.readSelectionHotkeyEnabled") private var readSelectionHotkeyEnabled = true
     @AppStorage("lf.whisperModelPath") private var whisperModelPath = ""
     @AppStorage("lf.whisperLanguage") private var whisperLanguage = "auto"
 
@@ -252,6 +258,12 @@ private struct VoiceTab: View {
                             .frame(width: 34, alignment: .trailing)
                     }
                 } else {
+                    Picker("Language", selection: $omniVoiceLanguage) {
+                        ForEach(OmniVoiceLanguage.allCases) { language in
+                            Text(language.displayName).tag(language.rawValue)
+                        }
+                    }
+
                     HStack {
                         Text("OmniVoice")
                         Spacer()
@@ -260,9 +272,31 @@ private struct VoiceTab: View {
                             .lineLimit(1)
                     }
 
-                    TextField("Voice style, e.g. female, low pitch, British accent", text: $omniVoiceInstruct)
-                        .textFieldStyle(.roundedBorder)
-                        .controlSize(.small)
+                    Picker("Voice", selection: $omniVoiceGender) {
+                        ForEach(OmniVoiceGenderStyle.allCases) { style in
+                            Text(style.displayName).tag(style.rawValue)
+                        }
+                    }
+
+                    Picker("Age", selection: $omniVoiceAge) {
+                        ForEach(OmniVoiceAgeStyle.allCases) { style in
+                            Text(style.displayName).tag(style.rawValue)
+                        }
+                    }
+
+                    Picker("Pitch", selection: $omniVoicePitch) {
+                        ForEach(OmniVoicePitchStyle.allCases) { style in
+                            Text(style.displayName).tag(style.rawValue)
+                        }
+                    }
+
+                    Picker("Accent", selection: $omniVoiceAccent) {
+                        ForEach(OmniVoiceAccentStyle.allCases) { style in
+                            Text(style.displayName).tag(style.rawValue)
+                        }
+                    }
+
+                    Toggle("Whisper style", isOn: $omniVoiceWhisper)
 
                     if let omniVoiceMessage {
                         Text(omniVoiceMessage)
@@ -306,6 +340,11 @@ private struct VoiceTab: View {
                 .controlSize(.small)
 
                 helpText("Use the menu bar action to read the current text selection aloud. System voices are instant; OmniVoice is local, higher quality, and heavier.")
+            }
+
+            Section("Read aloud shortcut") {
+                Toggle("Read selected text with Control+Option+R", isOn: $readSelectionHotkeyEnabled)
+                helpText("Select text in any app and press Control+Option+R. LangFlip copies the selection briefly, restores your clipboard, and reads it with the selected text-to-speech backend.")
             }
 
             Section("Dictation") {
