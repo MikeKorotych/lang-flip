@@ -10,4 +10,8 @@ extension Notification.Name {
     /// or reset, so the in-memory auto-flip engine can reload without
     /// requiring an app restart.
     static let langFlipDictionariesChanged = Notification.Name("LangFlipDictionariesChanged")
+
+    /// Posted when the voice recorder starts, stops, or fails so
+    /// Preferences can refresh without polling tight loops.
+    static let langFlipVoiceRecorderChanged = Notification.Name("LangFlipVoiceRecorderChanged")
 }

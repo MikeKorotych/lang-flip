@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import AVFoundation
 import IOKit.hid
 import ApplicationServices
 import CoreGraphics
@@ -53,6 +54,36 @@ struct PermissionStatus: Equatable {
 
     static func requestScreenRecording() {
         _ = CGRequestScreenCaptureAccess()
+    }
+
+    static func hasMicrophone() -> Bool {
+        AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    }
+
+    static func microphoneAuthorizationStatus() -> AVAuthorizationStatus {
+        AVCaptureDevice.authorizationStatus(for: .audio)
+    }
+
+    static func requestMicrophone(_ completion: @escaping (Bool) -> Void = { _ in }) {
+        AVCaptureDevice.requestAccess(for: .audio) { granted in
+            DispatchQueue.main.async {
+                completion(granted)
+            }
+        }
+    }
+
+    static func openMicrophonePane() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    static func openSoundInputPane() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension?input") {
+            NSWorkspace.shared.open(url)
+        } else if let url = URL(string: "x-apple.systempreferences:com.apple.preference.sound?input") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     static func openScreenRecordingPane() {

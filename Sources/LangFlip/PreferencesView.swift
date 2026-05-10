@@ -1,6 +1,8 @@
 import SwiftUI
 import AppKit
+import AVFoundation
 import ServiceManagement
+import UniformTypeIdentifiers
 
 /// Top-level Preferences view: 5 sections covering everything that used to
 /// live in the menubar. The menubar keeps only quick toggles + the
@@ -16,6 +18,7 @@ struct PreferencesView: View {
         case languages = "Languages"
         case behavior = "Behavior"
         case models = "AI"
+        case voice = "Voice"
         case apps = "Apps"
         case about = "About"
 
@@ -45,6 +48,7 @@ struct PreferencesView: View {
                 case .languages: LanguagesTab()
                 case .behavior:  BehaviorTab()
                 case .models:    ModelsTab()
+                case .voice:     VoiceTab()
                 case .apps:      AppsTab()
                 case .about:     AboutTab()
                 }
@@ -126,6 +130,501 @@ private struct GeneralTab: View {
             Button("Open System Settings", action: open)
                 .controlSize(.small)
         }
+    }
+}
+
+// MARK: - Voice
+
+private struct VoiceTab: View {
+    @AppStorage("lf.speechVoiceIdentifier") private var speechVoiceIdentifier = ""
+    @AppStorage("lf.speechRate") private var speechRate = 190.0
+    @AppStorage("lf.whisperModelPath") private var whisperModelPath = ""
+    @AppStorage("lf.whisperLanguage") private var whisperLanguage = "auto"
+
+    @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
+    @State private var voices = SpeechReader.availableVoices
+    @State private var recorderIsRecording = VoiceRecorder.shared.isRecording
+    @State private var recorderElapsed = VoiceRecorder.shared.elapsed
+    @State private var recorderAverageLevel = VoiceRecorder.shared.normalizedAveragePower
+    @State private var recorderPeakLevel = VoiceRecorder.shared.normalizedPeakPower
+    @State private var activeInputName = VoiceRecorder.shared.activeInputName
+    @State private var inputDevices = VoiceRecorder.inputDevices
+    @State private var lastRecordingURL = VoiceRecorder.shared.lastRecordingURL
+    @State private var recorderError = VoiceRecorder.shared.lastError
+    @State private var whisperAvailability = WhisperTranscriber.availability()
+    @State private var isTranscribing = false
+    @State private var transcriptionText = ""
+    @State private var transcriptionError: String?
+    @State private var downloadingWhisperModel: WhisperTranscriber.Model?
+    @State private var isDownloadingQwenASR = false
+    @State private var downloadProgress: Double?
+    @State private var whisperDownloadMessage: String?
+
+    private let timer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Form {
+            Section("Text to speech") {
+                Picker("Voice", selection: $speechVoiceIdentifier) {
+                    Text("System default").tag("")
+                    ForEach(voices, id: \.self) { voice in
+                        Text(SpeechReader.displayName(for: voice)).tag(voice)
+                    }
+                }
+                .onChange(of: speechVoiceIdentifier) { _ in
+                    SpeechReader.shared.applySettings()
+                }
+
+                HStack {
+                    Text("Speed")
+                    Slider(value: $speechRate, in: 120...260, step: 5)
+                        .onChange(of: speechRate) { _ in
+                            SpeechReader.shared.applySettings()
+                        }
+                    Text("\(Int(speechRate))")
+                        .foregroundColor(.secondary)
+                        .frame(width: 34, alignment: .trailing)
+                }
+
+                HStack {
+                    Button("Read sample") {
+                        SpeechReader.shared.speak("LangFlip can now read selected text aloud.")
+                    }
+                    Button("Stop") {
+                        SpeechReader.shared.stop()
+                    }
+                    Spacer()
+                }
+                .controlSize(.small)
+
+                helpText("Use the menu bar action to read the current text selection aloud. Native macOS voices are the first low-risk step before optional local TTS models.")
+            }
+
+            Section("Dictation") {
+                HStack {
+                    Image(systemName: microphoneStatus == .authorized ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                        .foregroundColor(microphoneStatus == .authorized ? .green : .orange)
+                    Text("Microphone")
+                    Text(microphoneStatusLabel)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button(microphoneButtonTitle) {
+                        switch microphoneStatus {
+                        case .authorized:
+                            PermissionStatus.openMicrophonePane()
+                        case .notDetermined:
+                            PermissionStatus.requestMicrophone { granted in
+                                microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
+                            }
+                        case .denied, .restricted:
+                            PermissionStatus.openMicrophonePane()
+                        @unknown default:
+                            PermissionStatus.openMicrophonePane()
+                        }
+                    }
+                    .controlSize(.small)
+                }
+
+                Divider()
+
+                HStack {
+                    Text("Input")
+                    Spacer()
+                    Text(activeInputName)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    Button("Sound Settings") {
+                        PermissionStatus.openSoundInputPane()
+                    }
+                    .controlSize(.small)
+                }
+
+                if !inputDevices.isEmpty {
+                    Text("Detected: \(inputDevices.map(\.localizedName).joined(separator: ", "))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+
+                HStack {
+                    Button(recorderIsRecording ? "Stop test recording" : "Start test recording") {
+                        if recorderIsRecording {
+                            VoiceRecorder.shared.stop()
+                        } else if microphoneStatus == .authorized {
+                            _ = VoiceRecorder.shared.start()
+                        } else if microphoneStatus == .notDetermined {
+                            PermissionStatus.requestMicrophone { _ in
+                                microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
+                                if microphoneStatus == .authorized {
+                                    _ = VoiceRecorder.shared.start()
+                                }
+                            }
+                        } else {
+                            PermissionStatus.openMicrophonePane()
+                        }
+                        refreshRecorderState()
+                    }
+                    .disabled(microphoneStatus == .restricted)
+
+                    if recorderIsRecording {
+                        Text(formatDuration(recorderElapsed))
+                            .monospacedDigit()
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+                }
+                .controlSize(.small)
+
+                if recorderIsRecording {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Input level")
+                            Spacer()
+                            Text(recorderPeakLevel > 0.04 ? "hearing you" : "quiet")
+                                .foregroundColor(.secondary)
+                        }
+                        ProgressView(value: recorderAverageLevel)
+                        ProgressView(value: recorderPeakLevel)
+                            .tint(.green)
+                    }
+                    .font(.caption)
+                }
+
+                if let lastRecordingURL {
+                    HStack {
+                        Text("Last recording")
+                        Spacer()
+                        Text(lastRecordingURL.lastPathComponent)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                        Button("Reveal") {
+                            NSWorkspace.shared.activateFileViewerSelecting([lastRecordingURL])
+                        }
+                        .controlSize(.small)
+                    }
+                }
+
+                Divider()
+
+                Picker("Language", selection: $whisperLanguage) {
+                    Text("Auto").tag("auto")
+                    Text("Українська").tag("uk")
+                    Text("Русский").tag("ru")
+                    Text("English").tag("en")
+                }
+
+                HStack {
+                    Text("Whisper")
+                    Spacer()
+                    Text(whisperStatusLabel)
+                        .foregroundColor(whisperAvailability.isReady ? .green : .orange)
+                        .lineLimit(1)
+                    Button("Choose Model") {
+                        chooseWhisperModel()
+                    }
+                    .controlSize(.small)
+                }
+
+                if !whisperModelPath.isEmpty {
+                    Text(whisperModelPath)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+
+                ForEach(WhisperTranscriber.Model.allCases) { model in
+                    HStack {
+                        Image(systemName: isSelectedWhisperModel(model) ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(isSelectedWhisperModel(model) ? .green : .secondary)
+                            .frame(width: 18)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(model.displayName)
+                                if isSelectedWhisperModel(model) {
+                                    Text("Selected")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                }
+                            }
+                            Text("\(model.approximateSize) · \(model.note)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        if WhisperTranscriber.isInstalled(model) {
+                            Button(isSelectedWhisperModel(model) ? "Selected" : "Use") {
+                                whisperModelPath = model.localURL.path
+                                whisperAvailability = WhisperTranscriber.availability()
+                                whisperDownloadMessage = "\(model.displayName) selected."
+                            }
+                            .disabled(isSelectedWhisperModel(model))
+                            .controlSize(.small)
+                        } else {
+                            Button(downloadingWhisperModel == model ? "Downloading…" : "Download") {
+                                downloadWhisperModel(model)
+                            }
+                            .disabled(downloadingWhisperModel != nil)
+                            .controlSize(.small)
+                        }
+                    }
+                }
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Qwen3-ASR-1.7B")
+                        Text("\(WhisperTranscriber.QwenASR.approximateSize) · downloaded for future Qwen runtime")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    if WhisperTranscriber.QwenASR.isInstalled {
+                        Button("Installed") {}
+                            .disabled(true)
+                            .controlSize(.small)
+                    } else {
+                        Button(isDownloadingQwenASR ? "Downloading…" : "Download") {
+                            downloadQwenASR()
+                        }
+                        .disabled(downloadingWhisperModel != nil || isDownloadingQwenASR)
+                        .controlSize(.small)
+                    }
+                }
+
+                if let whisperDownloadMessage {
+                    Text(whisperDownloadMessage)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let downloadProgress {
+                    ProgressView(value: downloadProgress)
+                    Text(downloadPercentLabel)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Text("Models folder: \(WhisperTranscriber.modelsDirectory.path)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+
+                HStack {
+                    Button(isTranscribing ? "Transcribing…" : "Transcribe last recording") {
+                        transcribeLastRecording()
+                    }
+                    .disabled(isTranscribing || lastRecordingURL == nil || !whisperAvailability.isReady)
+
+                    if let lastRecordingURL {
+                        Button("Copy result") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(transcriptionText, forType: .string)
+                        }
+                        .disabled(transcriptionText.isEmpty)
+                        .controlSize(.small)
+
+                        Text(lastRecordingURL.pathExtension.uppercased())
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                .controlSize(.small)
+
+                if !transcriptionText.isEmpty {
+                    Text(transcriptionText)
+                        .font(.callout)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let transcriptionError {
+                    Text("Transcription failed: \(transcriptionError)")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let recorderError {
+                    Text("Recording failed: \(recorderError)")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                helpText("Push-to-talk dictation is the next voice step: record locally, transcribe with Whisper/Qwen ASR, insert text, then run LangFlip cleanup.")
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear {
+            voices = SpeechReader.availableVoices
+            microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
+            refreshRecorderState()
+        }
+        .onReceive(timer) { _ in
+            microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
+            refreshRecorderState()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .langFlipVoiceRecorderChanged)) { _ in
+            refreshRecorderState()
+        }
+    }
+
+    private var microphoneStatusLabel: String {
+        switch microphoneStatus {
+        case .authorized: return "Granted"
+        case .notDetermined: return "Not requested"
+        case .denied: return "Denied"
+        case .restricted: return "Restricted"
+        @unknown default: return "Unknown"
+        }
+    }
+
+    private var microphoneButtonTitle: String {
+        switch microphoneStatus {
+        case .authorized: return "Open System Settings"
+        case .notDetermined: return "Request Access"
+        case .denied, .restricted: return "Open System Settings"
+        @unknown default: return "Open System Settings"
+        }
+    }
+
+    private func refreshRecorderState() {
+        recorderIsRecording = VoiceRecorder.shared.isRecording
+        recorderElapsed = VoiceRecorder.shared.elapsed
+        recorderAverageLevel = VoiceRecorder.shared.normalizedAveragePower
+        recorderPeakLevel = VoiceRecorder.shared.normalizedPeakPower
+        activeInputName = recorderIsRecording ? VoiceRecorder.shared.activeInputName : VoiceRecorder.defaultInputDeviceName()
+        inputDevices = VoiceRecorder.inputDevices
+        lastRecordingURL = VoiceRecorder.shared.lastRecordingURL
+        recorderError = VoiceRecorder.shared.lastError
+        whisperAvailability = WhisperTranscriber.availability()
+    }
+
+    private func formatDuration(_ value: TimeInterval) -> String {
+        let total = max(0, Int(value.rounded()))
+        return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    private var whisperStatusLabel: String {
+        if whisperAvailability.executableURL == nil { return "CLI missing" }
+        if whisperAvailability.modelURL == nil { return "Model missing" }
+        return whisperAvailability.modelURL?.lastPathComponent ?? "Ready"
+    }
+
+    private func isSelectedWhisperModel(_ model: WhisperTranscriber.Model) -> Bool {
+        let selected = whisperAvailability.modelURL?.standardizedFileURL.path
+            ?? URL(fileURLWithPath: NSString(string: whisperModelPath).expandingTildeInPath).standardizedFileURL.path
+        return selected == model.localURL.standardizedFileURL.path
+    }
+
+    private func chooseWhisperModel() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.data]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.prompt = "Choose"
+        if panel.runModal() == .OK, let url = panel.url {
+            whisperModelPath = url.path
+            whisperAvailability = WhisperTranscriber.availability()
+        }
+    }
+
+    private func transcribeLastRecording() {
+        guard let lastRecordingURL else { return }
+        isTranscribing = true
+        transcriptionText = ""
+        transcriptionError = nil
+
+        Task {
+            do {
+                let text = try await WhisperTranscriber.transcribe(
+                    audioURL: lastRecordingURL,
+                    language: whisperLanguage
+                )
+                await MainActor.run {
+                    transcriptionText = text
+                    isTranscribing = false
+                }
+            } catch {
+                await MainActor.run {
+                    transcriptionError = error.localizedDescription
+                    isTranscribing = false
+                }
+            }
+        }
+    }
+
+    private func downloadWhisperModel(_ model: WhisperTranscriber.Model) {
+        downloadingWhisperModel = model
+        whisperDownloadMessage = "Downloading \(model.displayName) (\(model.approximateSize))…"
+
+        Task {
+            do {
+                let url = try await WhisperTranscriber.download(model) { progress in
+                    downloadProgress = progress.fraction
+                    whisperDownloadMessage = "Downloading \(model.displayName): \(formatPercent(progress.fraction)) to \(WhisperTranscriber.modelsDirectory.path)"
+                }
+                await MainActor.run {
+                    whisperModelPath = url.path
+                    whisperAvailability = WhisperTranscriber.availability()
+                    downloadingWhisperModel = nil
+                    downloadProgress = nil
+                    whisperDownloadMessage = "\(model.displayName) is ready."
+                }
+            } catch {
+                await MainActor.run {
+                    downloadingWhisperModel = nil
+                    downloadProgress = nil
+                    whisperDownloadMessage = "Download failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func downloadQwenASR() {
+        isDownloadingQwenASR = true
+        downloadProgress = 0
+        whisperDownloadMessage = "Downloading \(WhisperTranscriber.QwenASR.displayName) (\(WhisperTranscriber.QwenASR.approximateSize)) to \(WhisperTranscriber.QwenASR.directory.path)…"
+
+        Task {
+            do {
+                let url = try await WhisperTranscriber.downloadQwenASR { progress in
+                    downloadProgress = progress.fraction
+                    whisperDownloadMessage = "Downloading \(WhisperTranscriber.QwenASR.displayName): \(formatPercent(progress.fraction)) · \(progress.currentFile)"
+                }
+                await MainActor.run {
+                    isDownloadingQwenASR = false
+                    downloadProgress = nil
+                    whisperDownloadMessage = "\(WhisperTranscriber.QwenASR.displayName) downloaded to \(url.path). Runtime integration is next."
+                }
+            } catch {
+                await MainActor.run {
+                    isDownloadingQwenASR = false
+                    downloadProgress = nil
+                    whisperDownloadMessage = "Qwen download failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private var downloadPercentLabel: String {
+        guard let downloadProgress else { return "" }
+        return "\(formatPercent(downloadProgress)) downloaded"
+    }
+
+    private func formatPercent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
+    @ViewBuilder
+    private func helpText(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

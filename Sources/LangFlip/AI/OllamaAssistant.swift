@@ -195,6 +195,21 @@ final class OllamaAssistant: AIAssistant {
         }
     }
 
+    func warmUp() {
+        guard isReady else { return }
+        runInference(
+            prompt: "Reply with exactly: OK",
+            options: ["temperature": 0, "num_ctx": 256, "num_predict": 4]
+        ) { result in
+            switch result {
+            case .success:
+                AppLog.write("ollama warm-up completed model=\(self.model)")
+            case .failure(let reason):
+                AppLog.write("ollama warm-up failed model=\(self.model): \(reason)")
+            }
+        }
+    }
+
     // MARK: - HTTP
 
     private enum InferenceResult {

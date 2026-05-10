@@ -245,9 +245,96 @@ Decide whether the App Store is worth the extra sandboxing and review work:
 
 ---
 
+## Phase 6 — Voice layer
+
+Goal: make LangFlip useful not only while typing, but also while speaking and
+listening. Keep the same product principle: explicit hotkeys, local-first where
+possible, clear permissions, and no surprise network calls.
+
+### 6.1 Dictation MVP — push-to-talk → insert text
+First target because it fits LangFlip's core loop best.
+
+- Add Microphone permission onboarding and diagnostics.
+- Add a configurable push-to-talk hotkey.
+- Record audio while the hotkey is held, then transcribe on release.
+- Insert recognized text into the focused field.
+- Immediately run the existing AI cleanup pass so dictated text gets punctuation,
+  casing, and typo cleanup before it lands.
+- Start with `openai/whisper-large-v3-turbo` as the baseline model because it is
+  MIT-licensed, multilingual, widely supported, and fast enough to validate UX.
+- Run the model out-of-process first (local Python helper/service) so the macOS
+  app stays small and we can swap runtimes without destabilizing EventTap.
+
+Success criteria: dictating one paragraph into Slack/Telegram/Notes feels faster
+than typing, and the final text needs little manual cleanup.
+
+### 6.2 Streaming dictation experiment
+Try to solve the Wispr Flow pain point: users should see text while speaking.
+
+- Evaluate `Qwen/Qwen3-ASR-1.7B` and, if needed, `Qwen3-ASR-0.6B`.
+- Prototype a local streaming service that emits partial transcripts.
+- Decide how partial text appears:
+  - temporary floating preview; or
+  - live insertion into the focused field with stable replacement ranges.
+- Keep an easy fallback to "transcribe after release" if streaming is unstable.
+
+Success criteria: partial text is useful rather than distracting, and corrections
+do not corrupt existing text in common apps.
+
+### 6.3 Text-to-speech for selected text
+Second product surface: let users listen while doing other tasks.
+
+- Add "Read selected text aloud" menu action and hotkey.
+- Add playback controls: play/pause/stop, speed, voice.
+- MVP can use macOS `AVSpeechSynthesizer` first for low-risk native playback.
+- Then evaluate `k2-fsa/OmniVoice` as an optional local model for higher-quality
+  voices and multilingual output.
+
+Success criteria: selected agent replies, articles, and docs can be listened to
+without blocking the user's hands or eyes.
+
+### 6.4 OmniVoice local TTS service
+If native TTS feels too limited, integrate OmniVoice as an optional install.
+
+- Download/install model into Application Support, not the app bundle.
+- Run it as an out-of-process local service.
+- Cache generated audio for repeated playback.
+- Support voice design presets before custom voice cloning.
+- Make model size, storage location, and deletion obvious in Preferences.
+
+### 6.5 Voice cloning — fun, but guarded
+Voice cloning can be magical and meme-worthy, but it needs careful UX.
+
+- Only allow cloning from user-provided reference audio.
+- Require an explicit consent/safety notice before enabling custom voice cloning.
+- Store reference clips locally and let users delete them.
+- Do not ship impersonation-oriented presets of real people or copyrighted
+  characters. Prefer neutral built-in style presets.
+- Label generated/clone voices clearly in UI.
+
+Success criteria: the feature feels playful and useful without encouraging
+impersonation or unsafe sharing.
+
+### 6.6 Voice settings
+Preferences should eventually include:
+
+- STT provider/model: Whisper turbo, Qwen ASR, system dictation, custom endpoint.
+- TTS provider/model: macOS voice, OmniVoice, custom endpoint.
+- Model install/update/remove actions.
+- Microphone device selection.
+- Push-to-talk hotkey.
+- Language hints and automatic language detection.
+- Local storage usage for models, cached audio, and reference voices.
+
+---
+
 ## Recommended order to resume
 
 When picking this up next, in this order:
+
+**Sprint 0 — Current trunk cleanup (same day)**
+1. Commit and release the built-in layout rules added after v0.2.4:
+   `тексті` stays Ukrainian, `єто` flips to Russian `это`.
 
 **Sprint 1 — Smart heuristics, the core IQ jump (1–2 weeks)**
 1. Phase 1.1 — Backspace self-learning (biggest single UX win)
@@ -272,6 +359,12 @@ When picking this up next, in this order:
 14. Phase 4.1 — DMG packaging via `create-dmg`
 15. README with screenshots, GIF demo, install instructions
 16. GitHub Release v0.2.0 with `.dmg`
+
+**Sprint 5 — Voice MVP (1–2 weeks)**
+17. Phase 6.1 — Dictation MVP with Whisper large-v3-turbo
+18. Phase 6.2 — Streaming ASR experiment with Qwen3-ASR
+19. Phase 6.3 — TTS for selected text with macOS voices
+20. Phase 6.4 / 6.5 — OmniVoice + voice cloning only after MVP UX is proven
 
 After that the app is genuinely usable by a non-technical colleague: install the
 `.dmg`, click through the wizard, type as normal — it does the right thing

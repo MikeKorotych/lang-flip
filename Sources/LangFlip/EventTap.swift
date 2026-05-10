@@ -695,6 +695,38 @@ final class EventTap {
         }
     }
 
+    // MARK: - Read selection aloud
+
+    func readSelectedTextAloud() {
+        let pb = NSPasteboard.general
+        let snapshot = PasteboardSnapshot.capture(pb)
+        let countBefore = pb.changeCount
+
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: speech: posting Cmd+C\n".utf8)) }
+        postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_C))
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
+            while Date() < deadline && NSPasteboard.general.changeCount == countBefore {
+                Thread.sleep(forTimeInterval: Self.copyPollInterval)
+            }
+
+            DispatchQueue.main.async {
+                let pb = NSPasteboard.general
+                defer { snapshot.restore(to: pb) }
+                guard pb.changeCount > countBefore,
+                      let text = pb.string(forType: .string),
+                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                else {
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: speech: no selected text\n".utf8)) }
+                    return
+                }
+                SpeechReader.shared.speak(text)
+            }
+        }
+    }
+
     // MARK: - Screen-region OCR (multimodal)
 
     /// Run macOS's built-in interactive area-select screenshot, send

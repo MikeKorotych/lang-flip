@@ -55,6 +55,10 @@ protocol AIAssistant: AnyObject {
     /// so this returns `.unsupported` there. Ollama with a multimodal
     /// model (Gemma 3+, Qwen 2.5-VL, LLaVA) does the real work.
     func extractTextFromImage(_ input: AIOcrRequest, completion: @escaping (AIOcrResult) -> Void)
+
+    /// Optional cold-start warm-up. Backends with a local runtime can use
+    /// this to load the model before the user's first real request.
+    func warmUp()
 }
 
 extension AIAssistant {
@@ -70,6 +74,7 @@ extension AIAssistant {
     func extractTextFromImage(_ input: AIOcrRequest, completion: @escaping (AIOcrResult) -> Void) {
         completion(.unsupported)
     }
+    func warmUp() {}
 }
 
 // MARK: - Vote model

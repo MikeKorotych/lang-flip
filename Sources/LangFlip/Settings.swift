@@ -72,6 +72,11 @@ final class Settings {
         static let ollamaModel = "lf.ollamaModel"
         static let openaiModel = "lf.openaiModel"
         static let openaiBaseURL = "lf.openaiBaseURL"
+        static let speechVoiceIdentifier = "lf.speechVoiceIdentifier"
+        static let speechRate = "lf.speechRate"
+        static let microphoneDeviceID = "lf.microphoneDeviceID"
+        static let whisperModelPath = "lf.whisperModelPath"
+        static let whisperLanguage = "lf.whisperLanguage"
     }
 
     var enabled: Bool {
@@ -132,6 +137,31 @@ final class Settings {
     var soundEnabled: Bool {
         get { defaults.object(forKey: Keys.soundEnabled) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.soundEnabled) }
+    }
+
+    var speechVoiceIdentifier: String {
+        get { defaults.string(forKey: Keys.speechVoiceIdentifier) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.speechVoiceIdentifier) }
+    }
+
+    var speechRate: Double {
+        get { defaults.object(forKey: Keys.speechRate) as? Double ?? 190 }
+        set { defaults.set(newValue, forKey: Keys.speechRate) }
+    }
+
+    var microphoneDeviceID: String {
+        get { defaults.string(forKey: Keys.microphoneDeviceID) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.microphoneDeviceID) }
+    }
+
+    var whisperModelPath: String {
+        get { defaults.string(forKey: Keys.whisperModelPath) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.whisperModelPath) }
+    }
+
+    var whisperLanguage: String {
+        get { defaults.string(forKey: Keys.whisperLanguage) ?? "auto" }
+        set { defaults.set(newValue, forKey: Keys.whisperLanguage) }
     }
 
     /// Optional AI assistant mode. `.off` keeps the app entirely rules-

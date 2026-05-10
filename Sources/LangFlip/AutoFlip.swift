@@ -82,6 +82,9 @@ final class AutoFlip {
     func suggestedFlip(for word: String, currentLayout: Layout) -> Layout? {
         // Words the user previously rejected via Backspace — never auto-flip.
         if BackspaceLearner.shared.isExcluded(word) { return nil }
+        // Hand-picked false positives that are common real words in the
+        // source layout, even when the converted form also looks valid.
+        if isForcedKeep(word, currentLayout: currentLayout) { return nil }
         // Hand-picked short phrases where dictionary scoring is too
         // conservative but the intent is clear in day-to-day typing.
         if let forced = forcedFlip(for: word, currentLayout: currentLayout) {
@@ -136,10 +139,20 @@ final class AutoFlip {
     private func forcedFlip(for word: String, currentLayout: Layout) -> Layout? {
         let lower = word.lowercased()
         switch (currentLayout, lower) {
-        case (.uk, "бі"):
+        case (.uk, "бі"), (.uk, "єто"):
             return .ru
         default:
             return nil
+        }
+    }
+
+    private func isForcedKeep(_ word: String, currentLayout: Layout) -> Bool {
+        let lower = word.lowercased()
+        switch (currentLayout, lower) {
+        case (.uk, "тексті"):
+            return true
+        default:
+            return false
         }
     }
 

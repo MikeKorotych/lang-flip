@@ -17,6 +17,8 @@ final class MenubarController: NSObject {
     private let flipSelectionItem = NSMenuItem(title: "Flip Selected Text", action: #selector(flipSelectedText), keyEquivalent: "")
     private let fixSelectionItem = NSMenuItem(title: "Fix Selected Text", action: #selector(fixSelectedText), keyEquivalent: "")
     private let translateMenuItem = NSMenuItem(title: "Translate selection", action: nil, keyEquivalent: "")
+    private let readSelectionItem = NSMenuItem(title: "Read Selected Text Aloud", action: #selector(readSelectedTextAloud), keyEquivalent: "")
+    private let stopReadingItem = NSMenuItem(title: "Stop Reading", action: #selector(stopReading), keyEquivalent: "")
     private let ocrMenuItem = NSMenuItem(title: "Capture text from screen…", action: #selector(captureScreenText), keyEquivalent: "")
     private let prefsItem = NSMenuItem(title: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",")
     private let updatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
@@ -57,6 +59,8 @@ final class MenubarController: NSObject {
         autoFlipItem.target = self
         flipSelectionItem.target = self
         fixSelectionItem.target = self
+        readSelectionItem.target = self
+        stopReadingItem.target = self
         prefsItem.target = self
         updatesItem.target = self
         quitItem.target = self
@@ -83,6 +87,8 @@ final class MenubarController: NSObject {
         translateMenuItem.submenu = translateSub
         menu.addItem(.separator())
         menu.addItem(translateMenuItem)
+        menu.addItem(readSelectionItem)
+        menu.addItem(stopReadingItem)
 
         ocrMenuItem.target = self
         ocrMenuItem.keyEquivalent = "S"
@@ -122,6 +128,7 @@ final class MenubarController: NSObject {
         // wouldn't do anything useful and risks confusing users who
         // haven't opted into AI yet.
         translateMenuItem.isHidden = (Settings.shared.aiMode == .off)
+        stopReadingItem.isEnabled = SpeechReader.shared.isSpeaking
         // OCR only belongs in the quick menu when the selected local
         // model can actually see images. Keep it hidden for text-only
         // models so release users don't hit a dead-end button.
@@ -182,6 +189,15 @@ final class MenubarController: NSObject {
         // app, so a Cmd+C round-trip from inside translateSelectionWithAI
         // lands in the right window.
         eventTap?.translateSelectionWithAI(target: target)
+    }
+
+    @objc private func readSelectedTextAloud() {
+        eventTap?.readSelectedTextAloud()
+    }
+
+    @objc private func stopReading() {
+        SpeechReader.shared.stop()
+        refresh()
     }
 
     @objc private func openPreferences() {

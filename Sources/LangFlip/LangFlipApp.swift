@@ -125,5 +125,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let hasKey = !(Settings.shared.openaiAPIKey?.isEmpty ?? true)
             log("OpenAI mode: model='\(Settings.shared.openaiModel)' base='\(Settings.shared.openaiBaseURL)' key=\(hasKey ? "present" : "MISSING — set in Preferences")")
         }
+        if assistantReady {
+            DispatchQueue.global(qos: .utility).async {
+                assistant.warmUp()
+            }
+        }
     }
 }

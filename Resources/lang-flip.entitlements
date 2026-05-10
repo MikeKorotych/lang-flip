@@ -9,9 +9,15 @@
       Distribution path is "outside the Mac App Store", which is fine
       with hardened runtime + notarization.
 
+      Microphone access is optional and used only for the future dictation
+      feature. Hardened runtime requires this entitlement before macOS will
+      show the microphone consent prompt.
+
       We do NOT need any of the security.cs.* opt-outs (allow-jit,
       allow-unsigned-executable-memory, etc.) — the binary is plain Swift
       with no JIT or runtime code generation.
     -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
 </dict>
 </plist>

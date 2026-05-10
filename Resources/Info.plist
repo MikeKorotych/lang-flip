@@ -31,6 +31,8 @@
 	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string>Open source — MIT.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>LangFlip needs microphone access for optional local dictation.</string>
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>
