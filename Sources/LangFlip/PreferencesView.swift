@@ -242,25 +242,29 @@ private struct VoiceTab: View {
     var body: some View {
         Form {
             Section("Text to speech") {
-                Picker("Backend", selection: $ttsBackend) {
+                Picker(selection: $ttsBackend) {
                     ForEach(TextToSpeechBackend.allCases) { backend in
                         Text(backend.displayName).tag(backend.rawValue)
                     }
+                } label: {
+                    settingLabel("Backend", help: "Choose between the built-in macOS voices and the local OmniVoice model.")
                 }
 
                 if activeTTSBackend == .system {
-                    Picker("Voice", selection: $speechVoiceIdentifier) {
+                    Picker(selection: $speechVoiceIdentifier) {
                         Text("System default").tag("")
                         ForEach(voices, id: \.self) { voice in
                             Text(SpeechReader.displayName(for: voice)).tag(voice)
                         }
+                    } label: {
+                        settingLabel("Voice", help: "The macOS system voice used when Backend is set to System voices.")
                     }
                     .onChange(of: speechVoiceIdentifier) { _ in
                         SpeechReader.shared.applySettings()
                     }
 
                     HStack {
-                        Text("Speed")
+                        settingLabel("Speed", help: "Speech rate for macOS system voices. Higher numbers speak faster.")
                         Slider(value: $speechRate, in: 120...260, step: 5)
                             .onChange(of: speechRate) { _ in
                                 SpeechReader.shared.applySettings()
@@ -270,50 +274,62 @@ private struct VoiceTab: View {
                             .frame(width: 34, alignment: .trailing)
                     }
                 } else {
-                    Picker("Language", selection: $omniVoiceLanguage) {
+                    Picker(selection: $omniVoiceLanguage) {
                         ForEach(OmniVoiceLanguage.allCases) { language in
                             Text(language.displayName).tag(language.rawValue)
                         }
+                    } label: {
+                        settingLabel("Language", help: "Language hint passed to OmniVoice. Auto guesses English, Ukrainian, or Russian from the selected text.")
                     }
 
                     HStack {
-                        Text("OmniVoice")
+                        settingLabel("OmniVoice", help: "Runtime status for the local OmniVoice text-to-speech model.")
                         Spacer()
                         Text(omniVoiceStatusLabel)
                             .foregroundColor(omniVoiceAvailability.isReady ? .green : .orange)
                             .lineLimit(1)
                     }
 
-                    Picker("Voice", selection: $omniVoiceGender) {
+                    Picker(selection: $omniVoiceGender) {
                         ForEach(OmniVoiceGenderStyle.allCases) { style in
                             Text(style.displayName).tag(style.rawValue)
                         }
+                    } label: {
+                        settingLabel("Voice", help: "High-level voice identity hint. OmniVoice supports male and female voice design tags.")
                     }
 
-                    Picker("Age", selection: $omniVoiceAge) {
+                    Picker(selection: $omniVoiceAge) {
                         ForEach(OmniVoiceAgeStyle.allCases) { style in
                             Text(style.displayName).tag(style.rawValue)
                         }
+                    } label: {
+                        settingLabel("Age", help: "Age-style hint for voice design. It changes the character of the generated voice, not the text.")
                     }
 
-                    Picker("Pitch", selection: $omniVoicePitch) {
+                    Picker(selection: $omniVoicePitch) {
                         ForEach(OmniVoicePitchStyle.allCases) { style in
                             Text(style.displayName).tag(style.rawValue)
                         }
+                    } label: {
+                        settingLabel("Pitch", help: "Voice pitch hint. Lower sounds deeper; higher sounds brighter.")
                     }
 
-                    Picker("Accent", selection: $omniVoiceAccent) {
+                    Picker(selection: $omniVoiceAccent) {
                         ForEach(OmniVoiceAccentStyle.allCases) { style in
                             Text(style.displayName).tag(style.rawValue)
                         }
+                    } label: {
+                        settingLabel("Accent", help: "Accent hint for voice design. Most useful for English speech.")
                     }
 
-                    Toggle("Whispered voice", isOn: $omniVoiceWhisper)
+                    Toggle(isOn: $omniVoiceWhisper) {
+                        settingLabel("Whispered voice", help: "Adds OmniVoice's whisper style tag, making the generated voice sound quieter and breathier.")
+                    }
 
                     Divider()
 
                     HStack {
-                        Text("Reference voice")
+                        settingLabel("Reference voice", help: "Optional audio sample for voice cloning. OmniVoice will try to imitate the speaker from this file.")
                         Spacer()
                         Text(omniVoiceReferenceAudioLabel)
                             .foregroundColor(.secondary)
@@ -334,12 +350,13 @@ private struct VoiceTab: View {
                         .textFieldStyle(.roundedBorder)
                         .controlSize(.small)
                         .disabled(omniVoiceReferenceAudioPath.isEmpty)
+                        .help("Optional transcript of the reference audio. Providing it can improve voice cloning quality.")
 
                     Divider()
 
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            Text("Speed")
+                            settingLabel("Speed", help: "Playback speed multiplier. 1.0 is normal; lower is slower, higher is faster. Disabled when fixed Duration is set.")
                             Slider(value: $omniVoiceSpeed, in: 0.5...1.5, step: 0.05)
                             Text(String(format: "%.2fx", omniVoiceSpeed))
                                 .foregroundColor(.secondary)
@@ -348,7 +365,7 @@ private struct VoiceTab: View {
                         .disabled(omniVoiceDuration > 0)
 
                         HStack {
-                            Text("Duration")
+                            settingLabel("Duration", help: "Fixed output length in seconds. Auto lets OmniVoice estimate natural duration. Any fixed value overrides Speed.")
                             Slider(value: $omniVoiceDuration, in: 0...60, step: 0.5)
                             Text(omniVoiceDuration > 0 ? String(format: "%.1fs", omniVoiceDuration) : "Auto")
                                 .foregroundColor(.secondary)
@@ -356,7 +373,7 @@ private struct VoiceTab: View {
                         }
 
                         HStack {
-                            Text("Inference steps")
+                            settingLabel("Inference steps", help: "Generation quality budget. Fewer steps are faster; more steps can improve quality but take longer.")
                             Slider(
                                 value: Binding(
                                     get: { Double(omniVoiceNumSteps) },
@@ -371,7 +388,7 @@ private struct VoiceTab: View {
                         }
 
                         HStack {
-                            Text("Guidance")
+                            settingLabel("Guidance", help: "How strongly the model follows the language, style, and voice conditions. Higher can be more controlled but less natural.")
                             Slider(value: $omniVoiceGuidanceScale, in: 0...4, step: 0.1)
                             Text(String(format: "%.1f", omniVoiceGuidanceScale))
                                 .foregroundColor(.secondary)
@@ -381,17 +398,22 @@ private struct VoiceTab: View {
 
                     DisclosureGroup("Advanced generation") {
                         VStack(alignment: .leading, spacing: 10) {
-                            Toggle("Denoise", isOn: $omniVoiceDenoise)
-                            Toggle("Postprocess output", isOn: $omniVoicePostprocessOutput)
-                            advancedOmniVoiceSlider("T-shift", value: $omniVoiceTShift, range: 0...2, step: 0.05)
-                            advancedOmniVoiceSlider("Layer penalty", value: $omniVoiceLayerPenaltyFactor, range: 0...10, step: 0.5)
-                            advancedOmniVoiceSlider("Position temperature", value: $omniVoicePositionTemperature, range: 0...10, step: 0.5)
-                            advancedOmniVoiceSlider("Class temperature", value: $omniVoiceClassTemperature, range: 0...2, step: 0.05)
+                            Toggle(isOn: $omniVoiceDenoise) {
+                                settingLabel("Denoise", help: "Adds OmniVoice's denoise conditioning. Usually best left on for cleaner speech.")
+                            }
+                            Toggle(isOn: $omniVoicePostprocessOutput) {
+                                settingLabel("Postprocess output", help: "Trims long silences and applies small audio cleanup after generation. Usually best left on.")
+                            }
+                            advancedOmniVoiceSlider("T-shift", value: $omniVoiceTShift, range: 0...2, step: 0.05, help: "Sampling timestep shift. The default is conservative; changing it can alter timing and stability.")
+                            advancedOmniVoiceSlider("Layer penalty", value: $omniVoiceLayerPenaltyFactor, range: 0...10, step: 0.5, help: "Penalty used during token/codebook selection. Higher values push the model toward earlier layers.")
+                            advancedOmniVoiceSlider("Position temperature", value: $omniVoicePositionTemperature, range: 0...10, step: 0.5, help: "Randomness for position selection. Higher values can add variety but may reduce consistency.")
+                            advancedOmniVoiceSlider("Class temperature", value: $omniVoiceClassTemperature, range: 0...2, step: 0.05, help: "Randomness for token sampling. 0 is greedy and most stable; higher values can be more varied.")
                             Button("Reset generation settings") {
                                 Settings.shared.resetOmniVoiceGenerationSettings()
                                 syncOmniVoiceGenerationSettingsFromDefaults()
                             }
                             .controlSize(.small)
+                            .help("Restore OmniVoice generation settings to the model defaults used by LangFlip.")
                         }
                         .padding(.top, 6)
                     }
@@ -799,19 +821,33 @@ private struct VoiceTab: View {
     }
 
     @ViewBuilder
+    private func settingLabel(_ title: String, help: String) -> some View {
+        HStack(spacing: 5) {
+            Text(title)
+            Image(systemName: "questionmark.circle")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .help(help)
+        }
+        .help(help)
+    }
+
+    @ViewBuilder
     private func advancedOmniVoiceSlider(
         _ title: String,
         value: Binding<Double>,
         range: ClosedRange<Double>,
-        step: Double
+        step: Double,
+        help: String
     ) -> some View {
         HStack {
-            Text(title)
+            settingLabel(title, help: help)
             Slider(value: value, in: range, step: step)
             Text(String(format: "%.2f", value.wrappedValue))
                 .foregroundColor(.secondary)
                 .frame(width: 48, alignment: .trailing)
         }
+        .help(help)
     }
 
     private var activeSpeechModelLabel: String {
