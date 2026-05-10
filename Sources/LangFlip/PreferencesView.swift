@@ -190,8 +190,10 @@ private struct GeneralTab: View {
 // MARK: - Voice
 
 private struct VoiceTab: View {
+    @AppStorage("lf.ttsBackend") private var ttsBackend = TextToSpeechBackend.system.rawValue
     @AppStorage("lf.speechVoiceIdentifier") private var speechVoiceIdentifier = ""
     @AppStorage("lf.speechRate") private var speechRate = 190.0
+    @AppStorage("lf.omniVoiceInstruct") private var omniVoiceInstruct = ""
     @AppStorage("lf.whisperModelPath") private var whisperModelPath = ""
     @AppStorage("lf.whisperLanguage") private var whisperLanguage = "auto"
 
@@ -212,45 +214,98 @@ private struct VoiceTab: View {
     @State private var downloadingWhisperModel: WhisperTranscriber.Model?
     @State private var downloadProgress: Double?
     @State private var whisperDownloadMessage: String?
+    @State private var omniVoiceAvailability = OmniVoiceSynthesizer.availability()
+    @State private var isGeneratingOmniVoice = false
+    @State private var omniVoiceOutputURL = OmniVoiceSynthesizer.shared.lastOutputURL
+    @State private var omniVoiceMessage: String?
 
     private let timer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
 
     var body: some View {
         Form {
             Section("Text to speech") {
-                Picker("Voice", selection: $speechVoiceIdentifier) {
-                    Text("System default").tag("")
-                    ForEach(voices, id: \.self) { voice in
-                        Text(SpeechReader.displayName(for: voice)).tag(voice)
+                Picker("Backend", selection: $ttsBackend) {
+                    ForEach(TextToSpeechBackend.allCases) { backend in
+                        Text(backend.displayName).tag(backend.rawValue)
                     }
                 }
-                .onChange(of: speechVoiceIdentifier) { _ in
-                    SpeechReader.shared.applySettings()
-                }
 
-                HStack {
-                    Text("Speed")
-                    Slider(value: $speechRate, in: 120...260, step: 5)
-                        .onChange(of: speechRate) { _ in
-                            SpeechReader.shared.applySettings()
+                if activeTTSBackend == .system {
+                    Picker("Voice", selection: $speechVoiceIdentifier) {
+                        Text("System default").tag("")
+                        ForEach(voices, id: \.self) { voice in
+                            Text(SpeechReader.displayName(for: voice)).tag(voice)
                         }
-                    Text("\(Int(speechRate))")
-                        .foregroundColor(.secondary)
-                        .frame(width: 34, alignment: .trailing)
+                    }
+                    .onChange(of: speechVoiceIdentifier) { _ in
+                        SpeechReader.shared.applySettings()
+                    }
+
+                    HStack {
+                        Text("Speed")
+                        Slider(value: $speechRate, in: 120...260, step: 5)
+                            .onChange(of: speechRate) { _ in
+                                SpeechReader.shared.applySettings()
+                            }
+                        Text("\(Int(speechRate))")
+                            .foregroundColor(.secondary)
+                            .frame(width: 34, alignment: .trailing)
+                    }
+                } else {
+                    HStack {
+                        Text("OmniVoice")
+                        Spacer()
+                        Text(omniVoiceStatusLabel)
+                            .foregroundColor(omniVoiceAvailability.isReady ? .green : .orange)
+                            .lineLimit(1)
+                    }
+
+                    TextField("Voice style, e.g. female, low pitch, British accent", text: $omniVoiceInstruct)
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.small)
+
+                    if let omniVoiceMessage {
+                        Text(omniVoiceMessage)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if let omniVoiceOutputURL {
+                        HStack {
+                            Text("Last OmniVoice output")
+                            Spacer()
+                            Text(omniVoiceOutputURL.lastPathComponent)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                            Button("Play") {
+                                OmniVoiceSynthesizer.shared.play(omniVoiceOutputURL)
+                            }
+                            .controlSize(.small)
+                            Button("Reveal") {
+                                NSWorkspace.shared.activateFileViewerSelecting([omniVoiceOutputURL])
+                            }
+                            .controlSize(.small)
+                        }
+                    }
                 }
 
                 HStack {
-                    Button("Read sample") {
-                        SpeechReader.shared.speak("LangFlip can now read selected text aloud.")
+                    Button(activeTTSBackend == .omniVoice && isGeneratingOmniVoice ? "Generating…" : "Read sample") {
+                        readTTSSample()
                     }
+                    .disabled(activeTTSBackend == .omniVoice && (!omniVoiceAvailability.isReady || isGeneratingOmniVoice))
+
                     Button("Stop") {
                         SpeechReader.shared.stop()
+                        OmniVoiceSynthesizer.shared.stop()
+                        isGeneratingOmniVoice = false
                     }
                     Spacer()
                 }
                 .controlSize(.small)
 
-                helpText("Use the menu bar action to read the current text selection aloud. Native macOS voices are the first low-risk step before optional local TTS models.")
+                helpText("Use the menu bar action to read the current text selection aloud. System voices are instant; OmniVoice is local, higher quality, and heavier.")
             }
 
             Section("Dictation") {
@@ -486,10 +541,12 @@ private struct VoiceTab: View {
             voices = SpeechReader.availableVoices
             microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
             refreshRecorderState()
+            refreshOmniVoiceState()
         }
         .onReceive(timer) { _ in
             microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
             refreshRecorderState()
+            refreshOmniVoiceState()
         }
         .onReceive(NotificationCenter.default.publisher(for: .langFlipVoiceRecorderChanged)) { _ in
             refreshRecorderState()
@@ -530,6 +587,49 @@ private struct VoiceTab: View {
     private func formatDuration(_ value: TimeInterval) -> String {
         let total = max(0, Int(value.rounded()))
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    private var activeTTSBackend: TextToSpeechBackend {
+        TextToSpeechBackend(rawValue: ttsBackend) ?? .system
+    }
+
+    private var omniVoiceStatusLabel: String {
+        if omniVoiceAvailability.executableURL == nil { return "Runtime missing" }
+        if omniVoiceAvailability.ffmpegURL == nil { return "ffmpeg missing" }
+        if !omniVoiceAvailability.modelCacheExists { return "Model will download on first use" }
+        return "Ready"
+    }
+
+    private func refreshOmniVoiceState() {
+        omniVoiceAvailability = OmniVoiceSynthesizer.availability()
+        omniVoiceOutputURL = OmniVoiceSynthesizer.shared.lastOutputURL
+    }
+
+    private func readTTSSample() {
+        let sample = "LangFlip can now read selected text aloud with the selected text to speech backend."
+        if activeTTSBackend == .system {
+            SpeechReader.shared.speak(sample)
+            return
+        }
+
+        isGeneratingOmniVoice = true
+        omniVoiceMessage = "Generating OmniVoice sample..."
+        Task {
+            do {
+                let url = try await OmniVoiceSynthesizer.shared.generate(text: sample)
+                await MainActor.run {
+                    isGeneratingOmniVoice = false
+                    omniVoiceOutputURL = url
+                    omniVoiceMessage = "Generated \(url.lastPathComponent)."
+                    OmniVoiceSynthesizer.shared.play(url)
+                }
+            } catch {
+                await MainActor.run {
+                    isGeneratingOmniVoice = false
+                    omniVoiceMessage = "OmniVoice failed: \(error.localizedDescription)"
+                }
+            }
+        }
     }
 
     private var activeSpeechModelLabel: String {

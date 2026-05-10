@@ -12,7 +12,7 @@ final class SpeechReader: NSObject, NSSpeechSynthesizerDelegate {
     }
 
     var isSpeaking: Bool {
-        synthesizer.isSpeaking
+        synthesizer.isSpeaking || OmniVoiceSynthesizer.shared.isSpeaking
     }
 
     static var availableVoices: [String] {
@@ -29,6 +29,10 @@ final class SpeechReader: NSObject, NSSpeechSynthesizerDelegate {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
         stop()
+        if Settings.shared.ttsBackend == .omniVoice {
+            _ = OmniVoiceSynthesizer.shared.speak(clean)
+            return
+        }
         applySettings()
         synthesizer.startSpeaking(clean)
     }
@@ -37,6 +41,7 @@ final class SpeechReader: NSObject, NSSpeechSynthesizerDelegate {
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking()
         }
+        OmniVoiceSynthesizer.shared.stop()
     }
 
     func applySettings() {

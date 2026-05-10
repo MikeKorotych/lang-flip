@@ -42,6 +42,20 @@ enum HotkeyPreset: String, CaseIterable, Identifiable {
     }
 }
 
+enum TextToSpeechBackend: String, CaseIterable, Identifiable {
+    case system
+    case omniVoice
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .system: return "System voices"
+        case .omniVoice: return "OmniVoice local"
+        }
+    }
+}
+
 /// User-facing toggles persisted in UserDefaults. Read by EventTap on each event,
 /// so changes from the menubar take effect immediately without restart.
 final class Settings {
@@ -72,8 +86,10 @@ final class Settings {
         static let ollamaModel = "lf.ollamaModel"
         static let openaiModel = "lf.openaiModel"
         static let openaiBaseURL = "lf.openaiBaseURL"
+        static let ttsBackend = "lf.ttsBackend"
         static let speechVoiceIdentifier = "lf.speechVoiceIdentifier"
         static let speechRate = "lf.speechRate"
+        static let omniVoiceInstruct = "lf.omniVoiceInstruct"
         static let microphoneDeviceID = "lf.microphoneDeviceID"
         static let whisperModelPath = "lf.whisperModelPath"
         static let whisperLanguage = "lf.whisperLanguage"
@@ -139,6 +155,16 @@ final class Settings {
         set { defaults.set(newValue, forKey: Keys.soundEnabled) }
     }
 
+    var ttsBackend: TextToSpeechBackend {
+        get {
+            guard let raw = defaults.string(forKey: Keys.ttsBackend),
+                  let backend = TextToSpeechBackend(rawValue: raw)
+            else { return .system }
+            return backend
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.ttsBackend) }
+    }
+
     var speechVoiceIdentifier: String {
         get { defaults.string(forKey: Keys.speechVoiceIdentifier) ?? "" }
         set { defaults.set(newValue, forKey: Keys.speechVoiceIdentifier) }
@@ -147,6 +173,11 @@ final class Settings {
     var speechRate: Double {
         get { defaults.object(forKey: Keys.speechRate) as? Double ?? 190 }
         set { defaults.set(newValue, forKey: Keys.speechRate) }
+    }
+
+    var omniVoiceInstruct: String {
+        get { defaults.string(forKey: Keys.omniVoiceInstruct) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceInstruct) }
     }
 
     var microphoneDeviceID: String {
