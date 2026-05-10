@@ -80,12 +80,17 @@ final class AutoFlip {
 
     /// Returns target layout if we should auto-flip; nil otherwise.
     func suggestedFlip(for word: String, currentLayout: Layout) -> Layout? {
+        // Words the user previously rejected via Backspace — never auto-flip.
+        if BackspaceLearner.shared.isExcluded(word) { return nil }
+        // Hand-picked short phrases where dictionary scoring is too
+        // conservative but the intent is clear in day-to-day typing.
+        if let forced = forcedFlip(for: word, currentLayout: currentLayout) {
+            return forced
+        }
         // Skip very short tokens — high false-positive rate ("я", "is", "и").
         guard word.count >= 3 else { return nil }
         // Skip anything with digits or non-letter cruft.
         if word.contains(where: { $0.isNumber }) { return nil }
-        // Words the user previously rejected via Backspace — never auto-flip.
-        if BackspaceLearner.shared.isExcluded(word) { return nil }
         // High-entropy strings (passwords, tokens, hashes) — keep them as-is
         // even if a layout flip would produce dictionary chars.
         if looksLikePassword(word) { return nil }
@@ -126,6 +131,16 @@ final class AutoFlip {
             return nil
         }
         return layout
+    }
+
+    private func forcedFlip(for word: String, currentLayout: Layout) -> Layout? {
+        let lower = word.lowercased()
+        switch (currentLayout, lower) {
+        case (.uk, "бі"):
+            return .ru
+        default:
+            return nil
+        }
     }
 
     /// True if `lowercased` is in any of our dictionaries. Used by

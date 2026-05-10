@@ -26,6 +26,31 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.2.4</title>
+      <pubDate>Sun, 10 May 2026 09:48:24 +0000</pubDate>
+      <sparkle:version>0.2.4</sparkle:version>
+      <sparkle:shortVersionString>0.2.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>No-selection Shift actions</h2>
+        <ul>
+          <li>Single Shift can now fix the last sentence before the cursor, even when no text is selected.</li>
+          <li>Double Shift can now flip the last wrong-layout word run before the cursor.</li>
+          <li>No-selection Shift actions are enabled by default and can be disabled in Preferences.</li>
+          <li>Rewrite feedback is more visible: the flip overlay is enabled by default and appears lower on screen.</li>
+          <li>More stable focused-field rewrites preserve surrounding text, blank lines, and cursor position better.</li>
+          <li>Added a built-in short-word rule for Ukrainian-layout <code>бі</code> → Russian <code>бы</code>.</li>
+          <li>Roadmap now tracks user-defined always-flip and never-flip layout rules.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.4/LangFlip-0.2.4.dmg"
+        length="3980517"
+        type="application/octet-stream"
+        sparkle:edSignature="GhL2qqfFYWrsdW4/ybNPgOKGdnHREYyEdQkN3PLazcHjl/ZbQvdZFpxwqZak2MEYEoaVgPl9aF2LbKjDkoOmCA==" />
+    </item>
+
+    <item>
       <title>v0.2.3</title>
       <pubDate>Sat, 9 May 2026 17:16:08 +0000</pubDate>
       <sparkle:version>0.2.3</sparkle:version>

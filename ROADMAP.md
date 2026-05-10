@@ -134,6 +134,16 @@ After Phase 1 lands, false positives are mostly mitigated by Backspace-learning 
 ### 2.3 Default auto-flip back to ON
 After 2.1 + Phase 1.1 / 1.2 / 1.4 are in. Update `Settings.autoFlip` default to `true`.
 
+### 2.4 User-defined layout rules
+Let users add local rules for words or short phrases:
+- **Always flip**: source text → target layout/result, e.g. `бі` on Ukrainian
+  layout should become Russian `бы`.
+- **Never flip**: product names, slang, abbreviations, code words, or phrases
+  that should stay exactly as typed.
+- Store rules locally in `UserDefaults` or Application Support, expose them in
+  Preferences, and apply them before dictionary scoring so explicit user intent
+  wins over heuristics.
+
 ---
 
 ## Phase 3 — Friendly UX (for non-technical users)

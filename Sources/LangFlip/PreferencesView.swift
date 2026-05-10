@@ -338,6 +338,8 @@ private struct BehaviorTab: View {
     @AppStorage("lf.suppressInFullscreen") private var suppressInFullscreen = false
     @AppStorage("lf.showOverlay") private var showOverlay = true
     @AppStorage("lf.hotkeyPreset") private var hotkeyPreset = HotkeyPreset.doubleShift.rawValue
+    @AppStorage("lf.fixLastSentenceOnSingleShift") private var fixLastSentenceOnSingleShift = true
+    @AppStorage("lf.flipLastWordsOnDoubleShift") private var flipLastWordsOnDoubleShift = true
 
     var body: some View {
         Form {
@@ -347,11 +349,16 @@ private struct BehaviorTab: View {
                         Text(preset.displayName).tag(preset.rawValue)
                     }
                 }
-                helpText("This gesture flips selected text between keyboard layouts. If nothing is selected, nothing happens. Pressing both Shift keys still pauses or resumes LangFlip.")
+                helpText("This gesture flips selected text between keyboard layouts. An experimental fallback can also try the last words before the cursor. Pressing both Shift keys still pauses or resumes LangFlip.")
             }
             Section {
                 Toggle("Auto-flip at word end", isOn: $autoFlip)
                 helpText("After Space or punctuation, LangFlip can fix a word that was typed in the wrong layout. Press Backspace right away to undo and remember an exception.")
+            }
+            Section("No-selection actions") {
+                Toggle("Single Shift fixes last sentence", isOn: $fixLastSentenceOnSingleShift)
+                Toggle("Double Shift flips last words", isOn: $flipLastWordsOnDoubleShift)
+                helpText("When no text is selected, LangFlip reads the focused text field through Accessibility and rewrites only the text before the cursor. Turn this off if a specific app behaves unpredictably.")
             }
             Section {
                 Toggle("Fix sticky-shift typos (WOrld → World)", isOn: $doubleCapsFix)
@@ -510,7 +517,7 @@ private struct ModelsTab: View {
                 ))
                 .disabled(!aiReadyForHotkeys)
                 helpText(aiReadyForHotkeys
-                         ? "A single clean Shift tap sends the selected text to the active AI model for typo, punctuation, and grammar cleanup. If nothing is selected, nothing happens."
+                         ? "A single clean Shift tap sends the selected text to the active AI model for typo, punctuation, and grammar cleanup. The experimental Behavior toggle can also try the last sentence before the cursor."
                          : "Install and select a local model to enable this shortcut.")
             }
 

@@ -19,6 +19,7 @@ final class FlipOverlay {
     /// Wall-clock budget: spring intro ≈ 0.55 s, linger 0.25 s, fade 0.25 s.
     private static let lingerAfterAnimation: TimeInterval = 0.5
     private static let fadeOutDuration: TimeInterval = 0.25
+    private static let bottomInset: CGFloat = 24
 
     private init() {}
 
@@ -79,12 +80,26 @@ final class FlipOverlay {
     }
 
     private func position(_ panel: NSPanel?) {
-        guard let panel, let screen = NSScreen.main else { return }
-        let visible = screen.visibleFrame
+        guard let panel else { return }
+        let screen = screenForOverlay()
         let size = panel.frame.size
-        let x = visible.midX - size.width / 2
-        let y = visible.minY + 100
+        let x = screen.frame.midX - size.width / 2
+        let y = screen.visibleFrame.minY + Self.bottomInset
         panel.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    private func screenForOverlay() -> NSScreen {
+        if let windowFrame = AppContext.frontmostWindowFrame() {
+            let center = NSPoint(x: windowFrame.midX, y: windowFrame.midY)
+            if let screen = NSScreen.screens.first(where: { $0.frame.contains(center) }) {
+                return screen
+            }
+        }
+        let mouse = NSEvent.mouseLocation
+        return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+            ?? NSScreen()
     }
 }
 

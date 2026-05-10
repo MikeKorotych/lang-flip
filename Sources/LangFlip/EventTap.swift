@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import CoreGraphics
 import Carbon.HIToolbox
+import ApplicationServices
 
 final class EventTap {
     private let buffer = WordBuffer()
@@ -510,14 +511,17 @@ final class EventTap {
         }
     }
 
-    /// Hotkey entry point: selection-based layout flip only. Without a
-    /// selection, we intentionally do nothing; the typed word buffer is
-    /// not a reliable representation of the focused field after edits,
-    /// cursor moves, paste, or app-level autocorrect.
+    /// Hotkey entry point: prefer the stable selection-based layout flip.
+    /// If the experimental no-selection toggle is enabled, fall back to
+    /// the focused field's AX value instead of the lossy key history.
     private func handleHotkey(targetNonEnglish: Layout) {
         convertSelectionIfPresent(targetNonEnglish: targetNonEnglish) { [weak self] didConvertSelection in
             guard let self else { return }
             if !didConvertSelection {
+                if Settings.shared.flipLastWordsOnDoubleShift,
+                   self.flipFocusedLastWords(targetNonEnglish: targetNonEnglish) {
+                    return
+                }
                 if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: no selection — double-shift layout flip skipped\n".utf8)) }
             }
         }
@@ -922,6 +926,21 @@ final class EventTap {
                     return
                 }
 
+                if Settings.shared.fixLastSentenceOnSingleShift,
+                   let context = self.focusedTextContext(),
+                   context.selectedRange.length == 0,
+                   let sentence = self.lastSentenceBeforeCursor(in: context.value, cursorUTF16: context.selectedRange.location) {
+                    AppLog.write("single-shift grammar using focused last sentence len=\(sentence.text.count)")
+                    self.singleShiftGrammarInFlight = true
+                    self.applySingleShiftAIFixToFocusedRange(
+                        context: context,
+                        range: sentence.range,
+                        text: sentence.text,
+                        snapshot: snapshot
+                    )
+                    return
+                }
+
                 AppLog.write("single-shift grammar found no selection; skipped")
                 snapshot.restore(to: pb)
             }
@@ -975,6 +994,300 @@ final class EventTap {
     private func playRewriteFeedback() {
         Sound.playFlip()
         FlipOverlay.shared.show()
+    }
+
+    // MARK: - Focused text fallback (experimental)
+
+    private struct FocusedTextContext {
+        let element: AXUIElement
+        let value: String
+        let selectedRange: CFRange
+    }
+
+    private struct FocusedTextSlice {
+        let range: CFRange
+        let text: String
+    }
+
+    private func focusedTextContext() -> FocusedTextContext? {
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedRef
+        ) == .success, let focusedRef else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: focused text: no focused AX element\n".utf8)) }
+            return nil
+        }
+
+        let element = focusedRef as! AXUIElement
+        var valueRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
+              let value = valueRef as? String else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: focused text: no string AX value\n".utf8)) }
+            return nil
+        }
+
+        var range = CFRange(location: value.utf16.count, length: 0)
+        var rangeRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
+           let rangeRef,
+           CFGetTypeID(rangeRef) == AXValueGetTypeID() {
+            var selected = CFRange()
+            if AXValueGetValue((rangeRef as! AXValue), .cfRange, &selected) {
+                range = selected
+            }
+        }
+
+        range.location = max(0, min(range.location, value.utf16.count))
+        range.length = max(0, min(range.length, value.utf16.count - range.location))
+        return FocusedTextContext(element: element, value: value, selectedRange: range)
+    }
+
+    private func setFocusedSelection(_ range: CFRange, in element: AXUIElement) -> Bool {
+        var mutableRange = range
+        guard let axRange = AXValueCreate(.cfRange, &mutableRange) else { return false }
+        return AXUIElementSetAttributeValue(
+            element,
+            kAXSelectedTextRangeAttribute as CFString,
+            axRange
+        ) == .success
+    }
+
+    private func focusedSelection(in element: AXUIElement) -> CFRange? {
+        var rangeRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
+              let rangeRef,
+              CFGetTypeID(rangeRef) == AXValueGetTypeID()
+        else {
+            return nil
+        }
+        var range = CFRange()
+        guard AXValueGetValue((rangeRef as! AXValue), .cfRange, &range) else { return nil }
+        return range
+    }
+
+    private func waitForFocusedSelection(_ expected: CFRange, in element: AXUIElement) -> Bool {
+        let deadline = Date().addingTimeInterval(0.16)
+        while Date() < deadline {
+            if let actual = focusedSelection(in: element),
+               actual.location == expected.location,
+               actual.length == expected.length {
+                return true
+            }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        return false
+    }
+
+    private func pasteFocusedReplacement(
+        _ replacement: String,
+        range: CFRange,
+        context: FocusedTextContext,
+        snapshot: PasteboardSnapshot
+    ) {
+        guard setFocusedSelection(range, in: context.element) else {
+            snapshot.restore()
+            return
+        }
+        guard waitForFocusedSelection(range, in: context.element) else {
+            snapshot.restore()
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: focused replacement: AX selection did not settle\n".utf8)) }
+            return
+        }
+
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(replacement, forType: .string)
+        postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+        playRewriteFeedback()
+
+        let cursor = CFRange(location: range.location + replacement.utf16.count, length: 0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            _ = self?.setFocusedSelection(cursor, in: context.element)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
+            snapshot.restore(to: pb)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                _ = self?.setFocusedSelection(cursor, in: context.element)
+            }
+        }
+    }
+
+    private func typeFocusedReplacementFromCursor(
+        original: String,
+        replacement: String,
+        range: CFRange,
+        context: FocusedTextContext,
+        snapshot: PasteboardSnapshot
+    ) -> Bool {
+        guard context.selectedRange.length == 0,
+              context.selectedRange.location == range.location + range.length
+        else {
+            return false
+        }
+
+        postBackspaces(original.count)
+        postUnicode(replacement)
+        playRewriteFeedback()
+        snapshot.restore()
+        return true
+    }
+
+    private func lastSentenceBeforeCursor(in value: String, cursorUTF16: Int) -> FocusedTextSlice? {
+        guard !value.isEmpty else { return nil }
+        let ns = value as NSString
+        var end = min(max(cursorUTF16, 0), ns.length)
+        while end > 0, isWhitespaceOrNewline(ns.character(at: end - 1)) {
+            end -= 1
+        }
+        guard end > 0 else { return nil }
+
+        var start = 0
+        let searchFrom = end > 0 && isSentenceBoundary(ns.character(at: end - 1)) ? end - 2 : end - 1
+        if searchFrom >= 0 {
+            for index in stride(from: searchFrom, through: 0, by: -1) where isSentenceBoundary(ns.character(at: index)) {
+                start = index + 1
+                break
+            }
+        }
+        while start < end, isWhitespaceOrNewline(ns.character(at: start)) {
+            start += 1
+        }
+
+        let range = NSRange(location: start, length: end - start)
+        guard range.length >= 2 else { return nil }
+        let text = ns.substring(with: range)
+        guard text.rangeOfCharacter(from: .letters) != nil else { return nil }
+        return FocusedTextSlice(range: CFRange(location: range.location, length: range.length), text: text)
+    }
+
+    private func lastWrongLayoutRunBeforeCursor(
+        in value: String,
+        cursorUTF16: Int,
+        targetNonEnglish: Layout
+    ) -> FocusedTextSlice? {
+        guard !value.isEmpty else { return nil }
+        let ns = value as NSString
+        var end = min(max(cursorUTF16, 0), ns.length)
+        while end > 0, isWhitespaceOrNewline(ns.character(at: end - 1)) {
+            end -= 1
+        }
+        guard end > 0 else { return nil }
+
+        var sentenceStart = 0
+        let searchFrom = end > 0 && isSentenceBoundary(ns.character(at: end - 1)) ? end - 2 : end - 1
+        if searchFrom >= 0 {
+            for index in stride(from: searchFrom, through: 0, by: -1) where isSentenceBoundary(ns.character(at: index)) {
+                sentenceStart = index + 1
+                break
+            }
+        }
+        while sentenceStart < end, isWhitespaceOrNewline(ns.character(at: sentenceStart)) {
+            sentenceStart += 1
+        }
+        guard sentenceStart < end else { return nil }
+
+        let sentenceRange = NSRange(location: sentenceStart, length: end - sentenceStart)
+        guard let regex = try? NSRegularExpression(pattern: "[A-Za-zА-Яа-яЁёІіЇїЄєҐґ']+") else { return nil }
+        let matches = regex.matches(in: value, range: sentenceRange)
+        guard let lastMatch = matches.last else { return nil }
+
+        let lastWord = ns.substring(with: lastMatch.range)
+        guard let source = detectLayout(lastWord) else { return nil }
+        let target = resolveTarget(source: source, configured: targetNonEnglish)
+        let convertedLastWord = convert(lastWord, from: source, to: target)
+        guard convertedLastWord != lastWord else { return nil }
+
+        var includedStart = lastMatch.range.location
+        if matches.count >= 2 {
+            for match in matches.dropLast().reversed() {
+                let word = ns.substring(with: match.range)
+                guard let wordSource = detectLayout(word),
+                      wordSource == source,
+                      resolveTarget(source: wordSource, configured: targetNonEnglish) == target,
+                      AutoFlip.shared.suggestedFlip(for: word, currentLayout: wordSource) == target
+                else {
+                    break
+                }
+                includedStart = match.range.location
+            }
+        }
+
+        let range = NSRange(location: includedStart, length: end - includedStart)
+        guard range.length > 0 else { return nil }
+        let original = ns.substring(with: range)
+        let converted = convert(original, from: source, to: target)
+        guard converted != original else { return nil }
+        return FocusedTextSlice(range: CFRange(location: range.location, length: range.length), text: converted)
+    }
+
+    private func flipFocusedLastWords(targetNonEnglish: Layout) -> Bool {
+        guard let context = focusedTextContext(),
+              context.selectedRange.length == 0,
+              let replacement = lastWrongLayoutRunBeforeCursor(
+                  in: context.value,
+                  cursorUTF16: context.selectedRange.location,
+                  targetNonEnglish: targetNonEnglish
+              )
+        else {
+            return false
+        }
+
+        let snapshot = PasteboardSnapshot.capture()
+        if let source = detectLayout((context.value as NSString).substring(with: NSRange(location: replacement.range.location, length: replacement.range.length))) {
+            InputSource.switchTo(resolveTarget(source: source, configured: targetNonEnglish))
+        }
+        pasteFocusedReplacement(replacement.text, range: replacement.range, context: context, snapshot: snapshot)
+        AppLog.write("double-shift focused words flipped len=\(replacement.text.count)")
+        return true
+    }
+
+    private func applySingleShiftAIFixToFocusedRange(
+        context: FocusedTextContext,
+        range: CFRange,
+        text: String,
+        snapshot: PasteboardSnapshot
+    ) {
+        let request = AIFixRequest(text: text, activeLayout: InputSource.currentLayout())
+        AIAssistantManager.shared.current.fixSelection(request) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.singleShiftGrammarInFlight = false
+                switch result {
+                case .fixed(let corrected):
+                    AppLog.write("single-shift focused sentence fixed \(text.count)->\(corrected.count)")
+                    if !self.typeFocusedReplacementFromCursor(
+                        original: text,
+                        replacement: corrected,
+                        range: range,
+                        context: context,
+                        snapshot: snapshot
+                    ) {
+                        self.pasteFocusedReplacement(corrected, range: range, context: context, snapshot: snapshot)
+                    }
+                case .unchanged:
+                    AppLog.write("single-shift focused sentence unchanged")
+                    snapshot.restore()
+                case .unsupported:
+                    AppLog.write("single-shift focused sentence unsupported")
+                    snapshot.restore()
+                case .failed(let reason):
+                    AppLog.write("single-shift focused sentence failed: \(reason)")
+                    snapshot.restore()
+                }
+            }
+        }
+    }
+
+    private func isSentenceBoundary(_ utf16: unichar) -> Bool {
+        utf16 == 10 || utf16 == 13 || utf16 == 46 || utf16 == 33 || utf16 == 63 || utf16 == 8230
+    }
+
+    private func isWhitespaceOrNewline(_ utf16: unichar) -> Bool {
+        guard let scalar = UnicodeScalar(Int(utf16)) else { return false }
+        return CharacterSet.whitespacesAndNewlines.contains(scalar)
     }
 
     // MARK: - Posting synthesized events

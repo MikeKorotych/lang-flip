@@ -64,6 +64,8 @@ final class Settings {
         static let aiMode = "lf.aiMode"
         static let activeModelID = "lf.activeModelID"
         static let grammarCheckOnSingleShift = "lf.grammarCheckOnSingleShift"
+        static let fixLastSentenceOnSingleShift = "lf.fixLastSentenceOnSingleShift"
+        static let flipLastWordsOnDoubleShift = "lf.flipLastWordsOnDoubleShift"
         static let translationHotkeyEnabled = "lf.translationHotkeyEnabled"
         static let screenTextCaptureHotkeyEnabled = "lf.screenTextCaptureHotkeyEnabled"
         static let translationTarget = "lf.translationTarget"
@@ -117,10 +119,10 @@ final class Settings {
     }
 
     /// Bouncy app-icon flourish at the bottom of the screen on every
-    /// rewrite. Off by default — pure delight, can be distracting if
-    /// flipping happens often. Opt in via Preferences > Behavior.
+    /// rewrite. On by default, matching the Preferences UI; users who
+    /// find it distracting can turn it off in Preferences > Behavior.
     var showOverlay: Bool {
-        get { defaults.object(forKey: Keys.showOverlay) as? Bool ?? false }
+        get { defaults.object(forKey: Keys.showOverlay) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.showOverlay) }
     }
 
@@ -155,6 +157,22 @@ final class Settings {
     var grammarCheckOnSingleShift: Bool {
         get { defaults.object(forKey: Keys.grammarCheckOnSingleShift) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.grammarCheckOnSingleShift) }
+    }
+
+    /// If single Shift finds no selected text, read the focused text
+    /// field through Accessibility, extract the last sentence before the
+    /// cursor, and ask AI to clean only that range.
+    var fixLastSentenceOnSingleShift: Bool {
+        get { defaults.object(forKey: Keys.fixLastSentenceOnSingleShift) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.fixLastSentenceOnSingleShift) }
+    }
+
+    /// If double Shift finds no selected text, read the focused text
+    /// field through Accessibility and flip the last wrong-layout word
+    /// run before the cursor.
+    var flipLastWordsOnDoubleShift: Bool {
+        get { defaults.object(forKey: Keys.flipLastWordsOnDoubleShift) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.flipLastWordsOnDoubleShift) }
     }
 
     /// When true, ⇧Space (Shift+Space) translates the current text
