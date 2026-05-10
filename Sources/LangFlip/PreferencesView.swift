@@ -363,17 +363,19 @@ private struct VoiceTab: View {
 
                 Divider()
 
-                Picker("Recognition", selection: $speechRecognitionBackend) {
-                    ForEach(SpeechRecognitionBackend.allCases) { backend in
-                        Text(backend.displayName).tag(backend.rawValue)
-                    }
-                }
-
                 Picker("Language", selection: $whisperLanguage) {
                     Text("Auto").tag("auto")
                     Text("Українська").tag("uk")
                     Text("Русский").tag("ru")
                     Text("English").tag("en")
+                }
+
+                HStack {
+                    Text("Speech model")
+                    Spacer()
+                    Text(activeSpeechModelLabel)
+                        .foregroundColor(.green)
+                        .lineLimit(1)
                 }
 
                 HStack {
@@ -416,13 +418,17 @@ private struct VoiceTab: View {
                         }
                         Spacer()
                         if WhisperTranscriber.isInstalled(model) {
-                            Button(isSelectedWhisperModel(model) ? "Selected" : "Use") {
-                                speechRecognitionBackend = SpeechRecognitionBackend.whisper.rawValue
-                                whisperModelPath = model.localURL.path
-                                whisperAvailability = WhisperTranscriber.availability()
-                                whisperDownloadMessage = "\(model.displayName) selected."
+                            Button(isSelectedWhisperModel(model) ? "Test" : "Use") {
+                                if isSelectedWhisperModel(model) {
+                                    transcribeLastRecording()
+                                } else {
+                                    speechRecognitionBackend = SpeechRecognitionBackend.whisper.rawValue
+                                    whisperModelPath = model.localURL.path
+                                    whisperAvailability = WhisperTranscriber.availability()
+                                    whisperDownloadMessage = "\(model.displayName) selected."
+                                }
                             }
-                            .disabled(isSelectedWhisperModel(model))
+                            .disabled(isSelectedWhisperModel(model) && (lastRecordingURL == nil || isTranscribing))
                             .controlSize(.small)
                         } else {
                             Button(downloadingWhisperModel == model ? "Downloading…" : "Download") {
@@ -453,12 +459,16 @@ private struct VoiceTab: View {
                     }
                     Spacer()
                     if WhisperTranscriber.QwenASR.isInstalled {
-                        Button(isQwenSelected ? "Selected" : "Use") {
-                            speechRecognitionBackend = SpeechRecognitionBackend.qwenASR.rawValue
-                            qwenAvailability = QwenASRTranscriber.availability()
-                            whisperDownloadMessage = "Qwen3-ASR selected."
+                        Button(isQwenSelected ? "Test" : "Use") {
+                            if isQwenSelected {
+                                transcribeLastRecording()
+                            } else {
+                                speechRecognitionBackend = SpeechRecognitionBackend.qwenASR.rawValue
+                                qwenAvailability = QwenASRTranscriber.availability()
+                                whisperDownloadMessage = "Qwen3-ASR selected."
+                            }
                         }
-                        .disabled(isQwenSelected || !qwenAvailability.isReady)
+                        .disabled(!qwenAvailability.isReady || (isQwenSelected && (lastRecordingURL == nil || isTranscribing)))
                         .controlSize(.small)
                     } else {
                         Button(isDownloadingQwenASR ? "Downloading…" : "Download") {
@@ -489,7 +499,7 @@ private struct VoiceTab: View {
                     .lineLimit(2)
 
                 HStack {
-                    Button(isTranscribing ? "Transcribing…" : "Transcribe last recording") {
+                    Button(isTranscribing ? "Testing…" : "Test selected model") {
                         transcribeLastRecording()
                     }
                     .disabled(isTranscribing || lastRecordingURL == nil || !activeSpeechBackendIsReady)
@@ -595,6 +605,18 @@ private struct VoiceTab: View {
         SpeechRecognitionBackend(rawValue: speechRecognitionBackend) ?? .whisper
     }
 
+    private var activeSpeechModelLabel: String {
+        switch activeSpeechBackend {
+        case .whisper:
+            if let model = WhisperTranscriber.Model.allCases.first(where: { isSelectedWhisperModel($0) }) {
+                return model.displayName
+            }
+            return whisperAvailability.modelURL?.lastPathComponent ?? "Whisper"
+        case .qwenASR:
+            return "Qwen3-ASR-1.7B"
+        }
+    }
+
     private var isQwenSelected: Bool {
         activeSpeechBackend == .qwenASR
     }
@@ -617,6 +639,7 @@ private struct VoiceTab: View {
     }
 
     private func isSelectedWhisperModel(_ model: WhisperTranscriber.Model) -> Bool {
+        guard activeSpeechBackend == .whisper else { return false }
         let selected = whisperAvailability.modelURL?.standardizedFileURL.path
             ?? URL(fileURLWithPath: NSString(string: whisperModelPath).expandingTildeInPath).standardizedFileURL.path
         return selected == model.localURL.standardizedFileURL.path
@@ -630,6 +653,7 @@ private struct VoiceTab: View {
         panel.canChooseFiles = true
         panel.prompt = "Choose"
         if panel.runModal() == .OK, let url = panel.url {
+            speechRecognitionBackend = SpeechRecognitionBackend.whisper.rawValue
             whisperModelPath = url.path
             whisperAvailability = WhisperTranscriber.availability()
         }
