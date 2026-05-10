@@ -68,6 +68,7 @@ enum WhisperTranscriber {
         static let directory = modelsDirectory.appendingPathComponent("Qwen3-ASR-1.7B", isDirectory: true)
 
         static let files: [(name: String, size: Int64)] = [
+            ("chat_template.json", 1_161),
             ("config.json", 6_194),
             ("generation_config.json", 142),
             ("preprocessor_config.json", 330),

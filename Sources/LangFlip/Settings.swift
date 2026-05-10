@@ -42,6 +42,20 @@ enum HotkeyPreset: String, CaseIterable, Identifiable {
     }
 }
 
+enum SpeechRecognitionBackend: String, CaseIterable, Identifiable {
+    case whisper
+    case qwenASR
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .whisper: return "Whisper"
+        case .qwenASR: return "Qwen3-ASR"
+        }
+    }
+}
+
 /// User-facing toggles persisted in UserDefaults. Read by EventTap on each event,
 /// so changes from the menubar take effect immediately without restart.
 final class Settings {
@@ -77,6 +91,7 @@ final class Settings {
         static let microphoneDeviceID = "lf.microphoneDeviceID"
         static let whisperModelPath = "lf.whisperModelPath"
         static let whisperLanguage = "lf.whisperLanguage"
+        static let speechRecognitionBackend = "lf.speechRecognitionBackend"
     }
 
     var enabled: Bool {
@@ -162,6 +177,16 @@ final class Settings {
     var whisperLanguage: String {
         get { defaults.string(forKey: Keys.whisperLanguage) ?? "auto" }
         set { defaults.set(newValue, forKey: Keys.whisperLanguage) }
+    }
+
+    var speechRecognitionBackend: SpeechRecognitionBackend {
+        get {
+            guard let raw = defaults.string(forKey: Keys.speechRecognitionBackend),
+                  let backend = SpeechRecognitionBackend(rawValue: raw)
+            else { return .whisper }
+            return backend
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.speechRecognitionBackend) }
     }
 
     /// Optional AI assistant mode. `.off` keeps the app entirely rules-

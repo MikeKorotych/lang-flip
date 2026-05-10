@@ -194,6 +194,7 @@ private struct VoiceTab: View {
     @AppStorage("lf.speechRate") private var speechRate = 190.0
     @AppStorage("lf.whisperModelPath") private var whisperModelPath = ""
     @AppStorage("lf.whisperLanguage") private var whisperLanguage = "auto"
+    @AppStorage("lf.speechRecognitionBackend") private var speechRecognitionBackend = SpeechRecognitionBackend.whisper.rawValue
 
     @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
     @State private var voices = SpeechReader.availableVoices
@@ -206,6 +207,7 @@ private struct VoiceTab: View {
     @State private var lastRecordingURL = VoiceRecorder.shared.lastRecordingURL
     @State private var recorderError = VoiceRecorder.shared.lastError
     @State private var whisperAvailability = WhisperTranscriber.availability()
+    @State private var qwenAvailability = QwenASRTranscriber.availability()
     @State private var isTranscribing = false
     @State private var transcriptionText = ""
     @State private var transcriptionError: String?
@@ -361,6 +363,12 @@ private struct VoiceTab: View {
 
                 Divider()
 
+                Picker("Recognition", selection: $speechRecognitionBackend) {
+                    ForEach(SpeechRecognitionBackend.allCases) { backend in
+                        Text(backend.displayName).tag(backend.rawValue)
+                    }
+                }
+
                 Picker("Language", selection: $whisperLanguage) {
                     Text("Auto").tag("auto")
                     Text("Українська").tag("uk")
@@ -409,6 +417,7 @@ private struct VoiceTab: View {
                         Spacer()
                         if WhisperTranscriber.isInstalled(model) {
                             Button(isSelectedWhisperModel(model) ? "Selected" : "Use") {
+                                speechRecognitionBackend = SpeechRecognitionBackend.whisper.rawValue
                                 whisperModelPath = model.localURL.path
                                 whisperAvailability = WhisperTranscriber.availability()
                                 whisperDownloadMessage = "\(model.displayName) selected."
@@ -426,17 +435,31 @@ private struct VoiceTab: View {
                 }
 
                 HStack {
+                    Image(systemName: isQwenSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(isQwenSelected ? .green : .secondary)
+                        .frame(width: 18)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Qwen3-ASR-1.7B")
-                        Text("\(WhisperTranscriber.QwenASR.approximateSize) · downloaded for future Qwen runtime")
+                        HStack(spacing: 6) {
+                            Text("Qwen3-ASR-1.7B")
+                            if isQwenSelected {
+                                Text("Selected")
+                                    .font(.caption)
+                                    .foregroundColor(.green)
+                            }
+                        }
+                        Text(qwenStatusLine)
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                     Spacer()
                     if WhisperTranscriber.QwenASR.isInstalled {
-                        Button("Installed") {}
-                            .disabled(true)
-                            .controlSize(.small)
+                        Button(isQwenSelected ? "Selected" : "Use") {
+                            speechRecognitionBackend = SpeechRecognitionBackend.qwenASR.rawValue
+                            qwenAvailability = QwenASRTranscriber.availability()
+                            whisperDownloadMessage = "Qwen3-ASR selected."
+                        }
+                        .disabled(isQwenSelected || !qwenAvailability.isReady)
+                        .controlSize(.small)
                     } else {
                         Button(isDownloadingQwenASR ? "Downloading…" : "Download") {
                             downloadQwenASR()
@@ -469,7 +492,7 @@ private struct VoiceTab: View {
                     Button(isTranscribing ? "Transcribing…" : "Transcribe last recording") {
                         transcribeLastRecording()
                     }
-                    .disabled(isTranscribing || lastRecordingURL == nil || !whisperAvailability.isReady)
+                    .disabled(isTranscribing || lastRecordingURL == nil || !activeSpeechBackendIsReady)
 
                     if let lastRecordingURL {
                         Button("Copy result") {
@@ -554,6 +577,7 @@ private struct VoiceTab: View {
         lastRecordingURL = VoiceRecorder.shared.lastRecordingURL
         recorderError = VoiceRecorder.shared.lastError
         whisperAvailability = WhisperTranscriber.availability()
+        qwenAvailability = QwenASRTranscriber.availability()
     }
 
     private func formatDuration(_ value: TimeInterval) -> String {
@@ -565,6 +589,31 @@ private struct VoiceTab: View {
         if whisperAvailability.executableURL == nil { return "CLI missing" }
         if whisperAvailability.modelURL == nil { return "Model missing" }
         return whisperAvailability.modelURL?.lastPathComponent ?? "Ready"
+    }
+
+    private var activeSpeechBackend: SpeechRecognitionBackend {
+        SpeechRecognitionBackend(rawValue: speechRecognitionBackend) ?? .whisper
+    }
+
+    private var isQwenSelected: Bool {
+        activeSpeechBackend == .qwenASR
+    }
+
+    private var qwenStatusLine: String {
+        if !WhisperTranscriber.QwenASR.isInstalled {
+            return "\(WhisperTranscriber.QwenASR.approximateSize) · download model files"
+        }
+        if qwenAvailability.pythonURL == nil {
+            return "\(WhisperTranscriber.QwenASR.approximateSize) · runtime missing"
+        }
+        return "\(WhisperTranscriber.QwenASR.approximateSize) · offline ASR ready"
+    }
+
+    private var activeSpeechBackendIsReady: Bool {
+        switch activeSpeechBackend {
+        case .whisper: return whisperAvailability.isReady
+        case .qwenASR: return qwenAvailability.isReady
+        }
     }
 
     private func isSelectedWhisperModel(_ model: WhisperTranscriber.Model) -> Bool {
@@ -594,10 +643,19 @@ private struct VoiceTab: View {
 
         Task {
             do {
-                let text = try await WhisperTranscriber.transcribe(
-                    audioURL: lastRecordingURL,
-                    language: whisperLanguage
-                )
+                let text: String
+                switch activeSpeechBackend {
+                case .whisper:
+                    text = try await WhisperTranscriber.transcribe(
+                        audioURL: lastRecordingURL,
+                        language: whisperLanguage
+                    )
+                case .qwenASR:
+                    text = try await QwenASRTranscriber.transcribe(
+                        audioURL: lastRecordingURL,
+                        language: whisperLanguage
+                    )
+                }
                 await MainActor.run {
                     transcriptionText = text
                     isTranscribing = false
@@ -650,9 +708,10 @@ private struct VoiceTab: View {
                     whisperDownloadMessage = "Downloading \(WhisperTranscriber.QwenASR.displayName): \(formatPercent(progress.fraction)) · \(progress.currentFile)"
                 }
                 await MainActor.run {
+                    qwenAvailability = QwenASRTranscriber.availability()
                     isDownloadingQwenASR = false
                     downloadProgress = nil
-                    whisperDownloadMessage = "\(WhisperTranscriber.QwenASR.displayName) downloaded to \(url.path). Runtime integration is next."
+                    whisperDownloadMessage = "\(WhisperTranscriber.QwenASR.displayName) downloaded to \(url.path)."
                 }
             } catch {
                 await MainActor.run {
