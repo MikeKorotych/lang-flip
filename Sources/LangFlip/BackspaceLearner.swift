@@ -114,10 +114,26 @@ final class BackspaceLearner {
         defaults.removeObject(forKey: Self.exceptionsKey)
     }
 
-    private func addException(_ word: String) {
+    /// Add an exception manually from Preferences. Useful for product
+    /// names, nicknames, commands, and other words the app should never
+    /// auto-flip.
+    func addException(_ word: String) {
         let lower = word.lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !lower.isEmpty else { return }
         if exceptions.insert(lower).inserted {
-            defaults.set(Array(exceptions), forKey: Self.exceptionsKey)
+            saveExceptions()
         }
+    }
+
+    func removeException(_ word: String) {
+        let lower = word.lowercased()
+        if exceptions.remove(lower) != nil {
+            saveExceptions()
+        }
+    }
+
+    private func saveExceptions() {
+        defaults.set(Array(exceptions).sorted(), forKey: Self.exceptionsKey)
     }
 }

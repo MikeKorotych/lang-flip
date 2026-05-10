@@ -66,7 +66,8 @@ private struct GeneralTab: View {
     @AppStorage("lf.soundEnabled") private var soundEnabled = false
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var permissions = PermissionStatus.current()
-    @State private var exceptionsCount = BackspaceLearner.shared.exceptions.count
+    @State private var learnedExceptions = GeneralTab.sortedExceptions()
+    @State private var newException = ""
 
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
@@ -103,20 +104,73 @@ private struct GeneralTab: View {
                 HStack {
                     Text("Remembered exceptions")
                     Spacer()
-                    Text("\(exceptionsCount)").foregroundColor(.secondary)
+                    Text("\(learnedExceptions.count)").foregroundColor(.secondary)
                     Button("Forget all") {
                         BackspaceLearner.shared.clearExceptions()
-                        exceptionsCount = 0
+                        refreshLearning()
                     }
-                    .disabled(exceptionsCount == 0)
+                    .disabled(learnedExceptions.isEmpty)
+                }
+
+                HStack {
+                    TextField("Add word to never auto-flip", text: $newException)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Add") {
+                        BackspaceLearner.shared.addException(newException)
+                        newException = ""
+                        refreshLearning()
+                    }
+                    .disabled(newException.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .controlSize(.small)
+
+                if learnedExceptions.isEmpty {
+                    Text("No learned exceptions yet. When you undo a bad auto-flip with Backspace, LangFlip remembers that word here.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    VStack(spacing: 6) {
+                        ForEach(learnedExceptions, id: \.self) { word in
+                            HStack {
+                                Text(word)
+                                    .font(.system(.body, design: .monospaced))
+                                    .lineLimit(1)
+                                Spacer()
+                                Button {
+                                    BackspaceLearner.shared.removeException(word)
+                                    refreshLearning()
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundColor(.secondary)
+                                .help("Remove \(word) from learned exceptions")
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
                 }
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            refreshLearning()
+        }
         .onReceive(timer) { _ in
             permissions = PermissionStatus.current()
-            exceptionsCount = BackspaceLearner.shared.exceptions.count
+            refreshLearning()
             launchAtLogin = LaunchAtLogin.isEnabled
+        }
+    }
+
+    private func refreshLearning() {
+        learnedExceptions = Self.sortedExceptions()
+    }
+
+    private static func sortedExceptions() -> [String] {
+        BackspaceLearner.shared.exceptions.sorted {
+            $0.localizedStandardCompare($1) == .orderedAscending
         }
     }
 
