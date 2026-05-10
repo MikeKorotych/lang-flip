@@ -826,7 +826,6 @@ private struct VoiceTab: View {
             Text(title)
             HelpPopoverButton(text: help)
         }
-        .help(help)
     }
 
     @ViewBuilder
@@ -844,7 +843,6 @@ private struct VoiceTab: View {
                 .foregroundColor(.secondary)
                 .frame(width: 48, alignment: .trailing)
         }
-        .help(help)
     }
 
     private var activeSpeechModelLabel: String {
@@ -945,7 +943,6 @@ private struct HelpPopoverButton: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
-        .help(text)
         .onHover { hovering in
             isPresented = hovering
         }
