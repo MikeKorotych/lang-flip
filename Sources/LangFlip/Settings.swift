@@ -860,7 +860,7 @@ final class Settings {
     /// the current selection and silently applies the result. LangFlip
     /// enables this automatically after a local Ollama model is ready.
     var grammarCheckOnSingleShift: Bool {
-        get { defaults.object(forKey: Keys.grammarCheckOnSingleShift) as? Bool ?? false }
+        get { defaults.object(forKey: Keys.grammarCheckOnSingleShift) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.grammarCheckOnSingleShift) }
     }
 

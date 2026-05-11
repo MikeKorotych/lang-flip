@@ -200,7 +200,7 @@ final class OllamaAssistant: AIAssistant {
         let system = Self.rewriteSystemPrompt(language: "input language", allowLayoutRepair: true)
         runInference(
             system: system,
-            prompt: "World is wery gandgerous plsce to leave in!",
+            prompt: "I dont know why this app works so well but it realy helps me every day",
             options: ["temperature": 0.1, "num_ctx": 1024, "num_predict": 64]
         ) { result in
             switch result {

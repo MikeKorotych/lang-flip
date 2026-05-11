@@ -1775,7 +1775,7 @@ private struct AIModelTestView: View {
         case failed(String)
     }
 
-    private let sample = "World is wery gandgerous plsce to leave in!"
+    private let sample = "I dont know why this app works so well but it realy helps me every day"
 
     @State private var state: TestState = .idle
 

@@ -1066,7 +1066,13 @@ final class EventTap {
                     return
                 }
 
-                AppLog.write("single-shift grammar found no selection; skipped")
+                if Settings.shared.fixLastSentenceOnSingleShift {
+                    AppLog.write("single-shift grammar falling back to keyboard line selection")
+                    self.tryKeyboardLineSingleShiftFallback(snapshot: snapshot)
+                    return
+                }
+
+                AppLog.write("single-shift grammar found no selection and focused fallback is off; skipped")
                 snapshot.restore(to: pb)
             }
         }
@@ -1110,6 +1116,103 @@ final class EventTap {
                 case .failed(let reason):
                     AppLog.write("single-shift selection failed: \(reason)")
                     if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift selection grammar — failed: \(reason)\n".utf8)) }
+                    snapshot.restore(to: pb)
+                }
+            }
+        }
+    }
+
+    private func tryKeyboardLineSingleShiftFallback(snapshot: PasteboardSnapshot) {
+        let pb = NSPasteboard.general
+        let countBefore = pb.changeCount
+
+        // Many browser/Electron text fields do not expose AXValue. As a
+        // pragmatic fallback, select from the cursor to the start of the
+        // current visual line, copy it, then select only the last sentence
+        // inside that line for replacement.
+        postKey(virtualKey: CGKeyCode(kVK_LeftArrow), flags: [.maskCommand, .maskShift])
+        tryCopyAfterKeyboardSelection(countBefore: countBefore) { [weak self] selectedLine in
+            guard let self else { return }
+            self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
+
+            guard let selectedLine,
+                  let sentence = self.lastSentenceBeforeCursor(in: selectedLine, cursorUTF16: selectedLine.utf16.count)
+            else {
+                AppLog.write("single-shift keyboard fallback found no usable line sentence")
+                snapshot.restore(to: pb)
+                return
+            }
+
+            AppLog.write("single-shift grammar using keyboard line fallback len=\(sentence.text.count)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+                self.selectPreviousCharacters(sentence.text.count)
+                self.singleShiftGrammarInFlight = true
+                self.applySingleShiftAIFixToKeyboardSuffix(text: sentence.text, snapshot: snapshot)
+            }
+        }
+    }
+
+    private func tryCopyAfterKeyboardSelection(countBefore: Int, completion: @escaping (String?) -> Void) {
+        let pb = NSPasteboard.general
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in
+            guard let self else {
+                completion(nil)
+                return
+            }
+            self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_C))
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
+                while Date() < deadline && pb.changeCount == countBefore {
+                    Thread.sleep(forTimeInterval: Self.copyPollInterval)
+                }
+                let text = pb.changeCount > countBefore ? pb.string(forType: .string) : nil
+                DispatchQueue.main.async {
+                    let usable = text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? text : nil
+                    completion(usable)
+                }
+            }
+        }
+    }
+
+    private func selectPreviousCharacters(_ count: Int) {
+        guard count > 0 else { return }
+        for i in 0..<count {
+            postKey(virtualKey: CGKeyCode(kVK_LeftArrow), flags: .maskShift)
+            if i + 1 < count {
+                Thread.sleep(forTimeInterval: 0.0005)
+            }
+        }
+    }
+
+    private func applySingleShiftAIFixToKeyboardSuffix(text: String, snapshot: PasteboardSnapshot) {
+        let pb = NSPasteboard.general
+        let request = AIFixRequest(text: text, activeLayout: InputSource.currentLayout())
+        AIAssistantManager.shared.current.fixSelection(request) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.singleShiftGrammarInFlight = false
+                switch result {
+                case .fixed(let corrected):
+                    AppLog.write("single-shift keyboard suffix fixed \(text.count)->\(corrected.count)")
+                    pb.clearContents()
+                    pb.setString(corrected, forType: .string)
+                    self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+                    self.playRewriteFeedback()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
+                        snapshot.restore(to: pb)
+                    }
+                case .unchanged:
+                    AppLog.write("single-shift keyboard suffix unchanged")
+                    self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
+                    snapshot.restore(to: pb)
+                case .unsupported:
+                    AppLog.write("single-shift keyboard suffix unsupported")
+                    self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
+                    snapshot.restore(to: pb)
+                case .failed(let reason):
+                    AppLog.write("single-shift keyboard suffix failed: \(reason)")
+                    self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
                     snapshot.restore(to: pb)
                 }
             }

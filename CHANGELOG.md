@@ -13,6 +13,8 @@ in the first session.
 - Qwen 3.5 2B as the default local AI model, with 4B kept as a heavier quality
   option for 16 GB+ Macs when the smaller model makes mistakes.
 - Built-in grammar test showing input and output.
+- Safer default grammar-test text that works better with the smaller local
+  model.
 - Built-in copy-text-from-screenshot test with a visible target and paste check.
 - Hotkey summary in onboarding:
   - Single Shift - fix selected text or the last sentence.
@@ -43,6 +45,8 @@ in the first session.
   multiline text and cursor placement.
 - Reduced first local-model latency by warming up text and vision requests
   sequentially instead of in parallel.
+- Improved no-selection Single Shift fallback for text fields that do not expose
+  their content through Accessibility.
 
 ### Notes
 

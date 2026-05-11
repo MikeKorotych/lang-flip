@@ -103,7 +103,7 @@ private struct SetupChecklist: View {
 
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     private let qwenModel = "qwen3.5:2b"
-    private let grammarSample = "World is wery gandgerous plsce to leave in!"
+    private let grammarSample = "I dont know why this app works so well but it realy helps me every day"
     private let screenshotSample = "SCAN THIS TEXT"
     private let grammarHint = "After this, just press Shift to fix the last sentence, or select any text and press Shift."
 
