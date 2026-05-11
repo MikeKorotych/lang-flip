@@ -50,7 +50,10 @@ enum DictionaryManager {
         return result
     }
 
-    static func installExtendedFrequencyPack(completion: @escaping (Result<[Layout: Int], Error>) -> Void) {
+    static func installExtendedFrequencyPack(
+        progress: ((Int, Int) -> Void)? = nil,
+        completion: @escaping (Result<[Layout: Int], Error>) -> Void
+    ) {
         AppLog.write("dictionary install started")
         let group = DispatchGroup()
         let lock = NSLock()
@@ -78,7 +81,13 @@ enum DictionaryManager {
                 AppLog.write("dictionary download finished layout=\(layout.rawValue) bytes=\(data.count)")
                 lock.lock()
                 rawTexts[layout] = text
+                let completed = rawTexts.count
                 lock.unlock()
+                if let progress {
+                    DispatchQueue.main.async {
+                        progress(completed, urls.count)
+                    }
+                }
             }.resume()
         }
 

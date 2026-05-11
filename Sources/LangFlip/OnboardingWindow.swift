@@ -74,20 +74,28 @@ final class OnboardingWindowController: NSObject {
 private struct SetupChecklist: View {
     private enum RunState: Equatable {
         case idle
-        case running
+        case running(String)
         case success(String)
         case failed(String)
+
+        var isRunning: Bool {
+            if case .running = self { return true }
+            return false
+        }
     }
 
     let onOpenPreferences: () -> Void
 
     @State private var dictionaryStats = DictionaryManager.stats()
     @State private var dictionaryState: RunState = .idle
+    @State private var dictionaryProgress: Double?
     @State private var aiReady = AIAssistantManager.shared.isReady
+    @State private var qwenState: RunState = .idle
     @State private var grammarState: RunState = .idle
     @State private var ocrState: RunState = .idle
 
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+    private let qwenModel = "qwen3.5:4b"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -99,29 +107,28 @@ private struct SetupChecklist: View {
                 icon: "text.book.closed",
                 title: "Install extended dictionaries",
                 detail: hasExtendedDictionaries ? "Extended EN/UK/RU dictionaries are active." : "Improves auto-flip coverage for real typing.",
-                state: dictionaryState
+                state: dictionaryState,
+                progress: dictionaryProgress
             ) {
-                Button(dictionaryButtonTitle) {
+                Button(dictionaryState.isRunning ? "Installing..." : "Install") {
                     installDictionaries()
                 }
-                .disabled(dictionaryState == .running)
+                .disabled(dictionaryState.isRunning || hasExtendedDictionaries)
             }
 
             checklistRow(
                 done: aiReady,
                 icon: "sparkles",
                 title: "Use Qwen 3.5 for local AI",
-                detail: aiReady ? "Qwen 3.5 is selected and reachable through Ollama." : "Select Qwen 3.5 for grammar fixes, translation, and OCR.",
-                state: .idle
+                detail: aiReady ? "Qwen 3.5 is selected and reachable through Ollama." : "Download and select Qwen 3.5 for grammar fixes, translation, and OCR.",
+                state: qwenState
             ) {
-                HStack(spacing: 8) {
-                    Button("Select Qwen") {
-                        Settings.shared.aiMode = .ollama
-                        Settings.shared.ollamaModel = "qwen3.5:4b"
-                        refresh()
+                Button(qwenButtonTitle) {
+                    Task {
+                        await installAndSelectQwen()
                     }
-                    Button("AI Settings", action: onOpenPreferences)
                 }
+                .disabled(qwenState.isRunning || aiReady)
             }
 
             checklistRow(
@@ -131,10 +138,10 @@ private struct SetupChecklist: View {
                 detail: "Checks selected-text cleanup before you need it.",
                 state: grammarState
             ) {
-                Button(grammarState == .running ? "Testing..." : "Test") {
+                Button(grammarState.isRunning ? "Testing..." : "Test") {
                     runGrammarTest()
                 }
-                .disabled(grammarState == .running || !aiReady)
+                .disabled(grammarState.isRunning || !aiReady)
             }
 
             checklistRow(
@@ -144,10 +151,10 @@ private struct SetupChecklist: View {
                 detail: "Checks that the local vision model can read text from images.",
                 state: ocrState
             ) {
-                Button(ocrState == .running ? "Testing..." : "Test") {
+                Button(ocrState.isRunning ? "Testing..." : "Test") {
                     runOCRTest()
                 }
-                .disabled(ocrState == .running || !aiReady)
+                .disabled(ocrState.isRunning || !aiReady)
             }
 
             checklistRow(
@@ -157,7 +164,9 @@ private struct SetupChecklist: View {
                 detail: "Double Shift flips layout, single Shift fixes text, Shift+Command+S captures screen text.",
                 state: .idle
             ) {
-                Button("Hotkeys", action: onOpenPreferences)
+                Text("Double Shift / Single Shift / ⇧⌘S")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .padding(14)
@@ -174,11 +183,6 @@ private struct SetupChecklist: View {
         dictionaryStats.values.contains { $0.installedCount > 0 }
     }
 
-    private var dictionaryButtonTitle: String {
-        if dictionaryState == .running { return "Installing..." }
-        return hasExtendedDictionaries ? "Update" : "Install"
-    }
-
     private var grammarSucceeded: Bool {
         if case .success = grammarState { return true }
         return false
@@ -189,6 +193,12 @@ private struct SetupChecklist: View {
         return false
     }
 
+    private var qwenButtonTitle: String {
+        if qwenState.isRunning { return "Installing..." }
+        if case .failed = qwenState { return "Try again" }
+        return "Install Qwen"
+    }
+
     @ViewBuilder
     private func checklistRow<Action: View>(
         done: Bool,
@@ -196,6 +206,7 @@ private struct SetupChecklist: View {
         title: String,
         detail: String,
         state: RunState,
+        progress: Double? = nil,
         @ViewBuilder action: () -> Action
     ) -> some View {
         HStack(alignment: .top, spacing: 10) {
@@ -211,6 +222,11 @@ private struct SetupChecklist: View {
                     .font(.caption)
                     .foregroundColor(statusColor(for: state))
                     .fixedSize(horizontal: false, vertical: true)
+                if let progress {
+                    ProgressView(value: progress)
+                        .progressViewStyle(.linear)
+                        .frame(maxWidth: 220)
+                }
             }
 
             Spacer(minLength: 10)
@@ -224,8 +240,8 @@ private struct SetupChecklist: View {
         switch state {
         case .idle:
             return defaultDetail
-        case .running:
-            return "Running..."
+        case .running(let message):
+            return message
         case .success(let message):
             return message
         case .failed(let reason):
@@ -250,9 +266,14 @@ private struct SetupChecklist: View {
     }
 
     private func installDictionaries() {
-        dictionaryState = .running
-        DictionaryManager.installExtendedFrequencyPack { result in
+        dictionaryProgress = 0
+        dictionaryState = .running("Downloading word lists...")
+        DictionaryManager.installExtendedFrequencyPack { completed, total in
+            dictionaryProgress = Double(completed) / Double(total)
+            dictionaryState = .running("Downloaded \(completed) of \(total) word lists...")
+        } completion: { result in
             DispatchQueue.main.async {
+                dictionaryProgress = nil
                 switch result {
                 case .success:
                     dictionaryStats = DictionaryManager.stats()
@@ -264,8 +285,37 @@ private struct SetupChecklist: View {
         }
     }
 
+    @MainActor
+    private func installAndSelectQwen() async {
+        Settings.shared.aiMode = .ollama
+        Settings.shared.ollamaModel = qwenModel
+        qwenState = .running("Opening Ollama and checking Qwen 3.5...")
+        openOllamaOrDownloadPage()
+
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        if await isOllamaModelInstalled(qwenModel) {
+            refresh()
+            qwenState = AIAssistantManager.shared.isReady
+                ? .success("Qwen 3.5 is selected and ready.")
+                : .running("Qwen is installed. Waiting for Ollama to become ready...")
+            return
+        }
+
+        qwenState = .running("Downloading Qwen 3.5 4B. This can take a few minutes...")
+        if let failure = await Self.pullOllamaModel(qwenModel) {
+            qwenState = .failed(failure)
+            refresh()
+            return
+        }
+
+        refresh()
+        qwenState = AIAssistantManager.shared.isReady
+            ? .success("Qwen 3.5 is selected and ready.")
+            : .success("Qwen 3.5 is installed. If tests are disabled, reopen Ollama and wait a moment.")
+    }
+
     private func runGrammarTest() {
-        grammarState = .running
+        grammarState = .running("Asking the local model to fix the sample...")
         AIAssistantManager.shared.current.fixSelection(
             AIFixRequest(text: "World is wery gandgerous plsce to leave in!", activeLayout: .en)
         ) { result in
@@ -289,7 +339,7 @@ private struct SetupChecklist: View {
             ocrState = .failed("could not create test image")
             return
         }
-        ocrState = .running
+        ocrState = .running("Asking Qwen 3.5 to read the sample image...")
         AIAssistantManager.shared.current.extractTextFromImage(
             AIOcrRequest(imageBase64: imageBase64)
         ) { result in
@@ -324,6 +374,101 @@ private struct SetupChecklist: View {
         else { return nil }
         return png.base64EncodedString()
     }
+
+    private func openOllamaOrDownloadPage() {
+        let appURL = URL(fileURLWithPath: "/Applications/Ollama.app")
+        if FileManager.default.fileExists(atPath: appURL.path) {
+            NSWorkspace.shared.openApplication(
+                at: appURL,
+                configuration: NSWorkspace.OpenConfiguration()
+            )
+            return
+        }
+
+        if let downloadURL = URL(string: "https://ollama.com/download/mac") {
+            NSWorkspace.shared.open(downloadURL)
+        }
+    }
+
+    private func isOllamaModelInstalled(_ model: String) async -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:11434/api/tags") else { return false }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else {
+                return false
+            }
+            let decoded = try JSONDecoder().decode(OnboardingOllamaTagsResponse.self, from: data)
+            let canonical = canonicalModelTag(model)
+            return decoded.models.contains { canonicalModelTag($0.name) == canonical }
+        } catch {
+            return false
+        }
+    }
+
+    private func canonicalModelTag(_ model: String) -> String {
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasSuffix(":latest") {
+            return String(trimmed.dropLast(":latest".count))
+        }
+        return trimmed
+    }
+
+    nonisolated private static func pullOllamaModel(_ model: String) async -> String? {
+        await Task.detached(priority: .userInitiated) {
+            guard let executableURL = ollamaExecutableURL() else {
+                return "Ollama was not found. Install Ollama, open it once, then try again."
+            }
+
+            let process = Process()
+            let pipe = Pipe()
+            process.executableURL = executableURL
+            process.arguments = ["pull", model]
+            process.standardOutput = pipe
+            process.standardError = pipe
+
+            do {
+                try process.run()
+            } catch {
+                return "Could not open Ollama: \(error.localizedDescription)"
+            }
+
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            let output = String(data: data, encoding: .utf8)?
+                .replacingOccurrences(of: "\r", with: "\n")
+                .split(separator: "\n")
+                .map(String.init)
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .suffix(2)
+                .joined(separator: " ")
+
+            guard process.terminationStatus == 0 else {
+                let detail = output?.isEmpty == false ? " \(output!)" : ""
+                return "Ollama could not download \(model).\(detail)"
+            }
+            return nil
+        }.value
+    }
+
+    nonisolated private static func ollamaExecutableURL() -> URL? {
+        let candidates = [
+            "/usr/local/bin/ollama",
+            "/opt/homebrew/bin/ollama",
+            "/Applications/Ollama.app/Contents/Resources/ollama",
+        ]
+        return candidates
+            .map(URL.init(fileURLWithPath:))
+            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    }
+}
+
+private struct OnboardingOllamaTagsResponse: Decodable {
+    struct Model: Decodable {
+        let name: String
+    }
+
+    let models: [Model]
 }
 
 // MARK: - SwiftUI

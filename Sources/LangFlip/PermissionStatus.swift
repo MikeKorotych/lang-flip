@@ -30,7 +30,7 @@ struct PermissionStatus: Equatable {
         } else {
             ax = AXIsProcessTrustedWithOptions(nil)
         }
-        let im = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
+        let im = CGPreflightListenEventAccess()
         return PermissionStatus(accessibility: ax, inputMonitoring: im)
     }
 
@@ -97,6 +97,6 @@ struct PermissionStatus: Equatable {
     /// subsequent calls are a no-op so we always pair it with a deep-link
     /// to the settings pane.
     static func requestInputMonitoring() {
-        _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        _ = CGRequestListenEventAccess()
     }
 }
