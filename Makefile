@@ -15,6 +15,7 @@ SPARKLE_FW := .build/arm64-apple-macosx/release/Sparkle.framework
 
 # Read version from Info.plist so it's the single source of truth.
 VERSION := $(shell /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)
+BUNDLE_ID := $(shell /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" Resources/Info.plist)
 DMG_NAME := LangFlip-$(VERSION).dmg
 DMG_PATH := build/$(DMG_NAME)
 
@@ -34,6 +35,7 @@ NOTARY_PROFILE := lang-flip-notarize
 ENTITLEMENTS := Resources/lang-flip.entitlements
 
 .PHONY: all build app clean run install dev dicts icon \
+        reset-onboarding reset-onboarding-fresh run-onboarding \
         sign dmg notarize-app notarize-dmg staple staple-app release version \
         sign-update
 
@@ -51,6 +53,25 @@ dicts:
 # at Resources/lang-flip-logo.png. Run after replacing the master.
 icon:
 	./Scripts/build-icon.sh
+
+# ─── Dev reset helpers ────────────────────────────────────────────
+
+# Reset exactly the things that make the app feel like a first launch:
+# app settings + macOS privacy permissions. Keeps downloaded models,
+# runtimes, and dictionaries so repeated onboarding tests stay quick.
+reset-onboarding:
+	./Scripts/reset-onboarding.sh $(BUNDLE_ID) settings $(APP_NAME)
+
+# Same reset, plus installed dictionaries and generated TTS files.
+# This is the target for testing the onboarding checklist's dictionary
+# install path. Heavy model/runtime downloads are deliberately kept.
+reset-onboarding-fresh:
+	./Scripts/reset-onboarding.sh $(BUNDLE_ID) fresh $(APP_NAME)
+
+# One command for a clean first-run pass: reset state, rebuild/install,
+# and launch the signed /Applications copy.
+run-onboarding: reset-onboarding-fresh
+	$(MAKE) run
 
 # ─── Build ────────────────────────────────────────────────────────
 
