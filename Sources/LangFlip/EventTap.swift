@@ -424,20 +424,21 @@ final class EventTap {
     }
 
     private func handleSpeechModifierGesture(keyCode: CGKeyCode, flags: CGEventFlags) -> Bool {
-        let isShiftKey = keyCode == CGKeyCode(kVK_Shift) || keyCode == CGKeyCode(kVK_RightShift)
-        let isCommandKey = keyCode == CGKeyCode(kVK_Command) || keyCode == CGKeyCode(kVK_RightCommand)
+        let pushShortcut = Settings.shared.dictationPushToTalkShortcut
+        let handsFreeShortcut = Settings.shared.dictationHandsFreeShortcut
         let shiftHeld = flags.contains(.maskShift)
-        let commandHeld = flags.contains(.maskCommand)
+        let handsFreeReleased = handsFreeShortcut.isReleased(flags: flags)
         let hasOtherModifiers = flags.contains(.maskAlternate) || flags.contains(.maskControl)
 
         if commandShiftSpeechTriggered {
-            if !shiftHeld && !commandHeld {
+            if handsFreeReleased {
                 commandShiftSpeechTriggered = false
             }
             return true
         }
 
-        if shiftHeld && commandHeld && !hasOtherModifiers && (isShiftKey || isCommandKey) {
+        if Settings.shared.dictationHandsFreeEnabled,
+           handsFreeShortcut.matches(keyCode: keyCode, flags: flags) {
             speechHoldWork?.cancel()
             speechHoldWork = nil
             if commandShiftSpeechWork == nil {
@@ -457,38 +458,37 @@ final class EventTap {
         commandShiftSpeechWork?.cancel()
         commandShiftSpeechWork = nil
 
-        guard isShiftKey, !commandHeld, !hasOtherModifiers else {
+        guard Settings.shared.dictationPushToTalkEnabled,
+              pushShortcut.isWatchedKey(keyCode),
+              shiftHeld,
+              !flags.contains(.maskCommand),
+              !hasOtherModifiers
+        else {
             if !shiftHeld {
                 speechHoldWork?.cancel()
                 speechHoldWork = nil
-            }
-            return false
-        }
-
-        if shiftHeld {
-            if speechHoldWork == nil, !speechPushToTalkActive {
-                let work = DispatchWorkItem { [weak self] in
-                    guard let self else { return }
-                    self.speechHoldWork = nil
-                    self.speechPushToTalkActive = true
-                    self.hotkeyUsedAsModifier = true
-                    self.cancelPendingTaps()
-                    VoiceDictationController.shared.start(mode: .pushToTalk)
+                if speechPushToTalkActive {
+                    speechPushToTalkActive = false
+                    hotkeyUsedAsModifier = true
+                    cancelPendingTaps()
+                    VoiceDictationController.shared.stopAndTranscribe()
+                    return true
                 }
-                speechHoldWork = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.speechHoldDelay, execute: work)
             }
             return false
         }
 
-        speechHoldWork?.cancel()
-        speechHoldWork = nil
-        if speechPushToTalkActive {
-            speechPushToTalkActive = false
-            hotkeyUsedAsModifier = true
-            cancelPendingTaps()
-            VoiceDictationController.shared.stopAndTranscribe()
-            return true
+        if speechHoldWork == nil, !speechPushToTalkActive {
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.speechHoldWork = nil
+                self.speechPushToTalkActive = true
+                self.hotkeyUsedAsModifier = true
+                self.cancelPendingTaps()
+                VoiceDictationController.shared.start(mode: .pushToTalk)
+            }
+            speechHoldWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.speechHoldDelay, execute: work)
         }
         return false
     }

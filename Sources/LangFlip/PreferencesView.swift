@@ -221,6 +221,10 @@ private struct VoiceTab: View {
     @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
     @AppStorage("lf.whisperModelPath") private var whisperModelPath = ""
     @AppStorage("lf.whisperLanguage") private var whisperLanguage = "auto"
+    @AppStorage("lf.dictationPushToTalkEnabled") private var dictationPushToTalkEnabled = true
+    @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
+    @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = true
+    @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.commandShift.rawValue
 
     @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
     @State private var voices = SpeechReader.availableVoices
@@ -517,6 +521,18 @@ private struct VoiceTab: View {
 
                 Divider()
 
+                Toggle("Push-to-talk dictation", isOn: $dictationPushToTalkEnabled)
+                helpText(dictationPushToTalkEnabled
+                         ? "Hold \(dictationPushToTalkName) to record, then release to transcribe and insert text."
+                         : "Push-to-talk dictation is off. Hands-free dictation can stay enabled below.")
+
+                Toggle("Hands-free dictation", isOn: $dictationHandsFreeEnabled)
+                helpText(dictationHandsFreeEnabled
+                         ? "Press \(dictationHandsFreeName) once to start recording, then press it again to stop and transcribe."
+                         : "Hands-free dictation is off. Push-to-talk can stay enabled above.")
+
+                Divider()
+
                 HStack {
                     Text("Input")
                     Spacer()
@@ -715,7 +731,7 @@ private struct VoiceTab: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                helpText("Hold Shift to dictate while pressed. Press Command+Shift to toggle hands-free dictation. Whisper transcribes the last recording here for testing.")
+                helpText("Whisper transcribes the last recording here for testing. Dictation shortcuts can be changed in Hotkeys.")
             }
         }
         .formStyle(.grouped)
@@ -778,6 +794,14 @@ private struct VoiceTab: View {
     private var readSelectionShortcutName: String {
         GlobalShortcut.decode(readSelectionHotkeyCustom)?.displayName
             ?? (GlobalShortcutPreset(rawValue: readSelectionHotkeyPreset) ?? .controlOptionX).displayName
+    }
+
+    private var dictationPushToTalkName: String {
+        (DictationPushToTalkShortcut(rawValue: dictationPushToTalkShortcut) ?? .anyShift).displayName
+    }
+
+    private var dictationHandsFreeName: String {
+        (DictationHandsFreeShortcut(rawValue: dictationHandsFreeShortcut) ?? .commandShift).displayName
     }
 
     private var omniVoiceStatusLabel: String {
@@ -1200,6 +1224,8 @@ private struct HotkeysTab: View {
     @AppStorage("lf.screenTextCaptureHotkeyCustom") private var screenTextCaptureHotkeyCustom = ""
     @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.controlOptionX.rawValue
     @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
+    @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
+    @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.commandShift.rawValue
 
     var body: some View {
         Form {
@@ -1235,11 +1261,23 @@ private struct HotkeysTab: View {
                 )
                 helpText("Reads the current text selection with the voice backend selected in Voice settings.")
             }
+            Section("Dictation") {
+                Picker("Push-to-talk", selection: $dictationPushToTalkShortcut) {
+                    ForEach(DictationPushToTalkShortcut.allCases) { shortcut in
+                        Text(shortcut.displayName).tag(shortcut.rawValue)
+                    }
+                }
+                Picker("Hands-free toggle", selection: $dictationHandsFreeShortcut) {
+                    ForEach(DictationHandsFreeShortcut.allCases) { shortcut in
+                        Text(shortcut.displayName).tag(shortcut.rawValue)
+                    }
+                }
+                helpText("Push-to-talk records while held. Hands-free starts and stops recording with the same modifier chord. Enable or disable each mode in Voice.")
+            }
             Section("Modifier gestures") {
                 Text("Single Shift fixes selected text or the last sentence.")
                 Text("Double Shift flips selected text or the last words.")
-                Text("Hold Shift records dictation. Shift+Command toggles hands-free dictation.")
-                helpText("These gestures depend on press timing, so they stay as fixed gestures for now. The toggles live in AI, Behavior, and Voice.")
+                helpText("Single and double Shift depend on press timing, so they stay as fixed gestures for now. Dictation modifier gestures are configurable above.")
             }
         }
         .formStyle(.grouped)

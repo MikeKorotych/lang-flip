@@ -57,6 +57,87 @@ enum TextToSpeechBackend: String, CaseIterable, Identifiable {
     }
 }
 
+enum DictationPushToTalkShortcut: String, CaseIterable, Identifiable {
+    case anyShift
+    case leftShift
+    case rightShift
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .anyShift: return "Hold Shift"
+        case .leftShift: return "Hold left Shift"
+        case .rightShift: return "Hold right Shift"
+        }
+    }
+
+    func isWatchedKey(_ keyCode: CGKeyCode) -> Bool {
+        switch self {
+        case .anyShift:
+            return keyCode == CGKeyCode(kVK_Shift) || keyCode == CGKeyCode(kVK_RightShift)
+        case .leftShift:
+            return keyCode == CGKeyCode(kVK_Shift)
+        case .rightShift:
+            return keyCode == CGKeyCode(kVK_RightShift)
+        }
+    }
+}
+
+enum DictationHandsFreeShortcut: String, CaseIterable, Identifiable {
+    case commandShift
+    case controlShift
+    case optionShift
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .commandShift: return "Command+Shift"
+        case .controlShift: return "Control+Shift"
+        case .optionShift: return "Option+Shift"
+        }
+    }
+
+    func matches(keyCode: CGKeyCode, flags: CGEventFlags) -> Bool {
+        let isShiftKey = keyCode == CGKeyCode(kVK_Shift) || keyCode == CGKeyCode(kVK_RightShift)
+        switch self {
+        case .commandShift:
+            let isCommandKey = keyCode == CGKeyCode(kVK_Command) || keyCode == CGKeyCode(kVK_RightCommand)
+            return flags.contains(.maskShift) &&
+                   flags.contains(.maskCommand) &&
+                   !flags.contains(.maskAlternate) &&
+                   !flags.contains(.maskControl) &&
+                   (isShiftKey || isCommandKey)
+        case .controlShift:
+            let isControlKey = keyCode == CGKeyCode(kVK_Control) || keyCode == CGKeyCode(kVK_RightControl)
+            return flags.contains(.maskShift) &&
+                   flags.contains(.maskControl) &&
+                   !flags.contains(.maskAlternate) &&
+                   !flags.contains(.maskCommand) &&
+                   (isShiftKey || isControlKey)
+        case .optionShift:
+            let isOptionKey = keyCode == CGKeyCode(kVK_Option) || keyCode == CGKeyCode(kVK_RightOption)
+            return flags.contains(.maskShift) &&
+                   flags.contains(.maskAlternate) &&
+                   !flags.contains(.maskCommand) &&
+                   !flags.contains(.maskControl) &&
+                   (isShiftKey || isOptionKey)
+        }
+    }
+
+    func isReleased(flags: CGEventFlags) -> Bool {
+        switch self {
+        case .commandShift:
+            return !flags.contains(.maskShift) && !flags.contains(.maskCommand)
+        case .controlShift:
+            return !flags.contains(.maskShift) && !flags.contains(.maskControl)
+        case .optionShift:
+            return !flags.contains(.maskShift) && !flags.contains(.maskAlternate)
+        }
+    }
+}
+
 enum GlobalShortcutPreset: String, CaseIterable, Identifiable {
     case shiftSpace
     case commandShiftS
@@ -465,6 +546,10 @@ final class Settings {
         static let microphoneDeviceID = "lf.microphoneDeviceID"
         static let whisperModelPath = "lf.whisperModelPath"
         static let whisperLanguage = "lf.whisperLanguage"
+        static let dictationPushToTalkEnabled = "lf.dictationPushToTalkEnabled"
+        static let dictationPushToTalkShortcut = "lf.dictationPushToTalkShortcut"
+        static let dictationHandsFreeEnabled = "lf.dictationHandsFreeEnabled"
+        static let dictationHandsFreeShortcut = "lf.dictationHandsFreeShortcut"
     }
 
     var enabled: Bool {
@@ -722,6 +807,36 @@ final class Settings {
     var whisperLanguage: String {
         get { defaults.string(forKey: Keys.whisperLanguage) ?? "auto" }
         set { defaults.set(newValue, forKey: Keys.whisperLanguage) }
+    }
+
+    var dictationPushToTalkEnabled: Bool {
+        get { defaults.object(forKey: Keys.dictationPushToTalkEnabled) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.dictationPushToTalkEnabled) }
+    }
+
+    var dictationPushToTalkShortcut: DictationPushToTalkShortcut {
+        get {
+            guard let raw = defaults.string(forKey: Keys.dictationPushToTalkShortcut),
+                  let shortcut = DictationPushToTalkShortcut(rawValue: raw)
+            else { return .anyShift }
+            return shortcut
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.dictationPushToTalkShortcut) }
+    }
+
+    var dictationHandsFreeEnabled: Bool {
+        get { defaults.object(forKey: Keys.dictationHandsFreeEnabled) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.dictationHandsFreeEnabled) }
+    }
+
+    var dictationHandsFreeShortcut: DictationHandsFreeShortcut {
+        get {
+            guard let raw = defaults.string(forKey: Keys.dictationHandsFreeShortcut),
+                  let shortcut = DictationHandsFreeShortcut(rawValue: raw)
+            else { return .commandShift }
+            return shortcut
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.dictationHandsFreeShortcut) }
     }
 
     /// Optional AI assistant mode. `.off` keeps the app entirely rules-

@@ -33,7 +33,10 @@ final class VoiceDictationController {
         isRecording = true
         Sound.playFlip()
         FlipOverlay.shared.show()
-        Notifications.show(title: "Dictation", body: mode == .pushToTalk ? "Recording while Shift is held." : "Recording. Press Command+Shift to stop.")
+        let body = mode == .pushToTalk
+            ? "Recording while \(Settings.shared.dictationPushToTalkShortcut.displayName) is held."
+            : "Recording. Press \(Settings.shared.dictationHandsFreeShortcut.displayName) to stop."
+        Notifications.show(title: "Dictation", body: body)
     }
 
     func stopAndTranscribe() {
