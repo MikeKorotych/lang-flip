@@ -149,7 +149,8 @@ final class AutoFlip {
     private func isForcedKeep(_ word: String, currentLayout: Layout) -> Bool {
         let lower = word.lowercased()
         switch (currentLayout, lower) {
-        case (.uk, "тексті"), (.uk, "еще"):
+        case (.uk, "тексті"), (.uk, "еще"),
+             (.ru, "доступы"):
             return true
         default:
             return false
