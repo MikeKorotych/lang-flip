@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.4 - Release Candidate
+## 0.2.5 - Release Candidate
 
 This release focuses on making LangFlip easier to install, understand, and use
 in the first session.
