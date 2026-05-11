@@ -1,5 +1,6 @@
 import Foundation
 import Carbon.HIToolbox
+import AppKit
 
 /// User-selectable hotkey gestures. We deliberately keep the list short
 /// and limited to "safe" keys — any modifier that's heavily used in
@@ -53,6 +54,98 @@ enum TextToSpeechBackend: String, CaseIterable, Identifiable {
         case .system: return "System voices"
         case .omniVoice: return "OmniVoice local"
         }
+    }
+}
+
+enum GlobalShortcutPreset: String, CaseIterable, Identifiable {
+    case shiftSpace
+    case commandShiftS
+    case controlOptionX
+    case controlOptionR
+    case controlOptionT
+    case controlOptionS
+    case controlOptionO
+    case commandOptionT
+    case commandOptionS
+    case commandOptionO
+
+    var id: Self { self }
+
+    static let translationChoices: [GlobalShortcutPreset] = [
+        .shiftSpace, .controlOptionT, .commandOptionT
+    ]
+
+    static let screenCaptureChoices: [GlobalShortcutPreset] = [
+        .commandShiftS, .controlOptionS, .commandOptionS, .controlOptionO, .commandOptionO
+    ]
+
+    static let readAloudChoices: [GlobalShortcutPreset] = [
+        .controlOptionX, .controlOptionR, .controlOptionT, .commandOptionT
+    ]
+
+    var displayName: String {
+        switch self {
+        case .shiftSpace: return "Shift+Space"
+        case .commandShiftS: return "Shift+Command+S"
+        case .controlOptionX: return "Control+Option+X"
+        case .controlOptionR: return "Control+Option+R"
+        case .controlOptionT: return "Control+Option+T"
+        case .controlOptionS: return "Control+Option+S"
+        case .controlOptionO: return "Control+Option+O"
+        case .commandOptionT: return "Command+Option+T"
+        case .commandOptionS: return "Command+Option+S"
+        case .commandOptionO: return "Command+Option+O"
+        }
+    }
+
+    var keyCode: CGKeyCode {
+        switch self {
+        case .shiftSpace: return CGKeyCode(kVK_Space)
+        case .commandShiftS, .controlOptionS, .commandOptionS: return CGKeyCode(kVK_ANSI_S)
+        case .controlOptionX: return CGKeyCode(kVK_ANSI_X)
+        case .controlOptionR: return CGKeyCode(kVK_ANSI_R)
+        case .controlOptionT, .commandOptionT: return CGKeyCode(kVK_ANSI_T)
+        case .controlOptionO, .commandOptionO: return CGKeyCode(kVK_ANSI_O)
+        }
+    }
+
+    var requiredFlags: CGEventFlags {
+        switch self {
+        case .shiftSpace: return [.maskShift]
+        case .commandShiftS: return [.maskCommand, .maskShift]
+        case .controlOptionX, .controlOptionR, .controlOptionT, .controlOptionS, .controlOptionO:
+            return [.maskControl, .maskAlternate]
+        case .commandOptionT, .commandOptionS, .commandOptionO:
+            return [.maskCommand, .maskAlternate]
+        }
+    }
+
+    var keyEquivalent: String {
+        switch self {
+        case .shiftSpace: return " "
+        case .commandShiftS, .controlOptionS, .commandOptionS: return "s"
+        case .controlOptionX: return "x"
+        case .controlOptionR: return "r"
+        case .controlOptionT, .commandOptionT: return "t"
+        case .controlOptionO, .commandOptionO: return "o"
+        }
+    }
+
+    var menuModifierFlags: NSEvent.ModifierFlags {
+        switch self {
+        case .shiftSpace: return [.shift]
+        case .commandShiftS: return [.command, .shift]
+        case .controlOptionX, .controlOptionR, .controlOptionT, .controlOptionS, .controlOptionO:
+            return [.control, .option]
+        case .commandOptionT, .commandOptionS, .commandOptionO:
+            return [.command, .option]
+        }
+    }
+
+    func matches(keyCode: CGKeyCode, flags: CGEventFlags) -> Bool {
+        guard keyCode == self.keyCode else { return false }
+        let watched: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift]
+        return flags.intersection(watched) == requiredFlags
     }
 }
 
@@ -198,7 +291,9 @@ final class Settings {
         static let fixLastSentenceOnSingleShift = "lf.fixLastSentenceOnSingleShift"
         static let flipLastWordsOnDoubleShift = "lf.flipLastWordsOnDoubleShift"
         static let translationHotkeyEnabled = "lf.translationHotkeyEnabled"
+        static let translationHotkeyPreset = "lf.translationHotkeyPreset"
         static let screenTextCaptureHotkeyEnabled = "lf.screenTextCaptureHotkeyEnabled"
+        static let screenTextCaptureHotkeyPreset = "lf.screenTextCaptureHotkeyPreset"
         static let translationTarget = "lf.translationTarget"
         static let ollamaModel = "lf.ollamaModel"
         static let openaiModel = "lf.openaiModel"
@@ -227,6 +322,7 @@ final class Settings {
         static let omniVoiceReferenceAudioPath = "lf.omniVoiceReferenceAudioPath"
         static let omniVoiceReferenceText = "lf.omniVoiceReferenceText"
         static let readSelectionHotkeyEnabled = "lf.readSelectionHotkeyEnabled"
+        static let readSelectionHotkeyPreset = "lf.readSelectionHotkeyPreset"
         static let microphoneDeviceID = "lf.microphoneDeviceID"
         static let whisperModelPath = "lf.whisperModelPath"
         static let whisperLanguage = "lf.whisperLanguage"
@@ -459,6 +555,16 @@ final class Settings {
         set { defaults.set(newValue, forKey: Keys.readSelectionHotkeyEnabled) }
     }
 
+    var readSelectionHotkeyPreset: GlobalShortcutPreset {
+        get {
+            guard let raw = defaults.string(forKey: Keys.readSelectionHotkeyPreset),
+                  let preset = GlobalShortcutPreset(rawValue: raw)
+            else { return .controlOptionX }
+            return preset
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.readSelectionHotkeyPreset) }
+    }
+
     var microphoneDeviceID: String {
         get { defaults.string(forKey: Keys.microphoneDeviceID) ?? "" }
         set { defaults.set(newValue, forKey: Keys.microphoneDeviceID) }
@@ -524,6 +630,16 @@ final class Settings {
         set { defaults.set(newValue, forKey: Keys.translationHotkeyEnabled) }
     }
 
+    var translationHotkeyPreset: GlobalShortcutPreset {
+        get {
+            guard let raw = defaults.string(forKey: Keys.translationHotkeyPreset),
+                  let preset = GlobalShortcutPreset(rawValue: raw)
+            else { return .shiftSpace }
+            return preset
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.translationHotkeyPreset) }
+    }
+
     func applyRecommendedAIHotkeyDefaults(assistantReady: Bool) {
         guard aiMode == .ollama, assistantReady else { return }
         if defaults.object(forKey: Keys.grammarCheckOnSingleShift) == nil {
@@ -545,6 +661,16 @@ final class Settings {
     var screenTextCaptureHotkeyEnabled: Bool {
         get { defaults.object(forKey: Keys.screenTextCaptureHotkeyEnabled) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.screenTextCaptureHotkeyEnabled) }
+    }
+
+    var screenTextCaptureHotkeyPreset: GlobalShortcutPreset {
+        get {
+            guard let raw = defaults.string(forKey: Keys.screenTextCaptureHotkeyPreset),
+                  let preset = GlobalShortcutPreset(rawValue: raw)
+            else { return .commandShiftS }
+            return preset
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.screenTextCaptureHotkeyPreset) }
     }
 
     /// Default target language for the translate-selection feature.

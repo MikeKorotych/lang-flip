@@ -214,6 +214,7 @@ private struct VoiceTab: View {
     @AppStorage("lf.omniVoiceReferenceAudioPath") private var omniVoiceReferenceAudioPath = ""
     @AppStorage("lf.omniVoiceReferenceText") private var omniVoiceReferenceText = ""
     @AppStorage("lf.readSelectionHotkeyEnabled") private var readSelectionHotkeyEnabled = true
+    @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.controlOptionX.rawValue
     @AppStorage("lf.whisperModelPath") private var whisperModelPath = ""
     @AppStorage("lf.whisperLanguage") private var whisperLanguage = "auto"
 
@@ -481,8 +482,13 @@ private struct VoiceTab: View {
             }
 
             Section("Read aloud shortcut") {
-                Toggle("Read selected text with Control+Option+X", isOn: $readSelectionHotkeyEnabled)
-                helpText("Select text in any app and press Control+Option+X. LangFlip copies the selection briefly, restores your clipboard, and reads it with the selected text-to-speech backend.")
+                Toggle("Read selected text with \(readSelectionShortcutName)", isOn: $readSelectionHotkeyEnabled)
+                Picker("Shortcut", selection: $readSelectionHotkeyPreset) {
+                    ForEach(GlobalShortcutPreset.readAloudChoices) { shortcut in
+                        Text(shortcut.displayName).tag(shortcut.rawValue)
+                    }
+                }
+                helpText("Select text in any app and press the shortcut. LangFlip copies the selection briefly, restores your clipboard, and reads it with the selected text-to-speech backend.")
             }
 
             Section("Dictation") {
@@ -768,6 +774,10 @@ private struct VoiceTab: View {
 
     private var activeTTSBackend: TextToSpeechBackend {
         TextToSpeechBackend(rawValue: ttsBackend) ?? .system
+    }
+
+    private var readSelectionShortcutName: String {
+        (GlobalShortcutPreset(rawValue: readSelectionHotkeyPreset) ?? .controlOptionX).displayName
     }
 
     private var omniVoiceStatusLabel: String {
@@ -1191,6 +1201,9 @@ private struct BehaviorTab: View {
     @AppStorage("lf.hotkeyPreset") private var hotkeyPreset = HotkeyPreset.doubleShift.rawValue
     @AppStorage("lf.fixLastSentenceOnSingleShift") private var fixLastSentenceOnSingleShift = true
     @AppStorage("lf.flipLastWordsOnDoubleShift") private var flipLastWordsOnDoubleShift = true
+    @AppStorage("lf.translationHotkeyPreset") private var translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
+    @AppStorage("lf.screenTextCaptureHotkeyPreset") private var screenTextCaptureHotkeyPreset = GlobalShortcutPreset.commandShiftS.rawValue
+    @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.controlOptionX.rawValue
 
     var body: some View {
         Form {
@@ -1201,6 +1214,24 @@ private struct BehaviorTab: View {
                     }
                 }
                 helpText("This gesture flips selected text between keyboard layouts. An experimental fallback can also try the last words before the cursor. Pressing both Shift keys still pauses or resumes LangFlip.")
+            }
+            Section("Global shortcuts") {
+                Picker("Translate selection", selection: $translationHotkeyPreset) {
+                    ForEach(GlobalShortcutPreset.translationChoices) { shortcut in
+                        Text(shortcut.displayName).tag(shortcut.rawValue)
+                    }
+                }
+                Picker("Capture text from screen", selection: $screenTextCaptureHotkeyPreset) {
+                    ForEach(GlobalShortcutPreset.screenCaptureChoices) { shortcut in
+                        Text(shortcut.displayName).tag(shortcut.rawValue)
+                    }
+                }
+                Picker("Read selected text aloud", selection: $readSelectionHotkeyPreset) {
+                    ForEach(GlobalShortcutPreset.readAloudChoices) { shortcut in
+                        Text(shortcut.displayName).tag(shortcut.rawValue)
+                    }
+                }
+                helpText("These shortcuts work globally. The feature toggles still live in AI and Voice settings, so you can keep a shortcut assigned but temporarily turn the feature off.")
             }
             Section {
                 Toggle("Auto-flip at word end", isOn: $autoFlip)
@@ -1265,7 +1296,9 @@ private struct ModelsTab: View {
     @AppStorage("lf.aiMode") private var aiMode = AIMode.off.rawValue
     @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = true
     @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
+    @AppStorage("lf.translationHotkeyPreset") private var translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
     @AppStorage("lf.screenTextCaptureHotkeyEnabled") private var screenTextCaptureHotkeyEnabled = true
+    @AppStorage("lf.screenTextCaptureHotkeyPreset") private var screenTextCaptureHotkeyPreset = GlobalShortcutPreset.commandShiftS.rawValue
     @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
     @AppStorage("lf.ollamaModel") private var ollamaModel = "qwen3.5:4b"
     @AppStorage("lf.cloudProvider") private var cloudProvider = AICloudProvider.openRouter.rawValue
@@ -1380,19 +1413,19 @@ private struct ModelsTab: View {
                 }
                 helpText("Used by the menu bar Translate action and the optional Shift+Space hotkey.")
 
-                Toggle("Translate with Shift+Space", isOn: Binding(
+                Toggle("Translate with \(translationShortcutName)", isOn: Binding(
                     get: { aiReadyForHotkeys && translationHotkeyEnabled },
                     set: { translationHotkeyEnabled = $0 }
                 ))
                 .disabled(!aiReadyForHotkeys)
                 helpText(aiReadyForHotkeys
-                         ? "When AI is on, Shift+Space translates the current selection into the default target language."
+                         ? "When AI is on, \(translationShortcutName) translates the current selection into the default target language."
                          : "Install and select a local model to enable this shortcut.")
             }
 
             if AIMode(rawValue: aiMode) == .ollama {
                 Section("Screen text capture") {
-                    Toggle("Capture text with Shift+Command+S", isOn: $screenTextCaptureHotkeyEnabled)
+                    Toggle("Capture text with \(screenCaptureShortcutName)", isOn: $screenTextCaptureHotkeyEnabled)
                     helpText("Select a screen region and copy recognized text to the clipboard. Requires a vision-capable Ollama model.")
                 }
             }
@@ -1516,6 +1549,14 @@ private struct ModelsTab: View {
         if Settings.shared.hasStoredTranslationHotkeyPreference {
             translationHotkeyEnabled = Settings.shared.translationHotkeyEnabled
         }
+    }
+
+    private var translationShortcutName: String {
+        (GlobalShortcutPreset(rawValue: translationHotkeyPreset) ?? .shiftSpace).displayName
+    }
+
+    private var screenCaptureShortcutName: String {
+        (GlobalShortcutPreset(rawValue: screenTextCaptureHotkeyPreset) ?? .commandShiftS).displayName
     }
 }
 

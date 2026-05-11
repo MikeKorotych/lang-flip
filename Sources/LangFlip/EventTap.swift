@@ -157,12 +157,8 @@ final class EventTap {
         if Settings.shared.screenTextCaptureHotkeyEnabled,
            Settings.shared.aiMode == .ollama,
            Self.isVisionOllamaModel(Settings.shared.ollamaModel),
-           keyCode == CGKeyCode(kVK_ANSI_S),
-           flags.contains(.maskShift),
-           flags.contains(.maskCommand),
-           !flags.contains(.maskAlternate),
-           !flags.contains(.maskControl) {
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: screen OCR hotkey ⇧⌘S fired\n".utf8)) }
+           Settings.shared.screenTextCaptureHotkeyPreset.matches(keyCode: keyCode, flags: flags) {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: screen OCR hotkey fired\n".utf8)) }
             DispatchQueue.main.async { [weak self] in
                 self?.captureScreenTextWithAI()
             }
@@ -172,12 +168,8 @@ final class EventTap {
         // Read selected text aloud: Control+Option+X. This is global and
         // intentionally avoids Command-based browser/editor shortcuts.
         if Settings.shared.readSelectionHotkeyEnabled,
-           keyCode == CGKeyCode(kVK_ANSI_X),
-           flags.contains(.maskControl),
-           flags.contains(.maskAlternate),
-           !flags.contains(.maskShift),
-           !flags.contains(.maskCommand) {
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: read-aloud hotkey ⌃⌥X fired\n".utf8)) }
+           Settings.shared.readSelectionHotkeyPreset.matches(keyCode: keyCode, flags: flags) {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: read-aloud hotkey fired\n".utf8)) }
             DispatchQueue.main.async { [weak self] in
                 self?.readSelectedTextAloud()
             }
@@ -191,12 +183,8 @@ final class EventTap {
         // action only applies to selected text and consumes the stray space.
         if Settings.shared.translationHotkeyEnabled,
            Settings.shared.aiMode != .off,
-           keyCode == CGKeyCode(kVK_Space),
-           flags.contains(.maskShift),
-           !flags.contains(.maskCommand),
-           !flags.contains(.maskAlternate),
-           !flags.contains(.maskControl) {
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate hotkey ⇧Space fired\n".utf8)) }
+           Settings.shared.translationHotkeyPreset.matches(keyCode: keyCode, flags: flags) {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate hotkey fired\n".utf8)) }
             let target = Settings.shared.translationTarget
             DispatchQueue.main.async { [weak self] in
                 self?.translateSelectionWithAI(target: target)
@@ -829,7 +817,7 @@ final class EventTap {
                       !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 else {
                     if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: speech: no selected text\n".utf8)) }
-                    Notifications.show(title: "LangFlip", body: "Select text first, then press Control+Option+X.")
+                    Notifications.show(title: "LangFlip", body: "Select text first, then press \(Settings.shared.readSelectionHotkeyPreset.displayName).")
                     return
                 }
                 Notifications.show(title: "Reading selected text", body: String(text.prefix(80)))
