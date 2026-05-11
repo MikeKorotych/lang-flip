@@ -2043,7 +2043,7 @@ private struct OllamaModelPicker: View {
             tag: "qwen3.5:4b",
             menuLabel: "Qwen 3.5 4B Quality (vision)",
             displayName: "Qwen 3.5 4B",
-            detail: "Heavier quality option for comparison on Macs with 12 GB+ RAM."
+            detail: "Use on Macs with 16 GB+ RAM if the default 2B model makes mistakes."
         )
     ]
 

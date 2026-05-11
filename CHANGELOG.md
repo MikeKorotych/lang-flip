@@ -11,7 +11,7 @@ in the first session.
 - One-click extended dictionary install from onboarding.
 - Qwen 3.5 local AI setup from onboarding, with Ollama install guidance.
 - Qwen 3.5 2B as the default local AI model, with 4B kept as a heavier quality
-  option for comparison.
+  option for 16 GB+ Macs when the smaller model makes mistakes.
 - Built-in grammar test showing input and output.
 - Built-in copy-text-from-screenshot test with a visible target and paste check.
 - Hotkey summary in onboarding:

@@ -12,7 +12,7 @@ The layout fixer works locally with rules and dictionaries. AI features are
 optional and can run on your Mac through Ollama. The current recommended local
 model is **Qwen 3.5 2B** because it is fast, light, and good enough for short
 grammar fixes. **Qwen 3.5 4B** remains available as a heavier quality option for
-comparison on Macs with 12 GB+ RAM.
+Macs with 16 GB+ RAM when the smaller model makes mistakes.
 
 Supports **English, Ukrainian, and Russian** out of the box.
 
@@ -100,7 +100,7 @@ Manual setup:
 2. Open **LangFlip → Preferences → AI**.
 3. Choose **Ollama (local)**.
 4. Install or select **Qwen 3.5 2B**. If you want to compare quality, try
-   **Qwen 3.5 4B** from the same menu.
+   **Qwen 3.5 4B** from the same menu, preferably on a Mac with 16 GB+ RAM.
 5. Run the built-in grammar and copy-text-from-screenshot tests.
 
 In Ollama mode, LangFlip talks to `127.0.0.1:11434`. Your text and screenshots
