@@ -127,9 +127,9 @@ final class MenubarController: NSObject {
         // haven't opted into AI yet.
         translateMenuItem.isHidden = (Settings.shared.aiMode == .off)
         stopReadingItem.isEnabled = SpeechReader.shared.isSpeaking
-        applyShortcut(Settings.shared.translationHotkeyPreset, to: translateMenuItem)
-        applyShortcut(Settings.shared.readSelectionHotkeyPreset, to: readSelectionItem)
-        applyShortcut(Settings.shared.screenTextCaptureHotkeyPreset, to: ocrMenuItem)
+        applyShortcut(Settings.shared.translationShortcut, to: translateMenuItem)
+        applyShortcut(Settings.shared.readSelectionShortcut, to: readSelectionItem)
+        applyShortcut(Settings.shared.screenTextCaptureShortcut, to: ocrMenuItem)
         // OCR only belongs in the quick menu when the selected local
         // model can actually see images. Keep it hidden for text-only
         // models so release users don't hit a dead-end button.
@@ -213,7 +213,7 @@ final class MenubarController: NSObject {
         NSApp.terminate(nil)
     }
 
-    private func applyShortcut(_ shortcut: GlobalShortcutPreset, to item: NSMenuItem) {
+    private func applyShortcut(_ shortcut: GlobalShortcut, to item: NSMenuItem) {
         item.keyEquivalent = shortcut.keyEquivalent
         item.keyEquivalentModifierMask = shortcut.menuModifierFlags
     }

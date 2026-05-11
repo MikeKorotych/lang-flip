@@ -3,6 +3,7 @@ import AppKit
 import AVFoundation
 import ServiceManagement
 import UniformTypeIdentifiers
+import Carbon.HIToolbox
 
 /// Top-level Preferences view: 5 sections covering everything that used to
 /// live in the menubar. The menubar keeps only quick toggles + the
@@ -217,6 +218,7 @@ private struct VoiceTab: View {
     @AppStorage("lf.omniVoiceReferenceText") private var omniVoiceReferenceText = ""
     @AppStorage("lf.readSelectionHotkeyEnabled") private var readSelectionHotkeyEnabled = true
     @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.controlOptionX.rawValue
+    @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
     @AppStorage("lf.whisperModelPath") private var whisperModelPath = ""
     @AppStorage("lf.whisperLanguage") private var whisperLanguage = "auto"
 
@@ -774,7 +776,8 @@ private struct VoiceTab: View {
     }
 
     private var readSelectionShortcutName: String {
-        (GlobalShortcutPreset(rawValue: readSelectionHotkeyPreset) ?? .controlOptionX).displayName
+        GlobalShortcut.decode(readSelectionHotkeyCustom)?.displayName
+            ?? (GlobalShortcutPreset(rawValue: readSelectionHotkeyPreset) ?? .controlOptionX).displayName
     }
 
     private var omniVoiceStatusLabel: String {
@@ -1192,8 +1195,11 @@ private struct DictionaryPackView: View {
 private struct HotkeysTab: View {
     @AppStorage("lf.hotkeyPreset") private var hotkeyPreset = HotkeyPreset.doubleShift.rawValue
     @AppStorage("lf.translationHotkeyPreset") private var translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
+    @AppStorage("lf.translationHotkeyCustom") private var translationHotkeyCustom = ""
     @AppStorage("lf.screenTextCaptureHotkeyPreset") private var screenTextCaptureHotkeyPreset = GlobalShortcutPreset.commandShiftS.rawValue
+    @AppStorage("lf.screenTextCaptureHotkeyCustom") private var screenTextCaptureHotkeyCustom = ""
     @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.controlOptionX.rawValue
+    @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
 
     var body: some View {
         Form {
@@ -1206,29 +1212,27 @@ private struct HotkeysTab: View {
                 helpText("Flips selected text between keyboard layouts. If no text is selected and the Behavior toggle is on, the same gesture can try the last words before the cursor.")
             }
             Section("AI actions") {
-                Picker("Translate selection", selection: $translationHotkeyPreset) {
-                    ForEach(GlobalShortcutPreset.translationChoices) { shortcut in
-                        Text(shortcut.displayName).tag(shortcut.rawValue)
-                    }
-                }
-                Picker("Capture text from screen", selection: $screenTextCaptureHotkeyPreset) {
-                    ForEach(GlobalShortcutPreset.screenCaptureChoices) { shortcut in
-                        Text(shortcut.displayName).tag(shortcut.rawValue)
-                    }
-                }
-                Picker("Read selected text aloud", selection: $readSelectionHotkeyPreset) {
-                    ForEach(GlobalShortcutPreset.readAloudChoices) { shortcut in
-                        Text(shortcut.displayName).tag(shortcut.rawValue)
-                    }
-                }
+                ShortcutRecorderRow(
+                    title: "Translate selection",
+                    preset: $translationHotkeyPreset,
+                    custom: $translationHotkeyCustom,
+                    choices: GlobalShortcutPreset.translationChoices
+                )
+                ShortcutRecorderRow(
+                    title: "Capture text from screen",
+                    preset: $screenTextCaptureHotkeyPreset,
+                    custom: $screenTextCaptureHotkeyCustom,
+                    choices: GlobalShortcutPreset.screenCaptureChoices
+                )
                 helpText("These shortcuts work globally. Turn each feature on or off in AI settings without losing the shortcut you picked here.")
             }
             Section("Voice") {
-                Picker("Read selected text aloud", selection: $readSelectionHotkeyPreset) {
-                    ForEach(GlobalShortcutPreset.readAloudChoices) { shortcut in
-                        Text(shortcut.displayName).tag(shortcut.rawValue)
-                    }
-                }
+                ShortcutRecorderRow(
+                    title: "Read selected text aloud",
+                    preset: $readSelectionHotkeyPreset,
+                    custom: $readSelectionHotkeyCustom,
+                    choices: GlobalShortcutPreset.readAloudChoices
+                )
                 helpText("Reads the current text selection with the voice backend selected in Voice settings.")
             }
             Section("Modifier gestures") {
@@ -1247,6 +1251,102 @@ private struct HotkeysTab: View {
             .font(.callout)
             .foregroundColor(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct ShortcutRecorderRow: View {
+    let title: String
+    @Binding var preset: String
+    @Binding var custom: String
+    let choices: [GlobalShortcutPreset]
+
+    @State private var isRecording = false
+    @State private var warning = ""
+    @State private var monitor: Any?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Picker(title, selection: $preset) {
+                    ForEach(choices) { shortcut in
+                        Text(shortcut.displayName).tag(shortcut.rawValue)
+                    }
+                }
+                .disabled(hasCustom || isRecording)
+
+                Button(isRecording ? "Press keys..." : "Record") {
+                    startRecording()
+                }
+                .disabled(isRecording)
+
+                if hasCustom {
+                    Button("Use preset") {
+                        custom = ""
+                        warning = ""
+                    }
+                }
+            }
+
+            if hasCustom || isRecording || !warning.isEmpty {
+                HStack(spacing: 8) {
+                    if let shortcut = GlobalShortcut.decode(custom) {
+                        Text("Custom: \(shortcut.displayName)")
+                            .foregroundColor(.green)
+                    } else if isRecording {
+                        Text("Press a shortcut now. Esc cancels.")
+                            .foregroundColor(.secondary)
+                    }
+                    if !warning.isEmpty {
+                        Text(warning)
+                            .foregroundColor(.orange)
+                    }
+                }
+                .font(.caption)
+            }
+        }
+        .onDisappear {
+            stopRecording()
+        }
+    }
+
+    private var hasCustom: Bool {
+        GlobalShortcut.decode(custom) != nil
+    }
+
+    private func startRecording() {
+        stopRecording()
+        isRecording = true
+        warning = ""
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            handle(event: event)
+        }
+    }
+
+    private func stopRecording() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+        isRecording = false
+    }
+
+    private func handle(event: NSEvent) -> NSEvent? {
+        if event.keyCode == UInt16(kVK_Escape) {
+            stopRecording()
+            return nil
+        }
+        guard let shortcut = GlobalShortcut.from(event: event) else {
+            warning = "Use at least one modifier plus a normal key."
+            return nil
+        }
+        if shortcut.modifiers == GlobalShortcut.shift && shortcut.keyCode != CGKeyCode(kVK_Space) {
+            warning = "Shift-only shortcuts are too easy to trigger. Add Control, Option, or Command."
+            return nil
+        }
+        custom = shortcut.encoded
+        warning = ""
+        stopRecording()
+        return nil
     }
 }
 
@@ -1327,8 +1427,10 @@ private struct ModelsTab: View {
     @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = true
     @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
     @AppStorage("lf.translationHotkeyPreset") private var translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
+    @AppStorage("lf.translationHotkeyCustom") private var translationHotkeyCustom = ""
     @AppStorage("lf.screenTextCaptureHotkeyEnabled") private var screenTextCaptureHotkeyEnabled = true
     @AppStorage("lf.screenTextCaptureHotkeyPreset") private var screenTextCaptureHotkeyPreset = GlobalShortcutPreset.commandShiftS.rawValue
+    @AppStorage("lf.screenTextCaptureHotkeyCustom") private var screenTextCaptureHotkeyCustom = ""
     @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
     @AppStorage("lf.ollamaModel") private var ollamaModel = "qwen3.5:4b"
     @AppStorage("lf.cloudProvider") private var cloudProvider = AICloudProvider.openRouter.rawValue
@@ -1582,11 +1684,13 @@ private struct ModelsTab: View {
     }
 
     private var translationShortcutName: String {
-        (GlobalShortcutPreset(rawValue: translationHotkeyPreset) ?? .shiftSpace).displayName
+        GlobalShortcut.decode(translationHotkeyCustom)?.displayName
+            ?? (GlobalShortcutPreset(rawValue: translationHotkeyPreset) ?? .shiftSpace).displayName
     }
 
     private var screenCaptureShortcutName: String {
-        (GlobalShortcutPreset(rawValue: screenTextCaptureHotkeyPreset) ?? .commandShiftS).displayName
+        GlobalShortcut.decode(screenTextCaptureHotkeyCustom)?.displayName
+            ?? (GlobalShortcutPreset(rawValue: screenTextCaptureHotkeyPreset) ?? .commandShiftS).displayName
     }
 }
 

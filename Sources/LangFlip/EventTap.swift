@@ -157,7 +157,7 @@ final class EventTap {
         if Settings.shared.screenTextCaptureHotkeyEnabled,
            Settings.shared.aiMode == .ollama,
            Self.isVisionOllamaModel(Settings.shared.ollamaModel),
-           Settings.shared.screenTextCaptureHotkeyPreset.matches(keyCode: keyCode, flags: flags) {
+           Settings.shared.screenTextCaptureShortcut.matches(keyCode: keyCode, flags: flags) {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: screen OCR hotkey fired\n".utf8)) }
             DispatchQueue.main.async { [weak self] in
                 self?.captureScreenTextWithAI()
@@ -168,7 +168,7 @@ final class EventTap {
         // Read selected text aloud: Control+Option+X. This is global and
         // intentionally avoids Command-based browser/editor shortcuts.
         if Settings.shared.readSelectionHotkeyEnabled,
-           Settings.shared.readSelectionHotkeyPreset.matches(keyCode: keyCode, flags: flags) {
+           Settings.shared.readSelectionShortcut.matches(keyCode: keyCode, flags: flags) {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: read-aloud hotkey fired\n".utf8)) }
             DispatchQueue.main.async { [weak self] in
                 self?.readSelectedTextAloud()
@@ -183,7 +183,7 @@ final class EventTap {
         // action only applies to selected text and consumes the stray space.
         if Settings.shared.translationHotkeyEnabled,
            Settings.shared.aiMode != .off,
-           Settings.shared.translationHotkeyPreset.matches(keyCode: keyCode, flags: flags) {
+           Settings.shared.translationShortcut.matches(keyCode: keyCode, flags: flags) {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate hotkey fired\n".utf8)) }
             let target = Settings.shared.translationTarget
             DispatchQueue.main.async { [weak self] in
@@ -817,7 +817,7 @@ final class EventTap {
                       !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 else {
                     if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: speech: no selected text\n".utf8)) }
-                    Notifications.show(title: "LangFlip", body: "Select text first, then press \(Settings.shared.readSelectionHotkeyPreset.displayName).")
+                    Notifications.show(title: "LangFlip", body: "Select text first, then press \(Settings.shared.readSelectionShortcut.displayName).")
                     return
                 }
                 Notifications.show(title: "Reading selected text", body: String(text.prefix(80)))

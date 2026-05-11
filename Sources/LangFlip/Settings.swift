@@ -132,20 +132,152 @@ enum GlobalShortcutPreset: String, CaseIterable, Identifiable {
     }
 
     var menuModifierFlags: NSEvent.ModifierFlags {
-        switch self {
-        case .shiftSpace: return [.shift]
-        case .commandShiftS: return [.command, .shift]
-        case .controlOptionX, .controlOptionR, .controlOptionT, .controlOptionS, .controlOptionO:
-            return [.control, .option]
-        case .commandOptionT, .commandOptionS, .commandOptionO:
-            return [.command, .option]
-        }
+        shortcut.menuModifierFlags
     }
 
     func matches(keyCode: CGKeyCode, flags: CGEventFlags) -> Bool {
-        guard keyCode == self.keyCode else { return false }
-        let watched: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift]
-        return flags.intersection(watched) == requiredFlags
+        shortcut.matches(keyCode: keyCode, flags: flags)
+    }
+
+    var shortcut: GlobalShortcut {
+        GlobalShortcut(
+            keyCode: keyCode,
+            modifiers: GlobalShortcut.modifierMask(from: requiredFlags),
+            displayName: displayName,
+            keyEquivalent: keyEquivalent
+        )
+    }
+}
+
+struct GlobalShortcut: Equatable {
+    static let command = 1
+    static let option = 2
+    static let control = 4
+    static let shift = 8
+
+    let keyCode: CGKeyCode
+    let modifiers: Int
+    let displayName: String
+    let keyEquivalent: String
+
+    var menuModifierFlags: NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if modifiers & Self.command != 0 { flags.insert(.command) }
+        if modifiers & Self.option != 0 { flags.insert(.option) }
+        if modifiers & Self.control != 0 { flags.insert(.control) }
+        if modifiers & Self.shift != 0 { flags.insert(.shift) }
+        return flags
+    }
+
+    func matches(keyCode: CGKeyCode, flags: CGEventFlags) -> Bool {
+        self.keyCode == keyCode && Self.modifierMask(from: flags) == modifiers
+    }
+
+    var encoded: String {
+        [
+            String(keyCode),
+            String(modifiers),
+            displayName.replacingOccurrences(of: "|", with: "/"),
+            keyEquivalent.replacingOccurrences(of: "|", with: "/")
+        ].joined(separator: "|")
+    }
+
+    static func decode(_ raw: String?) -> GlobalShortcut? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let parts = raw.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 4,
+              let key = UInt16(parts[0]),
+              let modifiers = Int(parts[1]),
+              modifiers != 0
+        else { return nil }
+        return GlobalShortcut(
+            keyCode: CGKeyCode(key),
+            modifiers: modifiers,
+            displayName: parts[2],
+            keyEquivalent: parts[3]
+        )
+    }
+
+    static func from(event: NSEvent) -> GlobalShortcut? {
+        let modifiers = modifierMask(from: event.modifierFlags)
+        guard modifiers != 0 else { return nil }
+        let keyCode = CGKeyCode(event.keyCode)
+        guard !isModifierOnlyKey(keyCode) else { return nil }
+        let keyName = displayName(for: keyCode, event: event)
+        guard !keyName.isEmpty else { return nil }
+        return GlobalShortcut(
+            keyCode: keyCode,
+            modifiers: modifiers,
+            displayName: modifierPrefix(modifiers) + keyName,
+            keyEquivalent: keyEquivalent(for: keyCode, event: event)
+        )
+    }
+
+    static func modifierMask(from flags: CGEventFlags) -> Int {
+        var value = 0
+        if flags.contains(.maskCommand) { value |= command }
+        if flags.contains(.maskAlternate) { value |= option }
+        if flags.contains(.maskControl) { value |= control }
+        if flags.contains(.maskShift) { value |= shift }
+        return value
+    }
+
+    static func modifierMask(from flags: NSEvent.ModifierFlags) -> Int {
+        var value = 0
+        if flags.contains(.command) { value |= command }
+        if flags.contains(.option) { value |= option }
+        if flags.contains(.control) { value |= control }
+        if flags.contains(.shift) { value |= shift }
+        return value
+    }
+
+    private static func modifierPrefix(_ modifiers: Int) -> String {
+        var parts: [String] = []
+        if modifiers & control != 0 { parts.append("Control") }
+        if modifiers & option != 0 { parts.append("Option") }
+        if modifiers & shift != 0 { parts.append("Shift") }
+        if modifiers & command != 0 { parts.append("Command") }
+        return parts.isEmpty ? "" : parts.joined(separator: "+") + "+"
+    }
+
+    private static func isModifierOnlyKey(_ keyCode: CGKeyCode) -> Bool {
+        switch Int(keyCode) {
+        case kVK_Shift, kVK_RightShift, kVK_Command, kVK_RightCommand, kVK_Option, kVK_RightOption, kVK_Control, kVK_RightControl:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func displayName(for keyCode: CGKeyCode, event: NSEvent) -> String {
+        switch Int(keyCode) {
+        case kVK_Space: return "Space"
+        case kVK_Return: return "Return"
+        case kVK_Tab: return "Tab"
+        case kVK_Delete: return "Delete"
+        case kVK_Escape: return "Escape"
+        case kVK_LeftArrow: return "Left Arrow"
+        case kVK_RightArrow: return "Right Arrow"
+        case kVK_UpArrow: return "Up Arrow"
+        case kVK_DownArrow: return "Down Arrow"
+        default:
+            if let chars = event.charactersIgnoringModifiers, !chars.isEmpty {
+                return chars.uppercased()
+            }
+            return ""
+        }
+    }
+
+    private static func keyEquivalent(for keyCode: CGKeyCode, event: NSEvent) -> String {
+        switch Int(keyCode) {
+        case kVK_Space: return " "
+        case kVK_Return: return "\r"
+        case kVK_Tab: return "\t"
+        case kVK_Delete: return "\u{8}"
+        default:
+            guard let chars = event.charactersIgnoringModifiers, chars.count == 1 else { return "" }
+            return chars.lowercased()
+        }
     }
 }
 
@@ -292,8 +424,10 @@ final class Settings {
         static let flipLastWordsOnDoubleShift = "lf.flipLastWordsOnDoubleShift"
         static let translationHotkeyEnabled = "lf.translationHotkeyEnabled"
         static let translationHotkeyPreset = "lf.translationHotkeyPreset"
+        static let translationHotkeyCustom = "lf.translationHotkeyCustom"
         static let screenTextCaptureHotkeyEnabled = "lf.screenTextCaptureHotkeyEnabled"
         static let screenTextCaptureHotkeyPreset = "lf.screenTextCaptureHotkeyPreset"
+        static let screenTextCaptureHotkeyCustom = "lf.screenTextCaptureHotkeyCustom"
         static let translationTarget = "lf.translationTarget"
         static let ollamaModel = "lf.ollamaModel"
         static let openaiModel = "lf.openaiModel"
@@ -323,6 +457,7 @@ final class Settings {
         static let omniVoiceReferenceText = "lf.omniVoiceReferenceText"
         static let readSelectionHotkeyEnabled = "lf.readSelectionHotkeyEnabled"
         static let readSelectionHotkeyPreset = "lf.readSelectionHotkeyPreset"
+        static let readSelectionHotkeyCustom = "lf.readSelectionHotkeyCustom"
         static let microphoneDeviceID = "lf.microphoneDeviceID"
         static let whisperModelPath = "lf.whisperModelPath"
         static let whisperLanguage = "lf.whisperLanguage"
@@ -565,6 +700,11 @@ final class Settings {
         set { defaults.set(newValue.rawValue, forKey: Keys.readSelectionHotkeyPreset) }
     }
 
+    var readSelectionShortcut: GlobalShortcut {
+        GlobalShortcut.decode(defaults.string(forKey: Keys.readSelectionHotkeyCustom))
+            ?? readSelectionHotkeyPreset.shortcut
+    }
+
     var microphoneDeviceID: String {
         get { defaults.string(forKey: Keys.microphoneDeviceID) ?? "" }
         set { defaults.set(newValue, forKey: Keys.microphoneDeviceID) }
@@ -640,6 +780,11 @@ final class Settings {
         set { defaults.set(newValue.rawValue, forKey: Keys.translationHotkeyPreset) }
     }
 
+    var translationShortcut: GlobalShortcut {
+        GlobalShortcut.decode(defaults.string(forKey: Keys.translationHotkeyCustom))
+            ?? translationHotkeyPreset.shortcut
+    }
+
     func applyRecommendedAIHotkeyDefaults(assistantReady: Bool) {
         guard aiMode == .ollama, assistantReady else { return }
         if defaults.object(forKey: Keys.grammarCheckOnSingleShift) == nil {
@@ -671,6 +816,11 @@ final class Settings {
             return preset
         }
         set { defaults.set(newValue.rawValue, forKey: Keys.screenTextCaptureHotkeyPreset) }
+    }
+
+    var screenTextCaptureShortcut: GlobalShortcut {
+        GlobalShortcut.decode(defaults.string(forKey: Keys.screenTextCaptureHotkeyCustom))
+            ?? screenTextCaptureHotkeyPreset.shortcut
     }
 
     /// Default target language for the translate-selection feature.
