@@ -2023,7 +2023,29 @@ private struct OllamaModelPicker: View {
         case failed
     }
 
-    private let visionModel = "qwen3.5:4b"
+    private struct RecommendedModel: Identifiable {
+        let tag: String
+        let menuLabel: String
+        let displayName: String
+        let detail: String
+
+        var id: String { tag }
+    }
+
+    private let recommendedModels: [RecommendedModel] = [
+        RecommendedModel(
+            tag: "qwen3.5:2b",
+            menuLabel: "Qwen 3.5 2B Lite (vision)",
+            displayName: "Qwen 3.5 2B Lite",
+            detail: "Lower memory option for 8 GB Macs; useful for comparing speed and quality."
+        ),
+        RecommendedModel(
+            tag: "qwen3.5:4b",
+            menuLabel: "Qwen 3.5 4B Recommended (vision)",
+            displayName: "Qwen 3.5 4B",
+            detail: "Better proofreading stability; recommended for Macs with 12 GB+ RAM."
+        )
+    ]
 
     @Binding var selectedModel: String
     let onSelectedModelAvailabilityChanged: (Bool) -> Void
@@ -2033,11 +2055,12 @@ private struct OllamaModelPicker: View {
     @State private var loadError: String?
     @State private var installState: InstallState = .idle
     @State private var installingModel: String?
+    @State private var failedModel: String?
     @State private var installMessage: String?
 
     private var dropdownModels: [String] {
         var models: [String] = []
-        for model in [selectedModel] + installedModels + [visionModel] {
+        for model in [selectedModel] + installedModels + recommendedModels.map(\.tag) {
             let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
             let canonical = canonicalModelTag(trimmed)
             let alreadyIncluded = models.contains { canonicalModelTag($0) == canonical }
@@ -2081,16 +2104,20 @@ private struct OllamaModelPicker: View {
                 .help("Open Ollama")
             }
 
-            HStack(spacing: 8) {
-                Button(installButtonTitle(for: visionModel)) {
-                    Task { await installModel(visionModel) }
-                }
-                .disabled(isModelInstalled(visionModel) || isInstalling)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(recommendedModels) { model in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Button(installButtonTitle(for: model.tag)) {
+                            Task { await installModel(model.tag) }
+                        }
+                        .disabled(isModelInstalled(model.tag) || isInstalling)
+                        .frame(width: 218, alignment: .leading)
 
-                if isModelInstalled(visionModel) {
-                    Text("Ready for local text fixes and screenshot text capture.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        Text(modelStatusText(for: model))
+                            .font(.caption)
+                            .foregroundColor(isModelInstalled(model.tag) ? .secondary : .secondary)
+                            .lineLimit(2)
+                    }
                 }
             }
 
@@ -2130,24 +2157,39 @@ private struct OllamaModelPicker: View {
         if installingModel == model {
             return "Downloading \(displayName(for: model))..."
         }
+        if failedModel == model {
+            return "Try \(displayName(for: model)) again"
+        }
         switch installState {
-        case .failed: return "Try \(displayName(for: model)) again"
         case .idle, .installing, .finished: return "Download \(displayName(for: model))"
+        case .failed: return "Download \(displayName(for: model))"
         }
     }
 
     private func label(for model: String) -> String {
-        if canonicalModelTag(model) == visionModel {
-            return "Qwen 3.5 4B (vision)"
+        if let recommended = recommendedModel(for: model) {
+            return recommended.menuLabel
         }
         return model
     }
 
     private func displayName(for model: String) -> String {
-        if canonicalModelTag(model) == visionModel {
-            return "Qwen 3.5 4B"
+        if let recommended = recommendedModel(for: model) {
+            return recommended.displayName
         }
         return model
+    }
+
+    private func modelStatusText(for model: RecommendedModel) -> String {
+        if isModelInstalled(model.tag) {
+            return "Installed. \(model.detail)"
+        }
+        return model.detail
+    }
+
+    private func recommendedModel(for model: String) -> RecommendedModel? {
+        let canonical = canonicalModelTag(model)
+        return recommendedModels.first { canonicalModelTag($0.tag) == canonical }
     }
 
     private func isModelInstalled(_ model: String) -> Bool {
@@ -2172,6 +2214,7 @@ private struct OllamaModelPicker: View {
         selectedModel = model
         installState = .installing
         installingModel = model
+        failedModel = nil
         loadError = nil
         installMessage = "Downloading \(displayName(for: model)). This can take a few minutes."
         defer { installingModel = nil }
@@ -2180,9 +2223,11 @@ private struct OllamaModelPicker: View {
         try? await Task.sleep(nanoseconds: 2_000_000_000)
         if let failure = await Self.pullOllamaModel(model) {
             installState = .failed
+            failedModel = model
             installMessage = failure
         } else {
             installState = .finished
+            failedModel = nil
             installMessage = "\(displayName(for: model)) is ready."
             await refreshInstalledModels()
         }

@@ -10,7 +10,8 @@ translates selected text, and can copy text from a selected area of the screen.
 
 The layout fixer works locally with rules and dictionaries. AI features are
 optional and can run on your Mac through Ollama. The current recommended local
-model is **Qwen 3.5 4B**.
+model is **Qwen 3.5 4B** for Macs with 12 GB+ RAM; **Qwen 3.5 2B Lite** is
+available as a lower-memory option for testing and lighter machines.
 
 Supports **English, Ukrainian, and Russian** out of the box.
 
@@ -97,7 +98,8 @@ Manual setup:
 1. Install and open [Ollama](https://ollama.com/).
 2. Open **LangFlip → Preferences → AI**.
 3. Choose **Ollama (local)**.
-4. Install or select **Qwen 3.5 4B**.
+4. Install or select **Qwen 3.5 4B**. On lower-memory Macs, try **Qwen 3.5 2B
+   Lite** and compare it with the built-in tests.
 5. Run the built-in grammar and copy-text-from-screenshot tests.
 
 In Ollama mode, LangFlip talks to `127.0.0.1:11434`. Your text and screenshots
