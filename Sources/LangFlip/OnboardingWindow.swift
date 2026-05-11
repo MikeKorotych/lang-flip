@@ -99,6 +99,7 @@ private struct SetupChecklist: View {
     @State private var grammarState: RunState = .idle
     @State private var ocrState: RunState = .idle
     @State private var screenshotPasteTarget = ""
+    @State private var screenshotPulse = false
 
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     private let qwenModel = "qwen3.5:4b"
@@ -118,11 +119,13 @@ private struct SetupChecklist: View {
                 state: dictionaryState,
                 progress: dictionaryProgress
             ) {
-                Button(dictionaryState.isRunning ? "Installing..." : "Install") {
+                Button {
                     installDictionaries()
+                } label: {
+                    Text(dictionaryState.isRunning ? "Installing..." : "Install")
+                        .frame(width: 92)
                 }
                 .disabled(dictionaryState.isRunning || hasExtendedDictionaries)
-                .frame(width: 96)
             }
 
             checklistRow(
@@ -132,13 +135,15 @@ private struct SetupChecklist: View {
                 detail: aiReady ? "Qwen 3.5 is selected and reachable through Ollama." : "Download and select Qwen 3.5 for grammar fixes, translation, and screenshot text.",
                 state: qwenState
             ) {
-                Button(qwenButtonTitle) {
+                Button {
                     Task {
                         await installAndSelectQwen()
                     }
+                } label: {
+                    Text(qwenButtonTitle)
+                        .frame(width: 108)
                 }
                 .disabled(qwenState.isRunning || aiReady)
-                .frame(width: 112)
             }
 
             checklistRow(
@@ -148,11 +153,13 @@ private struct SetupChecklist: View {
                 detail: "Checks selected-text cleanup before you need it.",
                 state: grammarState
             ) {
-                Button(grammarState.isRunning ? "Testing..." : "Test") {
+                Button {
                     runGrammarTest()
+                } label: {
+                    Text(grammarState.isRunning ? "Testing..." : "Test")
+                        .frame(width: 76)
                 }
                 .disabled(grammarState.isRunning || !aiReady)
-                .frame(width: 80)
             }
             testTextBlock(label: "Input", text: grammarSample)
             if let grammarOutput {
@@ -166,14 +173,16 @@ private struct SetupChecklist: View {
                 detail: "Checks that Qwen can read text from an image and copy it for pasting.",
                 state: ocrState
             ) {
-                Button(ocrState.isRunning ? "Testing..." : "Test") {
+                Button {
                     runOCRTest()
+                } label: {
+                    Text(ocrState.isRunning ? "Testing..." : "Test")
+                        .frame(width: 76)
                 }
                 .disabled(ocrState.isRunning || !aiReady)
-                .frame(width: 80)
             }
             if !ocrState.isIdle {
-                testTextBlock(label: "Image text", text: screenshotSample)
+                screenshotTargetBlock()
             }
             if ocrSucceeded {
                 VStack(alignment: .leading, spacing: 5) {
@@ -207,6 +216,11 @@ private struct SetupChecklist: View {
         )
         .onAppear(perform: refresh)
         .onReceive(timer) { _ in refresh() }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                screenshotPulse.toggle()
+            }
+        }
     }
 
     private var hasExtendedDictionaries: Bool {
@@ -308,6 +322,29 @@ private struct SetupChecklist: View {
         .padding(.leading, 34)
     }
 
+    private func screenshotTargetBlock() -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Select this area when the crosshair appears")
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.secondary)
+            Text(screenshotSample)
+                .font(.system(size: 20, weight: .bold, design: .monospaced))
+                .foregroundColor(.primary)
+                .textSelection(.enabled)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.accentColor.opacity(screenshotPulse ? 0.28 : 0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.accentColor.opacity(screenshotPulse ? 0.95 : 0.35), lineWidth: 1.5)
+                )
+        }
+        .padding(.leading, 34)
+    }
+
     private func refresh() {
         dictionaryStats = DictionaryManager.stats()
         aiReady = AIAssistantManager.shared.isReady
@@ -344,8 +381,7 @@ private struct SetupChecklist: View {
             return
         }
 
-        qwenState = .running("Opening Ollama and checking Qwen 3.5...")
-        openOllamaAppIfInstalled()
+        qwenState = .running("Checking Qwen 3.5...")
 
         try? await Task.sleep(nanoseconds: 1_500_000_000)
         if await isOllamaModelInstalled(qwenModel) {
@@ -392,61 +428,71 @@ private struct SetupChecklist: View {
     }
 
     private func runOCRTest() {
-        guard let imageBase64 = makeOCRSampleImageBase64() else {
-            ocrState = .failed("could not create test image")
-            return
-        }
         screenshotPasteTarget = ""
-        ocrState = .running("Asking Qwen 3.5 to read the sample image...")
-        AIAssistantManager.shared.current.extractTextFromImage(
-            AIOcrRequest(imageBase64: imageBase64)
-        ) { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .extracted(let output):
-                    let clean = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(clean, forType: .string)
-                    ocrState = .success("Copied: \(clean)")
-                case .unsupported:
-                    ocrState = .failed("selected model does not support image input")
-                case .failed(let reason):
-                    ocrState = .failed(reason)
-                }
-            }
+        ocrState = .running("Select the highlighted SCAN THIS TEXT area.")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            startInteractiveScreenshotTextTest()
         }
     }
 
-    private func makeOCRSampleImageBase64() -> String? {
-        let image = NSImage(size: NSSize(width: 720, height: 180))
-        image.lockFocus()
-        NSColor.white.setFill()
-        NSRect(x: 0, y: 0, width: 720, height: 180).fill()
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 34, weight: .regular),
-            .foregroundColor: NSColor.black,
-        ]
-        screenshotSample.draw(in: NSRect(x: 36, y: 72, width: 650, height: 60), withAttributes: attrs)
-        image.unlockFocus()
-        guard let tiff = image.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff),
-              let png = rep.representation(using: .png, properties: [:])
-        else { return nil }
-        return png.base64EncodedString()
+    private func startInteractiveScreenshotTextTest() {
+        guard PermissionStatus.hasScreenRecording() else {
+            PermissionStatus.requestScreenRecording()
+            PermissionStatus.openScreenRecordingPane()
+            ocrState = .failed("Screen Recording permission is required. Toggle LangFlip on and try again.")
+            return
+        }
+
+        let pngURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("langflip-onboarding-screen-text-\(getpid())-\(Int(Date().timeIntervalSince1970)).png")
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        task.arguments = ["-i", "-t", "png", "-o", pngURL.path]
+        task.terminationHandler = { proc in
+            DispatchQueue.main.async {
+                guard proc.terminationStatus == 0,
+                      FileManager.default.fileExists(atPath: pngURL.path),
+                      let imageData = try? Data(contentsOf: pngURL),
+                      !imageData.isEmpty
+                else {
+                    try? FileManager.default.removeItem(at: pngURL)
+                    ocrState = .idle
+                    return
+                }
+
+                ocrState = .running("Reading selected screenshot area...")
+                let request = AIOcrRequest(imageBase64: imageData.base64EncodedString())
+                AIAssistantManager.shared.current.extractTextFromImage(request) { result in
+                    DispatchQueue.main.async {
+                        defer { try? FileManager.default.removeItem(at: pngURL) }
+                        switch result {
+                        case .extracted(let output):
+                            let clean = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(clean, forType: .string)
+                            ocrState = .success("Copied: \(clean)")
+                        case .unsupported:
+                            ocrState = .failed("selected model does not support image input")
+                        case .failed(let reason):
+                            ocrState = .failed(reason)
+                        }
+                    }
+                }
+            }
+        }
+
+        do {
+            try task.run()
+        } catch {
+            try? FileManager.default.removeItem(at: pngURL)
+            ocrState = .failed("Could not launch screen capture: \(error.localizedDescription)")
+        }
     }
 
     private var isOllamaAppInstalled: Bool {
         let appURL = URL(fileURLWithPath: "/Applications/Ollama.app")
         return FileManager.default.fileExists(atPath: appURL.path)
-    }
-
-    private func openOllamaAppIfInstalled() {
-        let appURL = URL(fileURLWithPath: "/Applications/Ollama.app")
-        guard FileManager.default.fileExists(atPath: appURL.path) else { return }
-        NSWorkspace.shared.openApplication(
-            at: appURL,
-            configuration: NSWorkspace.OpenConfiguration()
-        )
     }
 
     private func openOllamaDownloadPage() {
