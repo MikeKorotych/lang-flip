@@ -139,7 +139,7 @@ final class AutoFlip {
     private func forcedFlip(for word: String, currentLayout: Layout) -> Layout? {
         let lower = word.lowercased()
         switch (currentLayout, lower) {
-        case (.uk, "бі"), (.uk, "єто"):
+        case (.uk, "бі"), (.uk, "ті"), (.uk, "єто"):
             return .ru
         default:
             return nil
@@ -149,7 +149,7 @@ final class AutoFlip {
     private func isForcedKeep(_ word: String, currentLayout: Layout) -> Bool {
         let lower = word.lowercased()
         switch (currentLayout, lower) {
-        case (.uk, "тексті"):
+        case (.uk, "тексті"), (.uk, "еще"):
             return true
         default:
             return false

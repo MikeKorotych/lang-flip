@@ -926,27 +926,17 @@ final class EventTap {
         let converted = convert(completedWord, from: current, to: target)
         guard converted != completedWord else { return }
 
-        // Two-vote agreement: when the user has an AI assistant enabled
-        // and ready, ask it for a second opinion before committing the
-        // flip. AI inference runs off-main; the apply path hops back via
-        // DispatchQueue.main.async. When AI is .off or unavailable, we
-        // skip the vote entirely and apply immediately — keeps latency
-        // identical to v0.2.0 for users who haven't opted in.
-        if Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady {
-            consultAIThenApplyFlip(
-                original: completedWord,
-                converted: converted,
-                source: current,
-                target: target
-            )
-        } else {
-            applyAutoFlip(
-                original: completedWord,
-                converted: converted,
-                source: current,
-                target: target
-            )
-        }
+        // Auto-flip has to be immediate. Sending this path through AI
+        // made the result arrive after the user had already typed the
+        // next word, so the physical backspaces could hit the wrong
+        // range. Keep AI for explicit actions; keep automatic layout
+        // repair deterministic and fast.
+        applyAutoFlip(
+            original: completedWord,
+            converted: converted,
+            source: current,
+            target: target
+        )
     }
 
     /// Submit the candidate flip to the AI assistant. On `.flip` /
@@ -1307,43 +1297,36 @@ final class EventTap {
         }
         guard end > 0 else { return nil }
 
-        var sentenceStart = 0
-        let searchFrom = end > 0 && isSentenceBoundary(ns.character(at: end - 1)) ? end - 2 : end - 1
-        if searchFrom >= 0 {
-            for index in stride(from: searchFrom, through: 0, by: -1) where isSentenceBoundary(ns.character(at: index)) {
-                sentenceStart = index + 1
-                break
-            }
-        }
-        while sentenceStart < end, isWhitespaceOrNewline(ns.character(at: sentenceStart)) {
-            sentenceStart += 1
-        }
-        guard sentenceStart < end else { return nil }
+        let lastTokenRange = whitespaceTokenRangeEnding(at: end, in: ns)
+        guard lastTokenRange.length > 0 else { return nil }
 
-        let sentenceRange = NSRange(location: sentenceStart, length: end - sentenceStart)
-        guard let regex = try? NSRegularExpression(pattern: "[A-Za-zА-Яа-яЁёІіЇїЄєҐґ']+") else { return nil }
-        let matches = regex.matches(in: value, range: sentenceRange)
-        guard let lastMatch = matches.last else { return nil }
-
-        let lastWord = ns.substring(with: lastMatch.range)
-        guard let source = detectLayout(lastWord) else { return nil }
+        let lastToken = ns.substring(with: lastTokenRange)
+        guard let source = detectLayout(lastToken) else { return nil }
         let target = resolveTarget(source: source, configured: targetNonEnglish)
-        let convertedLastWord = convert(lastWord, from: source, to: target)
-        guard convertedLastWord != lastWord else { return nil }
+        let convertedLastToken = convert(lastToken, from: source, to: target)
+        guard convertedLastToken != lastToken else { return nil }
 
-        var includedStart = lastMatch.range.location
-        if matches.count >= 2 {
-            for match in matches.dropLast().reversed() {
-                let word = ns.substring(with: match.range)
-                guard let wordSource = detectLayout(word),
-                      wordSource == source,
-                      resolveTarget(source: wordSource, configured: targetNonEnglish) == target,
-                      AutoFlip.shared.suggestedFlip(for: word, currentLayout: wordSource) == target
+        var includedStart = lastTokenRange.location
+        var scanEnd = lastTokenRange.location
+        while scanEnd > 0 {
+            var previousEnd = scanEnd
+            while previousEnd > 0, isWhitespaceOrNewline(ns.character(at: previousEnd - 1)) {
+                previousEnd -= 1
+            }
+            guard previousEnd > 0 else { break }
+            let previousRange = whitespaceTokenRangeEnding(at: previousEnd, in: ns)
+            guard previousRange.length > 0 else { break }
+            let previousToken = ns.substring(with: previousRange)
+            if tokenEndsSentence(previousToken) { break }
+            guard let previousSource = detectLayout(previousToken),
+                  previousSource == source,
+                  resolveTarget(source: previousSource, configured: targetNonEnglish) == target,
+                  tokenLooksFlippable(previousToken, source: previousSource, target: target)
                 else {
                     break
                 }
-                includedStart = match.range.location
-            }
+            includedStart = previousRange.location
+            scanEnd = previousRange.location
         }
 
         let range = NSRange(location: includedStart, length: end - includedStart)
@@ -1352,6 +1335,37 @@ final class EventTap {
         let converted = convert(original, from: source, to: target)
         guard converted != original else { return nil }
         return FocusedTextSlice(range: CFRange(location: range.location, length: range.length), text: converted)
+    }
+
+    private func whitespaceTokenRangeEnding(at end: Int, in ns: NSString) -> NSRange {
+        var start = end
+        while start > 0, !isWhitespaceOrNewline(ns.character(at: start - 1)) {
+            start -= 1
+        }
+        return NSRange(location: start, length: end - start)
+    }
+
+    private func tokenLooksFlippable(_ token: String, source: Layout, target: Layout) -> Bool {
+        guard convert(token, from: source, to: target) != token else { return false }
+        if AutoFlip.shared.suggestedFlip(for: token, currentLayout: source) == target {
+            return true
+        }
+        let lettersOnly = String(token.filter { $0.isLetter || $0 == "'" || $0 == "-" })
+        guard !lettersOnly.isEmpty, lettersOnly != token else { return false }
+        return AutoFlip.shared.suggestedFlip(for: lettersOnly, currentLayout: source) == target
+    }
+
+    private func tokenEndsSentence(_ token: String) -> Bool {
+        for scalar in token.unicodeScalars.reversed() {
+            if CharacterSet.whitespacesAndNewlines.contains(scalar) { continue }
+            switch scalar.value {
+            case 46, 33, 63, 8230:
+                return true
+            default:
+                return false
+            }
+        }
+        return false
     }
 
     private func flipFocusedLastWords(targetNonEnglish: Layout) -> Bool {
