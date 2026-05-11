@@ -35,7 +35,8 @@ NOTARY_PROFILE := lang-flip-notarize
 ENTITLEMENTS := Resources/lang-flip.entitlements
 
 .PHONY: all build app clean run install dev dicts icon \
-        reset-onboarding reset-onboarding-fresh run-onboarding \
+        reset-onboarding reset-onboarding-fresh reset-onboarding-empty \
+        run-onboarding run-onboarding-empty \
         sign dmg notarize-app notarize-dmg staple staple-app release version \
         sign-update
 
@@ -68,9 +69,21 @@ reset-onboarding:
 reset-onboarding-fresh:
 	./Scripts/reset-onboarding.sh $(BUNDLE_ID) fresh $(APP_NAME)
 
+# Full new-user reset: settings + permissions + dictionaries + generated
+# audio + downloaded LangFlip models/runtimes. Also removes qwen3.5:4b
+# from Ollama if the Ollama CLI is available.
+reset-onboarding-empty:
+	./Scripts/reset-onboarding.sh $(BUNDLE_ID) empty $(APP_NAME)
+
 # One command for a clean first-run pass: reset state, rebuild/install,
 # and launch the signed /Applications copy.
 run-onboarding: reset-onboarding-fresh
+	$(MAKE) run
+
+# Same as run-onboarding, but starts without downloaded local models.
+# Use this to test whether a brand-new user can install/select models
+# from the onboarding flow without hidden state on the machine.
+run-onboarding-empty: reset-onboarding-empty
 	$(MAKE) run
 
 # ─── Build ────────────────────────────────────────────────────────
