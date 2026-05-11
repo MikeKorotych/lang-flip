@@ -1438,7 +1438,7 @@ private struct ModelsTab: View {
         case .ollama:
             return "Ollama mode sends selected text only to the local Ollama app on this Mac."
         case .bundledModel:
-            return "Bundled MLX models are not part of this release. Use Ollama with Qwen 2.5 for local grammar fixes."
+            return "Bundled MLX models are not part of this release. Use Ollama with Qwen 3.5 4B for local grammar fixes and screen text capture."
         case .openai:
             return "Cloud mode sends only the text or image you explicitly process to the selected provider. Your API key is stored in macOS Keychain. Layout correction still runs locally."
         }
@@ -1805,7 +1805,6 @@ private struct OllamaModelPicker: View {
         case failed
     }
 
-    private let grammarModel = "qwen2.5"
     private let visionModel = "qwen3.5:4b"
 
     @Binding var selectedModel: String
@@ -1820,7 +1819,7 @@ private struct OllamaModelPicker: View {
 
     private var dropdownModels: [String] {
         var models: [String] = []
-        for model in [selectedModel] + installedModels + [grammarModel, visionModel] {
+        for model in [selectedModel] + installedModels + [visionModel] {
             let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
             let canonical = canonicalModelTag(trimmed)
             let alreadyIncluded = models.contains { canonicalModelTag($0) == canonical }
@@ -1865,25 +1864,12 @@ private struct OllamaModelPicker: View {
             }
 
             HStack(spacing: 8) {
-                Button(installButtonTitle(for: grammarModel)) {
-                    Task { await installModel(grammarModel) }
-                }
-                .disabled(isModelInstalled(grammarModel) || isInstalling)
-
                 Button(installButtonTitle(for: visionModel)) {
                     Task { await installModel(visionModel) }
                 }
                 .disabled(isModelInstalled(visionModel) || isInstalling)
 
-                if isModelInstalled(grammarModel), isModelInstalled(visionModel) {
-                    Text("Ready for text fixes and screen capture.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } else if isModelInstalled(grammarModel) {
-                    Text("Ready for local text fixes.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } else if isModelInstalled(visionModel) {
+                if isModelInstalled(visionModel) {
                     Text("Ready for local text fixes and OCR.")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -1933,9 +1919,6 @@ private struct OllamaModelPicker: View {
     }
 
     private func label(for model: String) -> String {
-        if canonicalModelTag(model) == grammarModel {
-            return "Qwen 2.5 (recommended)"
-        }
         if canonicalModelTag(model) == visionModel {
             return "Qwen 3.5 4B (vision)"
         }
@@ -1943,9 +1926,6 @@ private struct OllamaModelPicker: View {
     }
 
     private func displayName(for model: String) -> String {
-        if canonicalModelTag(model) == grammarModel {
-            return "Qwen 2.5"
-        }
         if canonicalModelTag(model) == visionModel {
             return "Qwen 3.5 4B"
         }

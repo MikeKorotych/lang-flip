@@ -1,7 +1,10 @@
 import Foundation
 
 /// Holds the characters typed since the last word boundary.
-/// Boundaries: whitespace, newline, tab, and common punctuation that ends words.
+/// Boundaries: whitespace, newline, tab, and strong punctuation that ends words.
+/// Comma and period stay inside the buffer until the next boundary because
+/// those same physical keys are letters ("б", "ю") when English text was
+/// actually intended as Ukrainian/Russian.
 final class WordBuffer {
     private(set) var current: String = ""
 
@@ -13,7 +16,7 @@ final class WordBuffer {
 
     private static let boundary: Set<Character> = [
         " ", "\t", "\n", "\r",
-        ",", ".", ";", ":", "!", "?",
+        ";", ":", "!", "?",
         "(", ")", "[", "]", "{", "}",
         "\"", "'", "`", "/", "\\", "|", "—", "–"
     ]
