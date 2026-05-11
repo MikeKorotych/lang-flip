@@ -17,6 +17,7 @@ struct PreferencesView: View {
         case general = "General"
         case languages = "Languages"
         case behavior = "Behavior"
+        case hotkeys = "Hotkeys"
         case models = "AI"
         case voice = "Voice"
         case apps = "Apps"
@@ -47,6 +48,7 @@ struct PreferencesView: View {
                 case .general:   GeneralTab()
                 case .languages: LanguagesTab()
                 case .behavior:  BehaviorTab()
+                case .hotkeys:   HotkeysTab()
                 case .models:    ModelsTab()
                 case .voice:     VoiceTab()
                 case .apps:      AppsTab()
@@ -55,7 +57,7 @@ struct PreferencesView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 600, height: 440)
+        .frame(width: 680, height: 440)
     }
 }
 
@@ -483,12 +485,7 @@ private struct VoiceTab: View {
 
             Section("Read aloud shortcut") {
                 Toggle("Read selected text with \(readSelectionShortcutName)", isOn: $readSelectionHotkeyEnabled)
-                Picker("Shortcut", selection: $readSelectionHotkeyPreset) {
-                    ForEach(GlobalShortcutPreset.readAloudChoices) { shortcut in
-                        Text(shortcut.displayName).tag(shortcut.rawValue)
-                    }
-                }
-                helpText("Select text in any app and press the shortcut. LangFlip copies the selection briefly, restores your clipboard, and reads it with the selected text-to-speech backend.")
+                helpText("Select text in any app and press \(readSelectionShortcutName). Change this shortcut in Hotkeys.")
             }
 
             Section("Dictation") {
@@ -1190,17 +1187,10 @@ private struct DictionaryPackView: View {
     }()
 }
 
-// MARK: - Behavior
+// MARK: - Hotkeys
 
-private struct BehaviorTab: View {
-    @AppStorage("lf.autoFlip") private var autoFlip = true
-    @AppStorage("lf.doubleCapsFix") private var doubleCapsFix = true
-    @AppStorage("lf.crossLayoutFix") private var crossLayoutFix = true
-    @AppStorage("lf.suppressInFullscreen") private var suppressInFullscreen = false
-    @AppStorage("lf.showOverlay") private var showOverlay = true
+private struct HotkeysTab: View {
     @AppStorage("lf.hotkeyPreset") private var hotkeyPreset = HotkeyPreset.doubleShift.rawValue
-    @AppStorage("lf.fixLastSentenceOnSingleShift") private var fixLastSentenceOnSingleShift = true
-    @AppStorage("lf.flipLastWordsOnDoubleShift") private var flipLastWordsOnDoubleShift = true
     @AppStorage("lf.translationHotkeyPreset") private var translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
     @AppStorage("lf.screenTextCaptureHotkeyPreset") private var screenTextCaptureHotkeyPreset = GlobalShortcutPreset.commandShiftS.rawValue
     @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.controlOptionX.rawValue
@@ -1213,9 +1203,9 @@ private struct BehaviorTab: View {
                         Text(preset.displayName).tag(preset.rawValue)
                     }
                 }
-                helpText("This gesture flips selected text between keyboard layouts. An experimental fallback can also try the last words before the cursor. Pressing both Shift keys still pauses or resumes LangFlip.")
+                helpText("Flips selected text between keyboard layouts. If no text is selected and the Behavior toggle is on, the same gesture can try the last words before the cursor.")
             }
-            Section("Global shortcuts") {
+            Section("AI actions") {
                 Picker("Translate selection", selection: $translationHotkeyPreset) {
                     ForEach(GlobalShortcutPreset.translationChoices) { shortcut in
                         Text(shortcut.displayName).tag(shortcut.rawValue)
@@ -1231,8 +1221,48 @@ private struct BehaviorTab: View {
                         Text(shortcut.displayName).tag(shortcut.rawValue)
                     }
                 }
-                helpText("These shortcuts work globally. The feature toggles still live in AI and Voice settings, so you can keep a shortcut assigned but temporarily turn the feature off.")
+                helpText("These shortcuts work globally. Turn each feature on or off in AI settings without losing the shortcut you picked here.")
             }
+            Section("Voice") {
+                Picker("Read selected text aloud", selection: $readSelectionHotkeyPreset) {
+                    ForEach(GlobalShortcutPreset.readAloudChoices) { shortcut in
+                        Text(shortcut.displayName).tag(shortcut.rawValue)
+                    }
+                }
+                helpText("Reads the current text selection with the voice backend selected in Voice settings.")
+            }
+            Section("Modifier gestures") {
+                Text("Single Shift fixes selected text or the last sentence.")
+                Text("Double Shift flips selected text or the last words.")
+                Text("Hold Shift records dictation. Shift+Command toggles hands-free dictation.")
+                helpText("These gestures depend on press timing, so they stay as fixed gestures for now. The toggles live in AI, Behavior, and Voice.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    @ViewBuilder
+    private func helpText(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+// MARK: - Behavior
+
+private struct BehaviorTab: View {
+    @AppStorage("lf.autoFlip") private var autoFlip = true
+    @AppStorage("lf.doubleCapsFix") private var doubleCapsFix = true
+    @AppStorage("lf.crossLayoutFix") private var crossLayoutFix = true
+    @AppStorage("lf.suppressInFullscreen") private var suppressInFullscreen = false
+    @AppStorage("lf.showOverlay") private var showOverlay = true
+    @AppStorage("lf.fixLastSentenceOnSingleShift") private var fixLastSentenceOnSingleShift = true
+    @AppStorage("lf.flipLastWordsOnDoubleShift") private var flipLastWordsOnDoubleShift = true
+
+    var body: some View {
+        Form {
             Section {
                 Toggle("Auto-flip at word end", isOn: $autoFlip)
                 helpText("After Space or punctuation, LangFlip can fix a word that was typed in the wrong layout. Press Backspace right away to undo and remember an exception.")

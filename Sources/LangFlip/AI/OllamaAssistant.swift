@@ -197,18 +197,48 @@ final class OllamaAssistant: AIAssistant {
 
     func warmUp() {
         guard isReady else { return }
+        let system = Self.rewriteSystemPrompt(language: "input language", allowLayoutRepair: true)
         runInference(
-            prompt: "Reply with exactly: OK",
-            options: ["temperature": 0, "num_ctx": 256, "num_predict": 4]
+            system: system,
+            prompt: "World is wery gandgerous plsce to leave in!",
+            options: ["temperature": 0.1, "num_ctx": 1024, "num_predict": 64]
         ) { result in
             switch result {
             case .success:
-                AppLog.write("ollama warm-up completed model=\(self.model)")
+                AppLog.write("ollama text warm-up completed model=\(self.model)")
             case .failure(let reason):
-                AppLog.write("ollama warm-up failed model=\(self.model): \(reason)")
+                AppLog.write("ollama text warm-up failed model=\(self.model): \(reason)")
+            }
+        }
+
+        guard supportsVisionWarmUp else { return }
+        runInference(
+            prompt: "Look at the image and reply with exactly: OK",
+            options: ["temperature": 0, "num_ctx": 1024, "num_predict": 8],
+            images: [Self.warmUpImageBase64]
+        ) { result in
+            switch result {
+            case .success:
+                AppLog.write("ollama vision warm-up completed model=\(self.model)")
+            case .failure(let reason):
+                AppLog.write("ollama vision warm-up failed model=\(self.model): \(reason)")
             }
         }
     }
+
+    private var supportsVisionWarmUp: Bool {
+        let lower = model.lowercased()
+        return lower.contains("qwen3.5") ||
+               lower.contains("vision") ||
+               lower.contains("-vl") ||
+               lower.contains("llava") ||
+               lower.contains("gemma3")
+    }
+
+    /// Small valid PNG. It is intentionally plain because the goal is only
+    /// to make Ollama load the multimodal path before the first real OCR.
+    private static let warmUpImageBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAIAAAAt/+nTAAAAPklEQVR4nO3PMQ0AMAzAsPInvYLYYVWKESTzjhsd8KsBrQGtAa0BrQGtAa0BrQGtAa0BrQGtAa0BrQGtAW0BfqHpWg1AJrYAAAAASUVORK5CYII="
 
     // MARK: - HTTP
 
