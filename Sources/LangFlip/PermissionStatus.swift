@@ -31,6 +31,8 @@ struct PermissionStatus: Equatable {
             ax = AXIsProcessTrustedWithOptions(nil)
         }
         let im = CGPreflightListenEventAccess()
+            && IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
+            && canCreateKeyboardEventTap()
         return PermissionStatus(accessibility: ax, inputMonitoring: im)
     }
 
@@ -98,5 +100,27 @@ struct PermissionStatus: Equatable {
     /// to the settings pane.
     static func requestInputMonitoring() {
         _ = CGRequestListenEventAccess()
+    }
+
+    /// The system privacy APIs can report optimistic state immediately
+    /// after a request call. The app is only useful once a keyboard event
+    /// tap can actually be created, so onboarding uses this as the final
+    /// practical check before unlocking Continue.
+    private static func canCreateKeyboardEventTap() -> Bool {
+        let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.flagsChanged.rawValue)
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: CGEventMask(mask),
+            callback: { _, _, event, _ in
+                Unmanaged.passUnretained(event)
+            },
+            userInfo: nil
+        ) else {
+            return false
+        }
+        CFMachPortInvalidate(tap)
+        return true
     }
 }
