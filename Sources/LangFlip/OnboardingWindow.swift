@@ -105,6 +105,7 @@ private struct SetupChecklist: View {
     private let qwenModel = "qwen3.5:4b"
     private let grammarSample = "World is wery gandgerous plsce to leave in!"
     private let screenshotSample = "SCAN THIS TEXT"
+    private let grammarHint = "After this, just press Shift to fix the last sentence, or select any text and press Shift."
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -126,6 +127,7 @@ private struct SetupChecklist: View {
                         .frame(width: 92)
                 }
                 .disabled(dictionaryState.isRunning || hasExtendedDictionaries)
+                .focusable(false)
             }
 
             checklistRow(
@@ -144,13 +146,14 @@ private struct SetupChecklist: View {
                         .frame(width: 108)
                 }
                 .disabled(qwenState.isRunning || aiReady)
+                .focusable(false)
             }
 
             checklistRow(
                 done: grammarSucceeded,
                 icon: "wand.and.stars",
                 title: "Run grammar test",
-                detail: "Checks selected-text cleanup before you need it.",
+                detail: grammarHint,
                 state: grammarState
             ) {
                 Button {
@@ -160,6 +163,7 @@ private struct SetupChecklist: View {
                         .frame(width: 76)
                 }
                 .disabled(grammarState.isRunning || !aiReady)
+                .focusable(false)
             }
             testTextBlock(label: "Input", text: grammarSample)
             if let grammarOutput {
@@ -169,7 +173,7 @@ private struct SetupChecklist: View {
             checklistRow(
                 done: ocrSucceeded,
                 icon: "viewfinder",
-                title: "Test copy text from screenshot",
+                title: "Copy text from screenshot",
                 detail: "Checks that Qwen can read text from an image and copy it for pasting.",
                 state: ocrState
             ) {
@@ -180,6 +184,7 @@ private struct SetupChecklist: View {
                         .frame(width: 76)
                 }
                 .disabled(ocrState.isRunning || !aiReady)
+                .focusable(false)
             }
             if !ocrState.isIdle {
                 screenshotTargetBlock()
@@ -350,7 +355,12 @@ private struct SetupChecklist: View {
         aiReady = AIAssistantManager.shared.isReady
     }
 
+    private func clearButtonFocus() {
+        NSApp.keyWindow?.makeFirstResponder(nil)
+    }
+
     private func installDictionaries() {
+        clearButtonFocus()
         dictionaryProgress = 0
         dictionaryState = .running("Downloading word lists...")
         DictionaryManager.installExtendedFrequencyPack { completed, total in
@@ -372,6 +382,7 @@ private struct SetupChecklist: View {
 
     @MainActor
     private func installAndSelectQwen() async {
+        clearButtonFocus()
         Settings.shared.aiMode = .ollama
         Settings.shared.ollamaModel = qwenModel
 
@@ -408,6 +419,7 @@ private struct SetupChecklist: View {
     }
 
     private func runGrammarTest() {
+        clearButtonFocus()
         grammarState = .running("Asking the local model to fix the sample...")
         AIAssistantManager.shared.current.fixSelection(
             AIFixRequest(text: grammarSample, activeLayout: .en)
@@ -428,6 +440,7 @@ private struct SetupChecklist: View {
     }
 
     private func runOCRTest() {
+        clearButtonFocus()
         screenshotPasteTarget = ""
         ocrState = .running("Select the highlighted SCAN THIS TEXT area.")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
