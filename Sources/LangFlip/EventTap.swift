@@ -1128,8 +1128,9 @@ final class EventTap {
 
         // Many browser/Electron text fields do not expose AXValue. As a
         // pragmatic fallback, select from the cursor to the start of the
-        // current visual line, copy it, then select only the last sentence
-        // inside that line for replacement.
+        // current visual line, copy it, then collapse the selection. Once
+        // the model replies we replace from the cursor with backspaces, so
+        // the user only sees this one short selection flash.
         postKey(virtualKey: CGKeyCode(kVK_LeftArrow), flags: [.maskCommand, .maskShift])
         tryCopyAfterKeyboardSelection(countBefore: countBefore) { [weak self] selectedLine in
             guard let self else { return }
@@ -1209,9 +1210,9 @@ final class EventTap {
                 switch result {
                 case .fixed(let corrected):
                     AppLog.write("single-shift keyboard suffix fixed \(text.count)->\(corrected.count)")
-                    self.selectPreviousCharacters(replaceLength)
+                    let replacement = corrected.trimmingCharacters(in: .whitespacesAndNewlines) + suffix
+                    self.postBackspaces(replaceLength)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-                        let replacement = corrected.trimmingCharacters(in: .whitespacesAndNewlines) + suffix
                         pb.clearContents()
                         pb.setString(replacement, forType: .string)
                         self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
