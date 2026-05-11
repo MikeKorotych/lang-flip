@@ -24,6 +24,8 @@ Supports **English, Ukrainian, and Russian** out of the box.
   clipboard afterward.
 - 🧠 **Corrects selected text with local AI.** Select text and tap Shift once to
   fix typos, punctuation, capitalization, and small grammar mistakes.
+- ⚡ **Fixes the last sentence without selecting text.** Tap Shift at the end of
+  a sentence and LangFlip can clean up just that sentence.
 - 🌍 **Translates selected text.** Translate into English, Ukrainian, or Russian
   from the menu or with the optional Shift+Space hotkey.
 - 📸 **Captures text from the screen.** Press Shift+Command+S, select a screen
@@ -43,25 +45,30 @@ LangFlip saves the small but constant effort of correcting text by hand:
 - less copy/paste into browser-only grammar tools;
 - quick cleanup in any macOS app, not just the browser;
 - local AI processing when using Ollama;
-- Copy text from screenshots when visible text is hard or impossible to select.
+- copy text from screenshots when visible text is hard or impossible to select.
 
 It is especially useful for programmers, office workers, founders, support
 teams, writers, and anyone who switches languages all day.
 
 ## ⌨️ Basic Use
 
-After installation, LangFlip lives in the macOS menu bar.
+After installation, LangFlip lives in the macOS menu bar. The first launch
+onboarding walks you through permissions, extended dictionaries, Qwen 3.5 setup,
+and two quick tests.
 
 Common shortcuts:
 
-- **Double-tap Shift** - flip selected text to the other keyboard layout.
-- **Press both Shift keys** - pause or resume LangFlip.
-- **Single Shift tap** - AI-fix selected text, if enabled.
-- **Shift+Space** - translate selected text, if enabled.
-- **Shift+Command+S** - capture text from a selected screen region.
+- **Single Shift** - fix selected text, or the last sentence when nothing is
+  selected.
+- **Double Shift** - flip selected text, or the last wrong-layout word run when
+  nothing is selected.
+- **Shift+Space** - translate selected text.
+- **Shift+Command+S** - copy text from a selected screen region.
+- **Both Shift keys** - pause or resume LangFlip.
 
-Without selected text, the single-Shift and double-Shift actions do nothing.
-That keeps AI corrections explicit and predictable.
+The selection-based actions are the most predictable. The no-selection
+single/double Shift actions are designed for fast everyday typing and can be
+disabled in Preferences.
 
 For better auto-flip coverage, open **Preferences → Languages → Dictionaries**
 and install the extended word-list pack.
@@ -81,13 +88,17 @@ After onboarding, look for the LangFlip icon in the menu bar.
 
 ## 🤖 Local AI Setup
 
-AI is optional. For the best local experience:
+AI is optional. For the best local experience, use the onboarding checklist. It
+can install/select Qwen 3.5, run a grammar test, and test copy text from
+screenshot.
+
+Manual setup:
 
 1. Install and open [Ollama](https://ollama.com/).
 2. Open **LangFlip → Preferences → AI**.
 3. Choose **Ollama (local)**.
 4. Install or select **Qwen 3.5 4B**.
-5. Run the built-in grammar and screenshot text tests.
+5. Run the built-in grammar and copy-text-from-screenshot tests.
 
 In Ollama mode, LangFlip talks to `127.0.0.1:11434`. Your text and screenshots
 are sent to the local Ollama daemon on your Mac, not to LangFlip servers.
@@ -102,19 +113,20 @@ are sent to the local Ollama daemon on your Mac, not to LangFlip servers.
 
 ## 🛠️ Current Status
 
-LangFlip is already usable as a daily writing helper. The next release work is
-focused on polishing onboarding, simplifying the menu, improving first-session
-AI setup, and preparing a public release.
+LangFlip is usable as a daily writing helper. The current release candidate is
+focused on a much smoother first session: clearer onboarding, easier model
+setup, built-in tests, better hotkey explanation, and safer reset commands for
+development.
 
 Planned improvements include:
 
 - downloadable dictionaries for more Slavic and European languages;
-- customizable hotkeys;
-- smoother model installation;
+- richer custom hotkey recording across more actions;
 - App Store feasibility research;
 - iCloud sync for settings and learned exceptions.
 
-See [ROADMAP.md](ROADMAP.md) for the longer plan.
+See [CHANGELOG.md](CHANGELOG.md) for recent release notes and
+[ROADMAP.md](ROADMAP.md) for the longer plan.
 
 ## 🧑‍💻 Build From Source
 
@@ -135,6 +147,16 @@ make app       # build build/LangFlip.app
 make run       # same daily path as make dev
 make install   # copy build/LangFlip.app to /Applications
 make release   # build, sign, package, notarize, and staple a release DMG
+```
+
+Onboarding test commands:
+
+```sh
+make reset-onboarding        # reset settings + permissions, keep downloads
+make reset-onboarding-fresh  # also remove installed dictionaries and TTS files
+make reset-onboarding-empty  # full new-user reset, including local models
+make run-onboarding          # reset fresh, rebuild, install, launch
+make run-onboarding-empty    # full new-user reset, rebuild, install, launch
 ```
 
 ## 📄 License
