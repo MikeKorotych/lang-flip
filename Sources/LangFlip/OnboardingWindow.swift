@@ -205,13 +205,12 @@ private struct SetupChecklist: View {
                 done: true,
                 icon: "keyboard",
                 title: "Remember the core hotkeys",
-                detail: "Double Shift flips layout, single Shift fixes text, Shift+Command+S captures screen text.",
+                detail: "These are the main gestures to try first.",
                 state: .idle
             ) {
-                Text("Double Shift / Single Shift / ⇧⌘S")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                EmptyView()
             }
+            hotkeySummary()
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -348,6 +347,29 @@ private struct SetupChecklist: View {
                 )
         }
         .padding(.leading, 34)
+    }
+
+    private func hotkeySummary() -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            hotkeyLine("Single Shift", "Fix selected text, or the last sentence when nothing is selected.")
+            hotkeyLine("Double Shift", "Flip selected text, or the last wrong-layout word run.")
+            hotkeyLine("Shift + Space", "Translate selected text.")
+            hotkeyLine("Shift + ⌘ + S", "Copy text from a selected screenshot area.")
+        }
+        .padding(.leading, 34)
+    }
+
+    private func hotkeyLine(_ hotkey: String, _ description: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(hotkey)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.primary)
+                .frame(width: 92, alignment: .leading)
+            Text(description)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private func refresh() {
