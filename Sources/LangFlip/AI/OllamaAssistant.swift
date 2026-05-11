@@ -209,8 +209,11 @@ final class OllamaAssistant: AIAssistant {
             case .failure(let reason):
                 AppLog.write("ollama text warm-up failed model=\(self.model): \(reason)")
             }
+            self.warmUpVisionIfSupported()
         }
+    }
 
+    private func warmUpVisionIfSupported() {
         guard supportsVisionWarmUp else { return }
         runInference(
             prompt: "Look at the image and reply with exactly: OK",
