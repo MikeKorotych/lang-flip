@@ -82,6 +82,11 @@ private struct SetupChecklist: View {
             if case .running = self { return true }
             return false
         }
+
+        var isIdle: Bool {
+            if case .idle = self { return true }
+            return false
+        }
     }
 
     let onOpenPreferences: () -> Void
@@ -93,9 +98,12 @@ private struct SetupChecklist: View {
     @State private var qwenState: RunState = .idle
     @State private var grammarState: RunState = .idle
     @State private var ocrState: RunState = .idle
+    @State private var screenshotPasteTarget = ""
 
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     private let qwenModel = "qwen3.5:4b"
+    private let grammarSample = "World is wery gandgerous plsce to leave in!"
+    private let screenshotSample = "SCAN THIS TEXT"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -121,7 +129,7 @@ private struct SetupChecklist: View {
                 done: aiReady,
                 icon: "sparkles",
                 title: "Use Qwen 3.5 for local AI",
-                detail: aiReady ? "Qwen 3.5 is selected and reachable through Ollama." : "Download and select Qwen 3.5 for grammar fixes, translation, and OCR.",
+                detail: aiReady ? "Qwen 3.5 is selected and reachable through Ollama." : "Download and select Qwen 3.5 for grammar fixes, translation, and screenshot text.",
                 state: qwenState
             ) {
                 Button(qwenButtonTitle) {
@@ -146,12 +154,16 @@ private struct SetupChecklist: View {
                 .disabled(grammarState.isRunning || !aiReady)
                 .frame(width: 80)
             }
+            testTextBlock(label: "Input", text: grammarSample)
+            if let grammarOutput {
+                testTextBlock(label: "Output", text: grammarOutput)
+            }
 
             checklistRow(
                 done: ocrSucceeded,
                 icon: "viewfinder",
-                title: "Run OCR test",
-                detail: "Checks that the local vision model can read text from images.",
+                title: "Test copy text from screenshot",
+                detail: "Checks that Qwen can read text from an image and copy it for pasting.",
                 state: ocrState
             ) {
                 Button(ocrState.isRunning ? "Testing..." : "Test") {
@@ -159,6 +171,20 @@ private struct SetupChecklist: View {
                 }
                 .disabled(ocrState.isRunning || !aiReady)
                 .frame(width: 80)
+            }
+            if !ocrState.isIdle {
+                testTextBlock(label: "Image text", text: screenshotSample)
+            }
+            if ocrSucceeded {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Select this text input and press ⌘V")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+                    TextField("", text: $screenshotPasteTarget)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                }
+                .padding(.leading, 34)
             }
 
             checklistRow(
@@ -195,6 +221,11 @@ private struct SetupChecklist: View {
     private var ocrSucceeded: Bool {
         if case .success = ocrState { return true }
         return false
+    }
+
+    private var grammarOutput: String? {
+        if case .success(let output) = grammarState { return output }
+        return nil
     }
 
     private var qwenButtonTitle: String {
@@ -264,6 +295,19 @@ private struct SetupChecklist: View {
         }
     }
 
+    private func testTextBlock(label: String, text: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.secondary)
+            Text(text)
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.leading, 34)
+    }
+
     private func refresh() {
         dictionaryStats = DictionaryManager.stats()
         aiReady = AIAssistantManager.shared.isReady
@@ -330,7 +374,7 @@ private struct SetupChecklist: View {
     private func runGrammarTest() {
         grammarState = .running("Asking the local model to fix the sample...")
         AIAssistantManager.shared.current.fixSelection(
-            AIFixRequest(text: "World is wery gandgerous plsce to leave in!", activeLayout: .en)
+            AIFixRequest(text: grammarSample, activeLayout: .en)
         ) { result in
             DispatchQueue.main.async {
                 switch result {
@@ -352,6 +396,7 @@ private struct SetupChecklist: View {
             ocrState = .failed("could not create test image")
             return
         }
+        screenshotPasteTarget = ""
         ocrState = .running("Asking Qwen 3.5 to read the sample image...")
         AIAssistantManager.shared.current.extractTextFromImage(
             AIOcrRequest(imageBase64: imageBase64)
@@ -359,7 +404,10 @@ private struct SetupChecklist: View {
             DispatchQueue.main.async {
                 switch result {
                 case .extracted(let output):
-                    ocrState = .success(output.trimmingCharacters(in: .whitespacesAndNewlines))
+                    let clean = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(clean, forType: .string)
+                    ocrState = .success("Copied: \(clean)")
                 case .unsupported:
                     ocrState = .failed("selected model does not support image input")
                 case .failed(let reason):
@@ -370,7 +418,6 @@ private struct SetupChecklist: View {
     }
 
     private func makeOCRSampleImageBase64() -> String? {
-        let sample = "LangFlip OCR test"
         let image = NSImage(size: NSSize(width: 720, height: 180))
         image.lockFocus()
         NSColor.white.setFill()
@@ -379,7 +426,7 @@ private struct SetupChecklist: View {
             .font: NSFont.monospacedSystemFont(ofSize: 34, weight: .regular),
             .foregroundColor: NSColor.black,
         ]
-        sample.draw(in: NSRect(x: 36, y: 72, width: 650, height: 60), withAttributes: attrs)
+        screenshotSample.draw(in: NSRect(x: 36, y: 72, width: 650, height: 60), withAttributes: attrs)
         image.unlockFocus()
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff),

@@ -156,7 +156,7 @@ final class EventTap {
 
         // Screen text capture hotkey: Shift+Command+S. Only intercept it
         // when the selected local model can actually handle images; this
-        // avoids stealing Save As / Duplicate shortcuts when OCR is not
+        // avoids stealing Save As / Duplicate shortcuts when screen text capture is not
         // available.
         if Settings.shared.screenTextCaptureHotkeyEnabled,
            Settings.shared.aiMode == .ollama,
@@ -903,10 +903,10 @@ final class EventTap {
                             Notifications.show(title: "Text copied", body: text.count > 60 ? "\(preview)…" : preview)
                         case .unsupported:
                             if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: assistant doesn't support OCR\n".utf8)) }
-                            Notifications.show(title: "LangFlip", body: "OCR needs a vision-capable model. Switch to Ollama with qwen3.5:4b in Preferences.")
+                            Notifications.show(title: "LangFlip", body: "Copy text from screenshot needs a vision-capable model. Switch to Ollama with qwen3.5:4b in Preferences.")
                         case .failed(let reason):
                             if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: failed: \(reason)\n".utf8)) }
-                            Notifications.show(title: "OCR failed", body: reason)
+                            Notifications.show(title: "Copy text from screenshot failed", body: reason)
                         }
                     }
                 }

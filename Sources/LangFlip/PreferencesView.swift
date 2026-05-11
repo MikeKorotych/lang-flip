@@ -1884,7 +1884,7 @@ private struct AIOCRTestView: View {
         case failed(String)
     }
 
-    private let sample = "LangFlip OCR test"
+    private let sample = "SCAN THIS TEXT"
 
     @State private var state: TestState = .idle
 
@@ -1905,7 +1905,7 @@ private struct AIOCRTestView: View {
                 } label: {
                     Image(systemName: isRunning ? "hourglass" : "viewfinder")
                 }
-                .help("Run OCR test with the selected Ollama model")
+                .help("Test copy text from screenshot with the selected Ollama model")
                 .disabled(isRunning)
             }
 
@@ -1927,11 +1927,11 @@ private struct AIOCRTestView: View {
     private var statusText: some View {
         switch state {
         case .idle:
-            Text("Checks that the selected Ollama model can read text from images.")
+            Text("Checks that the selected Ollama model can read text from screenshots.")
         case .running:
-            Text("Running OCR test...")
+            Text("Running screenshot text test...")
         case .success(_, let seconds):
-            Text(String(format: "OCR replied in %.1f s.", seconds))
+            Text(String(format: "Copied text in %.1f s.", seconds))
         case .failed(let reason):
             Text("Failed: \(reason)")
         }
@@ -1973,8 +1973,11 @@ private struct AIOCRTestView: View {
                 let seconds = Date().timeIntervalSince(started)
                 switch result {
                 case .extracted(let output):
+                    let clean = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(clean, forType: .string)
                     state = .success(
-                        output: output.trimmingCharacters(in: .whitespacesAndNewlines),
+                        output: clean,
                         seconds: seconds
                     )
                 case .unsupported:
@@ -2085,7 +2088,7 @@ private struct OllamaModelPicker: View {
                 .disabled(isModelInstalled(visionModel) || isInstalling)
 
                 if isModelInstalled(visionModel) {
-                    Text("Ready for local text fixes and OCR.")
+                    Text("Ready for local text fixes and screenshot text capture.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

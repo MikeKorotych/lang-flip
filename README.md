@@ -43,7 +43,7 @@ LangFlip saves the small but constant effort of correcting text by hand:
 - less copy/paste into browser-only grammar tools;
 - quick cleanup in any macOS app, not just the browser;
 - local AI processing when using Ollama;
-- OCR for visible text that is hard or impossible to select.
+- Copy text from screenshots when visible text is hard or impossible to select.
 
 It is especially useful for programmers, office workers, founders, support
 teams, writers, and anyone who switches languages all day.
@@ -87,7 +87,7 @@ AI is optional. For the best local experience:
 2. Open **LangFlip → Preferences → AI**.
 3. Choose **Ollama (local)**.
 4. Install or select **Qwen 3.5 4B**.
-5. Run the built-in grammar and OCR tests.
+5. Run the built-in grammar and screenshot text tests.
 
 In Ollama mode, LangFlip talks to `127.0.0.1:11434`. Your text and screenshots
 are sent to the local Ollama daemon on your Mac, not to LangFlip servers.
