@@ -12,10 +12,10 @@ final class MenubarController: NSObject {
     /// weakly because EventTap's lifetime is owned by AppDelegate.
     private weak var eventTap: EventTap?
 
-    private let enabledItem = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
+    private let enabledItem = NSMenuItem(title: "LangFlip enabled", action: #selector(toggleEnabled), keyEquivalent: "")
     private let autoFlipItem = NSMenuItem(title: "Auto-flip at word end", action: #selector(toggleAutoFlip), keyEquivalent: "")
-    private let flipSelectionItem = NSMenuItem(title: "Flip Selected Text", action: #selector(flipSelectedText), keyEquivalent: "")
-    private let fixSelectionItem = NSMenuItem(title: "Fix Selected Text", action: #selector(fixSelectedText), keyEquivalent: "")
+    private let flipSelectionItem = NSMenuItem(title: "Flip Selected Text — Double Shift", action: #selector(flipSelectedText), keyEquivalent: "")
+    private let fixSelectionItem = NSMenuItem(title: "Fix Selected Text — Single Shift", action: #selector(fixSelectedText), keyEquivalent: "")
     private let translateMenuItem = NSMenuItem(title: "Translate selection", action: nil, keyEquivalent: "")
     private let readSelectionItem = NSMenuItem(title: "Read Selected Text Aloud", action: #selector(readSelectedTextAloud), keyEquivalent: "")
     private let stopReadingItem = NSMenuItem(title: "Stop Reading", action: #selector(stopReading), keyEquivalent: "")
