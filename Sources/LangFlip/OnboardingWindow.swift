@@ -114,6 +114,7 @@ private struct SetupChecklist: View {
                     installDictionaries()
                 }
                 .disabled(dictionaryState.isRunning || hasExtendedDictionaries)
+                .frame(width: 96)
             }
 
             checklistRow(
@@ -129,6 +130,7 @@ private struct SetupChecklist: View {
                     }
                 }
                 .disabled(qwenState.isRunning || aiReady)
+                .frame(width: 112)
             }
 
             checklistRow(
@@ -142,6 +144,7 @@ private struct SetupChecklist: View {
                     runGrammarTest()
                 }
                 .disabled(grammarState.isRunning || !aiReady)
+                .frame(width: 80)
             }
 
             checklistRow(
@@ -155,6 +158,7 @@ private struct SetupChecklist: View {
                     runOCRTest()
                 }
                 .disabled(ocrState.isRunning || !aiReady)
+                .frame(width: 80)
             }
 
             checklistRow(
@@ -289,8 +293,15 @@ private struct SetupChecklist: View {
     private func installAndSelectQwen() async {
         Settings.shared.aiMode = .ollama
         Settings.shared.ollamaModel = qwenModel
+
+        guard Self.ollamaExecutableURL() != nil || isOllamaAppInstalled else {
+            qwenState = .failed("Ollama is not installed. Download Ollama, open it once, then click Try again.")
+            openOllamaDownloadPage()
+            return
+        }
+
         qwenState = .running("Opening Ollama and checking Qwen 3.5...")
-        openOllamaOrDownloadPage()
+        openOllamaAppIfInstalled()
 
         try? await Task.sleep(nanoseconds: 1_500_000_000)
         if await isOllamaModelInstalled(qwenModel) {
@@ -302,7 +313,9 @@ private struct SetupChecklist: View {
         }
 
         qwenState = .running("Downloading Qwen 3.5 4B. This can take a few minutes...")
-        if let failure = await Self.pullOllamaModel(qwenModel) {
+        if let failure = await Self.pullOllamaModel(qwenModel, progress: { message in
+            qwenState = .running(message)
+        }) {
             qwenState = .failed(failure)
             refresh()
             return
@@ -375,16 +388,21 @@ private struct SetupChecklist: View {
         return png.base64EncodedString()
     }
 
-    private func openOllamaOrDownloadPage() {
+    private var isOllamaAppInstalled: Bool {
         let appURL = URL(fileURLWithPath: "/Applications/Ollama.app")
-        if FileManager.default.fileExists(atPath: appURL.path) {
-            NSWorkspace.shared.openApplication(
-                at: appURL,
-                configuration: NSWorkspace.OpenConfiguration()
-            )
-            return
-        }
+        return FileManager.default.fileExists(atPath: appURL.path)
+    }
 
+    private func openOllamaAppIfInstalled() {
+        let appURL = URL(fileURLWithPath: "/Applications/Ollama.app")
+        guard FileManager.default.fileExists(atPath: appURL.path) else { return }
+        NSWorkspace.shared.openApplication(
+            at: appURL,
+            configuration: NSWorkspace.OpenConfiguration()
+        )
+    }
+
+    private func openOllamaDownloadPage() {
         if let downloadURL = URL(string: "https://ollama.com/download/mac") {
             NSWorkspace.shared.open(downloadURL)
         }
@@ -414,7 +432,10 @@ private struct SetupChecklist: View {
         return trimmed
     }
 
-    nonisolated private static func pullOllamaModel(_ model: String) async -> String? {
+    nonisolated private static func pullOllamaModel(
+        _ model: String,
+        progress: @escaping @MainActor (String) -> Void
+    ) async -> String? {
         await Task.detached(priority: .userInitiated) {
             guard let executableURL = ollamaExecutableURL() else {
                 return "Ollama was not found. Install Ollama, open it once, then try again."
@@ -427,15 +448,29 @@ private struct SetupChecklist: View {
             process.standardOutput = pipe
             process.standardError = pipe
 
+            let outputBuffer = LockedOutputBuffer()
+            pipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty,
+                      let chunk = String(data: data, encoding: .utf8) else { return }
+                let message = Self.ollamaProgressMessage(from: outputBuffer.appendAndRead(chunk), model: model)
+                if let message {
+                    Task { @MainActor in
+                        progress(message)
+                    }
+                }
+            }
+
             do {
                 try process.run()
             } catch {
+                pipe.fileHandleForReading.readabilityHandler = nil
                 return "Could not open Ollama: \(error.localizedDescription)"
             }
 
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
-            let output = String(data: data, encoding: .utf8)?
+            pipe.fileHandleForReading.readabilityHandler = nil
+            let output: String? = outputBuffer.read()
                 .replacingOccurrences(of: "\r", with: "\n")
                 .split(separator: "\n")
                 .map(String.init)
@@ -449,6 +484,28 @@ private struct SetupChecklist: View {
             }
             return nil
         }.value
+    }
+
+    nonisolated private static func ollamaProgressMessage(from output: String, model: String) -> String? {
+        let lines = output
+            .replacingOccurrences(of: "\r", with: "\n")
+            .split(separator: "\n")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard let last = lines.last else { return nil }
+
+        if let percentRange = last.range(of: #"\d{1,3}%"#, options: .regularExpression) {
+            let percent = String(last[percentRange])
+            return "Downloading Qwen 3.5 4B... \(percent)"
+        }
+
+        let lower = last.lowercased()
+        if lower.contains("pulling manifest") { return "Preparing Qwen 3.5 download..." }
+        if lower.contains("verifying") { return "Verifying Qwen 3.5..." }
+        if lower.contains("writing manifest") { return "Finishing Qwen 3.5 install..." }
+        if lower.contains("success") { return "Qwen 3.5 downloaded." }
+
+        return "Downloading Qwen 3.5 4B..."
     }
 
     nonisolated private static func ollamaExecutableURL() -> URL? {
@@ -469,6 +526,24 @@ private struct OnboardingOllamaTagsResponse: Decodable {
     }
 
     let models: [Model]
+}
+
+private final class LockedOutputBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = ""
+
+    func appendAndRead(_ chunk: String) -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        value += chunk
+        return value
+    }
+
+    func read() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
 }
 
 // MARK: - SwiftUI
