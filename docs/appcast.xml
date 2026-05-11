@@ -26,6 +26,30 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.2.5</title>
+      <pubDate>Mon, 11 May 2026 16:05:06 +0000</pubDate>
+      <sparkle:version>0.2.5</sparkle:version>
+      <sparkle:shortVersionString>0.2.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>First-run setup, local AI, and voice tools</h2>
+        <ul>
+          <li>Added a first-run setup checklist after macOS permissions.</li>
+          <li>Made Qwen 3.5 2B the default local AI model, with 4B kept as a heavier option for 16 GB+ Macs.</li>
+          <li>Added built-in grammar and copy-text-from-screenshot tests.</li>
+          <li>Improved no-selection Single Shift fallback in text fields that do not expose their content through Accessibility.</li>
+          <li>Added configurable hotkeys, local dictation groundwork, Whisper model management, and experimental OmniVoice text-to-speech controls.</li>
+          <li>Polished onboarding copy, dictionary setup, and release reset commands for testing new-user flows.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.5/LangFlip-0.2.5.dmg"
+        length="4284747"
+        type="application/octet-stream"
+        sparkle:edSignature="nXLu8NHTTXHceK2EWWGYbn2a/mbNSIuxVfrHGKEXdC3lYyhGbBzcLGLTd31OvsrteSBmljAVKBmtagH9sQfjAg==" />
+    </item>
+
+    <item>
       <title>v0.2.4</title>
       <pubDate>Sun, 10 May 2026 09:48:24 +0000</pubDate>
       <sparkle:version>0.2.4</sparkle:version>
