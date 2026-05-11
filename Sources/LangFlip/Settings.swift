@@ -281,6 +281,10 @@ struct GlobalShortcut: Equatable {
     }
 }
 
+enum ShortcutRecordingState {
+    static var isRecording = false
+}
+
 enum OmniVoiceLanguage: String, CaseIterable, Identifiable {
     case auto
     case english

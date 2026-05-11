@@ -150,6 +150,10 @@ final class EventTap {
             FileHandle.standardError.write(Data("lang-flip[debug]: keyDown keyCode=\(keyCode) flags=\(String(masked.rawValue, radix: 16))\n".utf8))
         }
 
+        if ShortcutRecordingState.isRecording {
+            return Unmanaged.passUnretained(event)
+        }
+
         // Screen text capture hotkey: Shift+Command+S. Only intercept it
         // when the selected local model can actually handle images; this
         // avoids stealing Save As / Duplicate shortcuts when OCR is not

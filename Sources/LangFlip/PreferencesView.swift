@@ -1293,7 +1293,7 @@ private struct ShortcutRecorderRow: View {
                         Text("Custom: \(shortcut.displayName)")
                             .foregroundColor(.green)
                     } else if isRecording {
-                        Text("Press a shortcut now. Esc cancels.")
+                        Text("Press modifiers plus a normal key. Esc cancels.")
                             .foregroundColor(.secondary)
                     }
                     if !warning.isEmpty {
@@ -1316,6 +1316,7 @@ private struct ShortcutRecorderRow: View {
     private func startRecording() {
         stopRecording()
         isRecording = true
+        ShortcutRecordingState.isRecording = true
         warning = ""
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             handle(event: event)
@@ -1328,6 +1329,7 @@ private struct ShortcutRecorderRow: View {
             self.monitor = nil
         }
         isRecording = false
+        ShortcutRecordingState.isRecording = false
     }
 
     private func handle(event: NSEvent) -> NSEvent? {
