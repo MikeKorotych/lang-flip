@@ -201,6 +201,8 @@ private struct VoiceTab: View {
     @AppStorage("lf.omniVoiceWhisper") private var omniVoiceWhisper = false
     @AppStorage("lf.omniVoiceSpeed") private var omniVoiceSpeed = 1.0
     @AppStorage("lf.omniVoiceDuration") private var omniVoiceDuration = 0.0
+    @AppStorage("lf.omniVoiceSentencePause") private var omniVoiceSentencePause = 0.35
+    @AppStorage("lf.omniVoiceLinePause") private var omniVoiceLinePause = 0.75
     @AppStorage("lf.omniVoiceNumSteps") private var omniVoiceNumSteps = 32
     @AppStorage("lf.omniVoiceGuidanceScale") private var omniVoiceGuidanceScale = 2.0
     @AppStorage("lf.omniVoiceDenoise") private var omniVoiceDenoise = true
@@ -247,7 +249,7 @@ private struct VoiceTab: View {
                         Text(backend.displayName).tag(backend.rawValue)
                     }
                 } label: {
-                    settingLabel("Backend", help: "Choose between the built-in macOS voices and the local OmniVoice model.")
+                    settingLabel("Backend", help: "System voices start instantly. OmniVoice runs locally and gives more voice controls, but takes longer to generate audio.")
                 }
 
                 if activeTTSBackend == .system {
@@ -257,14 +259,14 @@ private struct VoiceTab: View {
                             Text(SpeechReader.displayName(for: voice)).tag(voice)
                         }
                     } label: {
-                        settingLabel("Voice", help: "The macOS system voice used when Backend is set to System voices.")
+                        settingLabel("Voice", help: "Pick which macOS voice reads selected text aloud.")
                     }
                     .onChange(of: speechVoiceIdentifier) { _ in
                         SpeechReader.shared.applySettings()
                     }
 
                     HStack {
-                        settingLabel("Speed", help: "Speech rate for macOS system voices. Higher numbers speak faster.")
+                        settingLabel("Speed", help: "Move right to read faster, left to read slower.")
                         Slider(value: $speechRate, in: 120...260, step: 5)
                             .onChange(of: speechRate) { _ in
                                 SpeechReader.shared.applySettings()
@@ -279,11 +281,11 @@ private struct VoiceTab: View {
                             Text(language.displayName).tag(language.rawValue)
                         }
                     } label: {
-                        settingLabel("Language", help: "Language hint passed to OmniVoice. Auto guesses English, Ukrainian, or Russian from the selected text.")
+                        settingLabel("Language", help: "Leave Auto for normal use. Choose a language manually if pronunciation sounds wrong.")
                     }
 
                     HStack {
-                        settingLabel("OmniVoice", help: "Runtime status for the local OmniVoice text-to-speech model.")
+                        settingLabel("OmniVoice", help: "Shows whether the local voice model is ready on this Mac.")
                         Spacer()
                         Text(omniVoiceStatusLabel)
                             .foregroundColor(omniVoiceAvailability.isReady ? .green : .orange)
@@ -295,7 +297,7 @@ private struct VoiceTab: View {
                             Text(style.displayName).tag(style.rawValue)
                         }
                     } label: {
-                        settingLabel("Voice", help: "High-level voice identity hint. OmniVoice supports male and female voice design tags.")
+                        settingLabel("Voice", help: "Choose a more feminine or masculine voice character. Default lets the model decide.")
                     }
 
                     Picker(selection: $omniVoiceAge) {
@@ -303,7 +305,7 @@ private struct VoiceTab: View {
                             Text(style.displayName).tag(style.rawValue)
                         }
                     } label: {
-                        settingLabel("Age", help: "Age-style hint for voice design. It changes the character of the generated voice, not the text.")
+                        settingLabel("Age", help: "Changes the age character of the voice: younger, older, or neutral.")
                     }
 
                     Picker(selection: $omniVoicePitch) {
@@ -311,7 +313,7 @@ private struct VoiceTab: View {
                             Text(style.displayName).tag(style.rawValue)
                         }
                     } label: {
-                        settingLabel("Pitch", help: "Voice pitch hint. Lower sounds deeper; higher sounds brighter.")
+                        settingLabel("Pitch", help: "Move toward Low for a deeper voice, High for a brighter voice.")
                     }
 
                     Picker(selection: $omniVoiceAccent) {
@@ -319,17 +321,17 @@ private struct VoiceTab: View {
                             Text(style.displayName).tag(style.rawValue)
                         }
                     } label: {
-                        settingLabel("Accent", help: "Accent hint for voice design. Most useful for English speech.")
+                        settingLabel("Accent", help: "Adds an accent flavor. It usually works best with English text.")
                     }
 
                     Toggle(isOn: $omniVoiceWhisper) {
-                        settingLabel("Whispered voice", help: "Adds OmniVoice's whisper style tag, making the generated voice sound quieter and breathier.")
+                        settingLabel("Whispered voice", help: "Makes the voice sound quieter and breathier, like a whisper.")
                     }
 
                     Divider()
 
                     HStack {
-                        settingLabel("Reference voice", help: "Optional audio sample for voice cloning. OmniVoice will try to imitate the speaker from this file.")
+                        settingLabel("Reference voice", help: "Optional voice sample. Add a short clean recording and OmniVoice will try to speak with a similar voice.")
                         Spacer()
                         Text(omniVoiceReferenceAudioLabel)
                             .foregroundColor(.secondary)
@@ -350,13 +352,13 @@ private struct VoiceTab: View {
                         .textFieldStyle(.roundedBorder)
                         .controlSize(.small)
                         .disabled(omniVoiceReferenceAudioPath.isEmpty)
-                        .help("Optional transcript of the reference audio. Providing it can improve voice cloning quality.")
+                        .help("Optional: type what is said in the reference audio. This can make voice cloning more accurate.")
 
                     Divider()
 
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            settingLabel("Speed", help: "Playback speed multiplier. 1.0 is normal; lower is slower, higher is faster. Disabled when fixed Duration is set.")
+                            settingLabel("Speed", help: "Move right to speak faster, left to speak slower. Fixed Duration turns this off.")
                             Slider(value: $omniVoiceSpeed, in: 0.5...1.5, step: 0.05)
                             Text(String(format: "%.2fx", omniVoiceSpeed))
                                 .foregroundColor(.secondary)
@@ -365,7 +367,7 @@ private struct VoiceTab: View {
                         .disabled(omniVoiceDuration > 0)
 
                         HStack {
-                            settingLabel("Duration", help: "Fixed output length in seconds. Auto lets OmniVoice estimate natural duration. Any fixed value overrides Speed.")
+                            settingLabel("Duration", help: "Keep Auto for natural timing. Set a number only when the audio must fit a fixed length.")
                             Slider(value: $omniVoiceDuration, in: 0...60, step: 0.5)
                             Text(omniVoiceDuration > 0 ? String(format: "%.1fs", omniVoiceDuration) : "Auto")
                                 .foregroundColor(.secondary)
@@ -373,7 +375,23 @@ private struct VoiceTab: View {
                         }
 
                         HStack {
-                            settingLabel("Inference steps", help: "Generation quality budget. Fewer steps are faster; more steps can improve quality but take longer.")
+                            settingLabel("Sentence pause", help: "Adds a real pause after '.', '!', '?' and similar sentence endings. Increase it for jokes, stories, and dramatic reading.")
+                            Slider(value: $omniVoiceSentencePause, in: 0...2, step: 0.05)
+                            Text(String(format: "%.2fs", omniVoiceSentencePause))
+                                .foregroundColor(.secondary)
+                                .frame(width: 48, alignment: .trailing)
+                        }
+
+                        HStack {
+                            settingLabel("Line pause", help: "Adds a longer pause after line breaks. Increase it when reading lists, poems, chat messages, or multi-line jokes.")
+                            Slider(value: $omniVoiceLinePause, in: 0...3, step: 0.05)
+                            Text(String(format: "%.2fs", omniVoiceLinePause))
+                                .foregroundColor(.secondary)
+                                .frame(width: 48, alignment: .trailing)
+                        }
+
+                        HStack {
+                            settingLabel("Quality", help: "Move left for faster generation, right for better quality. 32 is a good everyday balance.")
                             Slider(
                                 value: Binding(
                                     get: { Double(omniVoiceNumSteps) },
@@ -388,7 +406,7 @@ private struct VoiceTab: View {
                         }
 
                         HStack {
-                            settingLabel("Guidance", help: "How strongly the model follows the language, style, and voice conditions. Higher can be more controlled but less natural.")
+                            settingLabel("Style strength", help: "Move right if the selected voice/style is too subtle. Move left if the result sounds forced or less natural.")
                             Slider(value: $omniVoiceGuidanceScale, in: 0...4, step: 0.1)
                             Text(String(format: "%.1f", omniVoiceGuidanceScale))
                                 .foregroundColor(.secondary)
@@ -399,21 +417,21 @@ private struct VoiceTab: View {
                     DisclosureGroup("Advanced generation") {
                         VStack(alignment: .leading, spacing: 10) {
                             Toggle(isOn: $omniVoiceDenoise) {
-                                settingLabel("Denoise", help: "Adds OmniVoice's denoise conditioning. Usually best left on for cleaner speech.")
+                                settingLabel("Cleaner voice", help: "Usually keep this on. Turn it off only if the voice starts sounding too processed.")
                             }
                             Toggle(isOn: $omniVoicePostprocessOutput) {
-                                settingLabel("Postprocess output", help: "Trims long silences and applies small audio cleanup after generation. Usually best left on.")
+                                settingLabel("Trim awkward silence", help: "Usually keep this on. It removes overly long silent parts from the generated audio.")
                             }
-                            advancedOmniVoiceSlider("T-shift", value: $omniVoiceTShift, range: 0...2, step: 0.05, help: "Sampling timestep shift. The default is conservative; changing it can alter timing and stability.")
-                            advancedOmniVoiceSlider("Layer penalty", value: $omniVoiceLayerPenaltyFactor, range: 0...10, step: 0.5, help: "Penalty used during token/codebook selection. Higher values push the model toward earlier layers.")
-                            advancedOmniVoiceSlider("Position temperature", value: $omniVoicePositionTemperature, range: 0...10, step: 0.5, help: "Randomness for position selection. Higher values can add variety but may reduce consistency.")
-                            advancedOmniVoiceSlider("Class temperature", value: $omniVoiceClassTemperature, range: 0...2, step: 0.05, help: "Randomness for token sampling. 0 is greedy and most stable; higher values can be more varied.")
+                            advancedOmniVoiceSlider("Timing stability", value: $omniVoiceTShift, range: 0...2, step: 0.05, help: "Leave near the default unless speech timing sounds strange. Moving it can change rhythm and stability.")
+                            advancedOmniVoiceSlider("Voice smoothness", value: $omniVoiceLayerPenaltyFactor, range: 0...10, step: 0.5, help: "Higher can make the voice more controlled. Lower can make it looser, but sometimes less stable.")
+                            advancedOmniVoiceSlider("Rhythm variety", value: $omniVoicePositionTemperature, range: 0...10, step: 0.5, help: "Higher adds more variation to rhythm. Lower is more predictable.")
+                            advancedOmniVoiceSlider("Voice variety", value: $omniVoiceClassTemperature, range: 0...2, step: 0.05, help: "0 is safest and most stable. Increase only if you want more variation and can accept occasional odd results.")
                             Button("Reset generation settings") {
                                 Settings.shared.resetOmniVoiceGenerationSettings()
                                 syncOmniVoiceGenerationSettingsFromDefaults()
                             }
                             .controlSize(.small)
-                            .help("Restore OmniVoice generation settings to the model defaults used by LangFlip.")
+                            .help("Restore speed, pauses, quality, and advanced generation settings to LangFlip defaults.")
                         }
                         .padding(.top, 6)
                     }
@@ -781,7 +799,10 @@ private struct VoiceTab: View {
     }
 
     private func readTTSSample() {
-        let sample = "LangFlip can now read selected text aloud with the selected text to speech backend."
+        let sample = """
+        LangFlip can read selected text aloud. Sentence pauses make stories easier to follow.
+        A new line can pause a little longer.
+        """
         if activeTTSBackend == .system {
             SpeechReader.shared.speak(sample)
             return
@@ -810,6 +831,8 @@ private struct VoiceTab: View {
     private func syncOmniVoiceGenerationSettingsFromDefaults() {
         omniVoiceSpeed = Settings.shared.omniVoiceSpeed
         omniVoiceDuration = Settings.shared.omniVoiceDuration
+        omniVoiceSentencePause = Settings.shared.omniVoiceSentencePause
+        omniVoiceLinePause = Settings.shared.omniVoiceLinePause
         omniVoiceNumSteps = Settings.shared.omniVoiceNumSteps
         omniVoiceGuidanceScale = Settings.shared.omniVoiceGuidanceScale
         omniVoiceDenoise = Settings.shared.omniVoiceDenoise

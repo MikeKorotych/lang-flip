@@ -18,6 +18,11 @@ final class OmniVoiceSynthesizer {
     private var playbackProcess: Process?
     private(set) var lastOutputURL: URL?
 
+    private struct SpeechChunk {
+        let text: String
+        let pauseAfter: Double
+    }
+
     private init() {}
 
     static let runtimeDirectory = URL(
@@ -73,41 +78,29 @@ final class OmniVoiceSynthesizer {
     func generate(text: String) async throws -> URL {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw OmniVoiceError.emptyText }
-        guard let executableURL = Self.availability().executableURL else {
+        let availability = Self.availability()
+        guard let executableURL = availability.executableURL else {
             throw OmniVoiceError.missingRuntime
         }
 
         try FileManager.default.createDirectory(at: Self.outputDirectory, withIntermediateDirectories: true)
         let outputURL = Self.outputDirectory
-            .appendingPathComponent("omnivoice-\(Int(Date().timeIntervalSince1970)).wav")
+            .appendingPathComponent("omnivoice-\(Self.timestamp()).wav")
 
         return try await Task.detached(priority: .userInitiated) {
-            let process = Process()
-            let pipe = Pipe()
-            process.executableURL = executableURL
-            process.arguments = Self.arguments(text: clean, outputURL: outputURL)
-            process.environment = Self.processEnvironment()
-            process.standardOutput = pipe
-            process.standardError = pipe
-
-            await MainActor.run {
-                self.generationProcess = process
-            }
-            defer {
-                Task { @MainActor in self.generationProcess = nil }
-            }
-
-            try process.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-
-            guard process.terminationStatus == 0 else {
-                let output = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                throw OmniVoiceError.processFailed(output)
-            }
-            guard FileManager.default.fileExists(atPath: outputURL.path) else {
-                throw OmniVoiceError.noOutput
+            let chunks = Self.speechChunks(from: clean)
+            if chunks.count <= 1 {
+                try await self.generateSingle(text: clean, outputURL: outputURL, executableURL: executableURL)
+            } else {
+                guard let ffmpegURL = availability.ffmpegURL else {
+                    throw OmniVoiceError.missingFFmpeg
+                }
+                try await self.generateChunked(
+                    chunks: chunks,
+                    outputURL: outputURL,
+                    executableURL: executableURL,
+                    ffmpegURL: ffmpegURL
+                )
             }
             await MainActor.run {
                 self.lastOutputURL = outputURL
@@ -126,6 +119,105 @@ final class OmniVoiceSynthesizer {
             playbackProcess = process
         } catch {
             Notifications.show(title: "Audio playback failed", body: error.localizedDescription)
+        }
+    }
+
+    private func generateSingle(text: String, outputURL: URL, executableURL: URL) async throws {
+        let process = Process()
+        process.executableURL = executableURL
+        process.arguments = Self.arguments(text: text, outputURL: outputURL)
+        process.environment = Self.processEnvironment()
+        try await run(process)
+        guard FileManager.default.fileExists(atPath: outputURL.path) else {
+            throw OmniVoiceError.noOutput
+        }
+    }
+
+    private func generateChunked(
+        chunks: [SpeechChunk],
+        outputURL: URL,
+        executableURL: URL,
+        ffmpegURL: URL
+    ) async throws {
+        let sessionURL = Self.outputDirectory
+            .appendingPathComponent("omnivoice-\(Self.timestamp())-parts", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessionURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sessionURL) }
+
+        var audioParts: [URL] = []
+        for (index, chunk) in chunks.enumerated() {
+            let chunkURL = sessionURL.appendingPathComponent(String(format: "chunk-%03d.wav", index))
+            try await generateSingle(text: chunk.text, outputURL: chunkURL, executableURL: executableURL)
+            audioParts.append(chunkURL)
+
+            if chunk.pauseAfter > 0, index < chunks.count - 1 {
+                let silenceURL = sessionURL.appendingPathComponent(String(format: "pause-%03d.wav", index))
+                try await generateSilence(duration: chunk.pauseAfter, outputURL: silenceURL, ffmpegURL: ffmpegURL)
+                audioParts.append(silenceURL)
+            }
+        }
+        try await concatenate(audioParts, outputURL: outputURL, ffmpegURL: ffmpegURL, workingDirectory: sessionURL)
+    }
+
+    private func generateSilence(duration: Double, outputURL: URL, ffmpegURL: URL) async throws {
+        let process = Process()
+        process.executableURL = ffmpegURL
+        process.arguments = [
+            "-y",
+            "-f", "lavfi",
+            "-i", "anullsrc=r=24000:cl=mono",
+            "-t", String(format: "%.2f", duration),
+            outputURL.path
+        ]
+        process.environment = Self.processEnvironment()
+        try await run(process)
+    }
+
+    private func concatenate(_ parts: [URL], outputURL: URL, ffmpegURL: URL, workingDirectory: URL) async throws {
+        let listURL = workingDirectory.appendingPathComponent("concat.txt")
+        let body = parts
+            .map { "file '\(Self.escapedConcatPath($0.path))'" }
+            .joined(separator: "\n")
+        try body.write(to: listURL, atomically: true, encoding: .utf8)
+
+        let process = Process()
+        process.executableURL = ffmpegURL
+        process.arguments = [
+            "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", listURL.path,
+            "-ar", "24000",
+            "-ac", "1",
+            outputURL.path
+        ]
+        process.environment = Self.processEnvironment()
+        try await run(process)
+        guard FileManager.default.fileExists(atPath: outputURL.path) else {
+            throw OmniVoiceError.noOutput
+        }
+    }
+
+    private func run(_ process: Process) async throws {
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        await MainActor.run {
+            self.generationProcess = process
+        }
+        defer {
+            Task { @MainActor in self.generationProcess = nil }
+        }
+
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            let output = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            throw OmniVoiceError.processFailed(output)
         }
     }
 
@@ -213,6 +305,61 @@ final class OmniVoiceSynthesizer {
         return items.joined(separator: ", ")
     }
 
+    private static func speechChunks(from text: String) -> [SpeechChunk] {
+        let settings = Settings.shared
+        let sentencePause = max(0, settings.omniVoiceSentencePause)
+        let linePause = max(0, settings.omniVoiceLinePause)
+        guard sentencePause > 0 || linePause > 0 else {
+            return [SpeechChunk(text: text, pauseAfter: 0)]
+        }
+
+        var chunks: [SpeechChunk] = []
+        var current = ""
+
+        func appendCurrent(pause: Double) {
+            let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+            current = ""
+            guard !trimmed.isEmpty else {
+                if pause > 0, !chunks.isEmpty {
+                    let previous = chunks.removeLast()
+                    chunks.append(SpeechChunk(text: previous.text, pauseAfter: max(previous.pauseAfter, pause)))
+                }
+                return
+            }
+            chunks.append(SpeechChunk(text: trimmed, pauseAfter: pause))
+        }
+
+        for character in text {
+            if character.isNewline {
+                appendCurrent(pause: linePause)
+                continue
+            }
+            current.append(character)
+            if Self.isSentenceTerminator(character) {
+                appendCurrent(pause: sentencePause)
+            }
+        }
+        appendCurrent(pause: 0)
+
+        if !chunks.isEmpty {
+            let previous = chunks.removeLast()
+            chunks.append(SpeechChunk(text: previous.text, pauseAfter: 0))
+        }
+        return chunks.isEmpty ? [SpeechChunk(text: text, pauseAfter: 0)] : chunks
+    }
+
+    private static func isSentenceTerminator(_ character: Character) -> Bool {
+        ".!?;:…".contains(character)
+    }
+
+    private static func timestamp() -> String {
+        "\(Int(Date().timeIntervalSince1970 * 1000))"
+    }
+
+    private static func escapedConcatPath(_ path: String) -> String {
+        path.replacingOccurrences(of: "'", with: "'\\''")
+    }
+
     private static func processEnvironment() -> [String: String] {
         var environment = ProcessInfo.processInfo.environment
         let existingPath = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
@@ -239,6 +386,7 @@ final class OmniVoiceSynthesizer {
 enum OmniVoiceError: LocalizedError {
     case emptyText
     case missingRuntime
+    case missingFFmpeg
     case processFailed(String)
     case noOutput
 
@@ -248,6 +396,8 @@ enum OmniVoiceError: LocalizedError {
             return "No text to speak."
         case .missingRuntime:
             return "OmniVoice runtime is not installed."
+        case .missingFFmpeg:
+            return "ffmpeg is required to add pauses between spoken lines."
         case .processFailed(let output):
             return output.isEmpty ? "OmniVoice failed." : output
         case .noOutput:

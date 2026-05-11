@@ -214,6 +214,8 @@ final class Settings {
         static let omniVoiceWhisper = "lf.omniVoiceWhisper"
         static let omniVoiceSpeed = "lf.omniVoiceSpeed"
         static let omniVoiceDuration = "lf.omniVoiceDuration"
+        static let omniVoiceSentencePause = "lf.omniVoiceSentencePause"
+        static let omniVoiceLinePause = "lf.omniVoiceLinePause"
         static let omniVoiceNumSteps = "lf.omniVoiceNumSteps"
         static let omniVoiceGuidanceScale = "lf.omniVoiceGuidanceScale"
         static let omniVoiceDenoise = "lf.omniVoiceDenoise"
@@ -377,6 +379,16 @@ final class Settings {
         set { defaults.set(newValue, forKey: Keys.omniVoiceDuration) }
     }
 
+    var omniVoiceSentencePause: Double {
+        get { defaults.object(forKey: Keys.omniVoiceSentencePause) as? Double ?? 0.35 }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceSentencePause) }
+    }
+
+    var omniVoiceLinePause: Double {
+        get { defaults.object(forKey: Keys.omniVoiceLinePause) as? Double ?? 0.75 }
+        set { defaults.set(newValue, forKey: Keys.omniVoiceLinePause) }
+    }
+
     var omniVoiceNumSteps: Int {
         get { defaults.object(forKey: Keys.omniVoiceNumSteps) as? Int ?? 32 }
         set { defaults.set(newValue, forKey: Keys.omniVoiceNumSteps) }
@@ -420,6 +432,8 @@ final class Settings {
     func resetOmniVoiceGenerationSettings() {
         defaults.set(1.0, forKey: Keys.omniVoiceSpeed)
         defaults.set(0.0, forKey: Keys.omniVoiceDuration)
+        defaults.set(0.35, forKey: Keys.omniVoiceSentencePause)
+        defaults.set(0.75, forKey: Keys.omniVoiceLinePause)
         defaults.set(32, forKey: Keys.omniVoiceNumSteps)
         defaults.set(2.0, forKey: Keys.omniVoiceGuidanceScale)
         defaults.set(true, forKey: Keys.omniVoiceDenoise)
