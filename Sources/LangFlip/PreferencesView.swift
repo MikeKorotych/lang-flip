@@ -103,6 +103,16 @@ private struct GeneralTab: View {
                 )
             }
 
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Double-tap Shift flips selected text.", systemImage: "1.circle")
+                    Label("Triple-tap Shift uses the secondary language.", systemImage: "2.circle")
+                    Label("Press both Shift keys to pause or resume.", systemImage: "pause.circle")
+                }
+                .font(.callout)
+                .foregroundColor(.secondary)
+            }
+
             Section("Learning") {
                 HStack {
                     Text("Remembered exceptions")
@@ -1041,16 +1051,6 @@ private struct LanguagesTab: View {
 
             Section("Dictionaries") {
                 DictionaryPackView()
-            }
-
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Double-tap Shift flips selected text.", systemImage: "1.circle")
-                    Label("Triple-tap Shift uses the secondary language.", systemImage: "2.circle")
-                    Label("Press both Shift keys to pause or resume.", systemImage: "pause.circle")
-                }
-                .font(.callout)
-                .foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)

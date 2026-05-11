@@ -1144,11 +1144,20 @@ final class EventTap {
             }
 
             AppLog.write("single-shift grammar using keyboard line fallback len=\(sentence.text.count)")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-                self.selectPreviousCharacters(sentence.text.count)
-                self.singleShiftGrammarInFlight = true
-                self.applySingleShiftAIFixToKeyboardSuffix(text: sentence.text, snapshot: snapshot)
-            }
+            let nsLine = selectedLine as NSString
+            let sentenceEnd = sentence.range.location + sentence.range.length
+            let suffixLength = max(0, nsLine.length - sentenceEnd)
+            let suffix = suffixLength > 0
+                ? nsLine.substring(with: NSRange(location: sentenceEnd, length: suffixLength))
+                : ""
+            let replaceLength = nsLine.length - sentence.range.location
+            self.singleShiftGrammarInFlight = true
+            self.applySingleShiftAIFixToKeyboardSuffix(
+                text: sentence.text,
+                suffix: suffix,
+                replaceLength: replaceLength,
+                snapshot: snapshot
+            )
         }
     }
 
@@ -1185,7 +1194,12 @@ final class EventTap {
         }
     }
 
-    private func applySingleShiftAIFixToKeyboardSuffix(text: String, snapshot: PasteboardSnapshot) {
+    private func applySingleShiftAIFixToKeyboardSuffix(
+        text: String,
+        suffix: String,
+        replaceLength: Int,
+        snapshot: PasteboardSnapshot
+    ) {
         let pb = NSPasteboard.general
         let request = AIFixRequest(text: text, activeLayout: InputSource.currentLayout())
         AIAssistantManager.shared.current.fixSelection(request) { [weak self] result in
@@ -1195,24 +1209,25 @@ final class EventTap {
                 switch result {
                 case .fixed(let corrected):
                     AppLog.write("single-shift keyboard suffix fixed \(text.count)->\(corrected.count)")
-                    pb.clearContents()
-                    pb.setString(corrected, forType: .string)
-                    self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
-                    self.playRewriteFeedback()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
-                        snapshot.restore(to: pb)
+                    self.selectPreviousCharacters(replaceLength)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+                        let replacement = corrected.trimmingCharacters(in: .whitespacesAndNewlines) + suffix
+                        pb.clearContents()
+                        pb.setString(replacement, forType: .string)
+                        self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+                        self.playRewriteFeedback()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
+                            snapshot.restore(to: pb)
+                        }
                     }
                 case .unchanged:
                     AppLog.write("single-shift keyboard suffix unchanged")
-                    self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
                     snapshot.restore(to: pb)
                 case .unsupported:
                     AppLog.write("single-shift keyboard suffix unsupported")
-                    self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
                     snapshot.restore(to: pb)
                 case .failed(let reason):
                     AppLog.write("single-shift keyboard suffix failed: \(reason)")
-                    self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
                     snapshot.restore(to: pb)
                 }
             }
