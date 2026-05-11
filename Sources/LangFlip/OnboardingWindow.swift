@@ -31,7 +31,7 @@ final class OnboardingWindowController: NSObject {
             let win = NSWindow(contentViewController: host)
             win.title = "LangFlip"
             win.styleMask = [.titled, .closable]
-            win.setContentSize(NSSize(width: 520, height: 560))
+            win.setContentSize(NSSize(width: 600, height: 680))
             win.isReleasedWhenClosed = false
             win.center()
             // Keep the window above other apps so when the user comes back
@@ -68,6 +68,261 @@ final class OnboardingWindowController: NSObject {
                 PreferencesWindowController.shared.show()
             }
         }
+    }
+}
+
+private struct SetupChecklist: View {
+    private enum RunState: Equatable {
+        case idle
+        case running
+        case success(String)
+        case failed(String)
+    }
+
+    let onOpenPreferences: () -> Void
+
+    @State private var dictionaryStats = DictionaryManager.stats()
+    @State private var dictionaryState: RunState = .idle
+    @State private var aiReady = AIAssistantManager.shared.isReady
+    @State private var grammarState: RunState = .idle
+    @State private var ocrState: RunState = .idle
+
+    private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Quick setup")
+                .font(.headline)
+
+            checklistRow(
+                done: hasExtendedDictionaries,
+                icon: "text.book.closed",
+                title: "Install extended dictionaries",
+                detail: hasExtendedDictionaries ? "Extended EN/UK/RU dictionaries are active." : "Improves auto-flip coverage for real typing.",
+                state: dictionaryState
+            ) {
+                Button(dictionaryButtonTitle) {
+                    installDictionaries()
+                }
+                .disabled(dictionaryState == .running)
+            }
+
+            checklistRow(
+                done: aiReady,
+                icon: "sparkles",
+                title: "Use Qwen 3.5 for local AI",
+                detail: aiReady ? "Qwen 3.5 is selected and reachable through Ollama." : "Select Qwen 3.5 for grammar fixes, translation, and OCR.",
+                state: .idle
+            ) {
+                HStack(spacing: 8) {
+                    Button("Select Qwen") {
+                        Settings.shared.aiMode = .ollama
+                        Settings.shared.ollamaModel = "qwen3.5:4b"
+                        refresh()
+                    }
+                    Button("AI Settings", action: onOpenPreferences)
+                }
+            }
+
+            checklistRow(
+                done: grammarSucceeded,
+                icon: "wand.and.stars",
+                title: "Run grammar test",
+                detail: "Checks selected-text cleanup before you need it.",
+                state: grammarState
+            ) {
+                Button(grammarState == .running ? "Testing..." : "Test") {
+                    runGrammarTest()
+                }
+                .disabled(grammarState == .running || !aiReady)
+            }
+
+            checklistRow(
+                done: ocrSucceeded,
+                icon: "viewfinder",
+                title: "Run OCR test",
+                detail: "Checks that the local vision model can read text from images.",
+                state: ocrState
+            ) {
+                Button(ocrState == .running ? "Testing..." : "Test") {
+                    runOCRTest()
+                }
+                .disabled(ocrState == .running || !aiReady)
+            }
+
+            checklistRow(
+                done: true,
+                icon: "keyboard",
+                title: "Remember the core hotkeys",
+                detail: "Double Shift flips layout, single Shift fixes text, Shift+Command+S captures screen text.",
+                state: .idle
+            ) {
+                Button("Hotkeys", action: onOpenPreferences)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.secondary.opacity(0.06))
+        )
+        .onAppear(perform: refresh)
+        .onReceive(timer) { _ in refresh() }
+    }
+
+    private var hasExtendedDictionaries: Bool {
+        dictionaryStats.values.contains { $0.installedCount > 0 }
+    }
+
+    private var dictionaryButtonTitle: String {
+        if dictionaryState == .running { return "Installing..." }
+        return hasExtendedDictionaries ? "Update" : "Install"
+    }
+
+    private var grammarSucceeded: Bool {
+        if case .success = grammarState { return true }
+        return false
+    }
+
+    private var ocrSucceeded: Bool {
+        if case .success = ocrState { return true }
+        return false
+    }
+
+    @ViewBuilder
+    private func checklistRow<Action: View>(
+        done: Bool,
+        icon: String,
+        title: String,
+        detail: String,
+        state: RunState,
+        @ViewBuilder action: () -> Action
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: done ? "checkmark.circle.fill" : icon)
+                .font(.title3)
+                .foregroundColor(done ? .green : .accentColor)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                Text(statusDetail(defaultDetail: detail, state: state))
+                    .font(.caption)
+                    .foregroundColor(statusColor(for: state))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 10)
+
+            action()
+                .controlSize(.small)
+        }
+    }
+
+    private func statusDetail(defaultDetail: String, state: RunState) -> String {
+        switch state {
+        case .idle:
+            return defaultDetail
+        case .running:
+            return "Running..."
+        case .success(let message):
+            return message
+        case .failed(let reason):
+            return "Failed: \(reason)"
+        }
+    }
+
+    private func statusColor(for state: RunState) -> Color {
+        switch state {
+        case .success:
+            return .green
+        case .failed:
+            return .orange
+        default:
+            return .secondary
+        }
+    }
+
+    private func refresh() {
+        dictionaryStats = DictionaryManager.stats()
+        aiReady = AIAssistantManager.shared.isReady
+    }
+
+    private func installDictionaries() {
+        dictionaryState = .running
+        DictionaryManager.installExtendedFrequencyPack { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    dictionaryStats = DictionaryManager.stats()
+                    dictionaryState = .success("Extended dictionaries installed.")
+                case .failure(let error):
+                    dictionaryState = .failed(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func runGrammarTest() {
+        grammarState = .running
+        AIAssistantManager.shared.current.fixSelection(
+            AIFixRequest(text: "World is wery gandgerous plsce to leave in!", activeLayout: .en)
+        ) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .fixed(let output):
+                    grammarState = .success(output.trimmingCharacters(in: .whitespacesAndNewlines))
+                case .unchanged:
+                    grammarState = .success("Model replied; sample was unchanged.")
+                case .unsupported:
+                    grammarState = .failed("selected AI mode does not support text fixes")
+                case .failed(let reason):
+                    grammarState = .failed(reason)
+                }
+            }
+        }
+    }
+
+    private func runOCRTest() {
+        guard let imageBase64 = makeOCRSampleImageBase64() else {
+            ocrState = .failed("could not create test image")
+            return
+        }
+        ocrState = .running
+        AIAssistantManager.shared.current.extractTextFromImage(
+            AIOcrRequest(imageBase64: imageBase64)
+        ) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .extracted(let output):
+                    ocrState = .success(output.trimmingCharacters(in: .whitespacesAndNewlines))
+                case .unsupported:
+                    ocrState = .failed("selected model does not support image input")
+                case .failed(let reason):
+                    ocrState = .failed(reason)
+                }
+            }
+        }
+    }
+
+    private func makeOCRSampleImageBase64() -> String? {
+        let sample = "LangFlip OCR test"
+        let image = NSImage(size: NSSize(width: 720, height: 180))
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSRect(x: 0, y: 0, width: 720, height: 180).fill()
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 34, weight: .regular),
+            .foregroundColor: NSColor.black,
+        ]
+        sample.draw(in: NSRect(x: 36, y: 72, width: 650, height: 60), withAttributes: attrs)
+        image.unlockFocus()
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:])
+        else { return nil }
+        return png.base64EncodedString()
     }
 }
 
@@ -109,7 +364,7 @@ private struct OnboardingView: View {
                 } else {
                     completedStep(.accessibility)
                     completedStep(.inputMonitoring)
-                    quickSetup
+                    SetupChecklist(onOpenPreferences: onOpenPreferences)
                 }
             }
 
@@ -118,7 +373,7 @@ private struct OnboardingView: View {
             footer
         }
         .padding(24)
-        .frame(width: 432)
+        .frame(width: 512)
         .onReceive(timer) { _ in
             let next = PermissionStatus.current()
             guard next != status else { return }
@@ -191,49 +446,6 @@ private struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 8)
-        }
-    }
-
-    private var quickSetup: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            quickSetupRow(
-                icon: "text.book.closed",
-                title: "Install extended dictionaries",
-                detail: "Preferences → Languages → Dictionaries adds larger EN/UK/RU word lists for better auto-flip coverage."
-            )
-            quickSetupRow(
-                icon: "sparkles",
-                title: "Enable local AI",
-                detail: "Preferences → AI can use Ollama with Qwen 3.5 4B for selected-text fixes, translation, and screen text capture."
-            )
-            quickSetupRow(
-                icon: "keyboard",
-                title: "Start with selected text",
-                detail: "Double-tap Shift to flip layout, tap Shift once to fix grammar, or press Shift+Command+S to capture text from the screen."
-            )
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.secondary.opacity(0.06))
-        )
-    }
-
-    private func quickSetupRow(icon: String, title: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundColor(.accentColor)
-                .frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.callout.weight(.semibold))
-                Text(detail)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 
