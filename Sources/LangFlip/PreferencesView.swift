@@ -2034,16 +2034,16 @@ private struct OllamaModelPicker: View {
 
     private let recommendedModels: [RecommendedModel] = [
         RecommendedModel(
-            tag: "qwen3.5:2b",
-            menuLabel: "Qwen 3.5 2B Lite (vision)",
-            displayName: "Qwen 3.5 2B Lite",
-            detail: "Lower memory option for 8 GB Macs; useful for comparing speed and quality."
-        ),
-        RecommendedModel(
             tag: "qwen3.5:4b",
             menuLabel: "Qwen 3.5 4B Recommended (vision)",
             displayName: "Qwen 3.5 4B",
             detail: "Better proofreading stability; recommended for Macs with 12 GB+ RAM."
+        ),
+        RecommendedModel(
+            tag: "qwen3.5:2b",
+            menuLabel: "Qwen 3.5 2B Lite (vision)",
+            displayName: "Qwen 3.5 2B Lite",
+            detail: "Lower memory option for 8 GB Macs; useful for comparing speed and quality."
         )
     ]
 
@@ -2057,14 +2057,15 @@ private struct OllamaModelPicker: View {
     @State private var installingModel: String?
     @State private var failedModel: String?
     @State private var installMessage: String?
+    @State private var installProgress: Double?
 
     private var dropdownModels: [String] {
         var models: [String] = []
-        for model in [selectedModel] + installedModels + recommendedModels.map(\.tag) {
+        for model in recommendedModels.map(\.tag) + installedModels {
             let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
             let canonical = canonicalModelTag(trimmed)
             let alreadyIncluded = models.contains { canonicalModelTag($0) == canonical }
-            if !trimmed.isEmpty && !alreadyIncluded {
+            if isAllowedDropdownModel(trimmed), !alreadyIncluded {
                 models.append(trimmed)
             }
         }
@@ -2073,6 +2074,10 @@ private struct OllamaModelPicker: View {
 
     private var isInstalling: Bool {
         installingModel != nil
+    }
+
+    private var supportedInstalledModels: [String] {
+        installedModels.filter(isAllowedDropdownModel)
     }
 
     var body: some View {
@@ -2115,14 +2120,11 @@ private struct OllamaModelPicker: View {
 
                         Text(modelStatusText(for: model))
                             .font(.caption)
-                            .foregroundColor(isModelInstalled(model.tag) ? .secondary : .secondary)
+                            .foregroundColor(.secondary)
                             .lineLimit(2)
                     }
                 }
             }
-
-            TextField("Custom model tag", text: $selectedModel)
-                .textFieldStyle(.roundedBorder)
 
             if isLoading {
                 Text("Refreshing Ollama models...")
@@ -2136,8 +2138,12 @@ private struct OllamaModelPicker: View {
                 Text(installMessage)
                     .font(.caption)
                     .foregroundColor(installState == .failed ? .red : .secondary)
-            } else if !installedModels.isEmpty {
-                Text("Found \(installedModels.count) installed model\(installedModels.count == 1 ? "" : "s").")
+                if let installProgress {
+                    ProgressView(value: installProgress)
+                        .progressViewStyle(.linear)
+                }
+            } else if !supportedInstalledModels.isEmpty {
+                Text("Found \(supportedInstalledModels.count) supported Qwen 3.5 model\(supportedInstalledModels.count == 1 ? "" : "s").")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -2147,6 +2153,9 @@ private struct OllamaModelPicker: View {
         }
         .onChange(of: selectedModel) { _ in
             notifySelectedModelAvailability()
+        }
+        .onChange(of: installedModels) { _ in
+            selectSupportedModelIfNeeded()
         }
     }
 
@@ -2192,6 +2201,11 @@ private struct OllamaModelPicker: View {
         return recommendedModels.first { canonicalModelTag($0.tag) == canonical }
     }
 
+    private func isAllowedDropdownModel(_ model: String) -> Bool {
+        let canonical = canonicalModelTag(model)
+        return canonical.contains("qwen3.5")
+    }
+
     private func isModelInstalled(_ model: String) -> Bool {
         let canonical = canonicalModelTag(model)
         return installedModels.contains { canonicalModelTag($0) == canonical }
@@ -2199,6 +2213,16 @@ private struct OllamaModelPicker: View {
 
     private func notifySelectedModelAvailability() {
         onSelectedModelAvailabilityChanged(isModelInstalled(selectedModel))
+    }
+
+    private func selectSupportedModelIfNeeded() {
+        guard !isAllowedDropdownModel(selectedModel) else { return }
+        let fallback = installedModels.first { canonicalModelTag($0) == "qwen3.5:4b" }
+            ?? installedModels.first { canonicalModelTag($0) == "qwen3.5:2b" }
+            ?? dropdownModels.first
+        guard let fallback else { return }
+        selectedModel = fallback
+        notifySelectedModelAvailability()
     }
 
     private func canonicalModelTag(_ model: String) -> String {
@@ -2217,17 +2241,30 @@ private struct OllamaModelPicker: View {
         failedModel = nil
         loadError = nil
         installMessage = "Downloading \(displayName(for: model)). This can take a few minutes."
+        installProgress = nil
         defer { installingModel = nil }
-        openOllamaOrDownloadPage()
 
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
-        if let failure = await Self.pullOllamaModel(model) {
+        if Self.ollamaExecutableURL() == nil {
+            openOllamaOrDownloadPage()
             installState = .failed
             failedModel = model
+            installProgress = nil
+            installMessage = "Ollama was not found. Install Ollama, open it once, then try again."
+            return
+        }
+
+        if let failure = await Self.pullOllamaModel(model, progress: { message, progress in
+            installMessage = message
+            installProgress = progress
+        }) {
+            installState = .failed
+            failedModel = model
+            installProgress = nil
             installMessage = failure
         } else {
             installState = .finished
             failedModel = nil
+            installProgress = nil
             installMessage = "\(displayName(for: model)) is ready."
             await refreshInstalledModels()
         }
@@ -2250,6 +2287,7 @@ private struct OllamaModelPicker: View {
             }
             let decoded = try JSONDecoder().decode(OllamaTagsResponse.self, from: data)
             installedModels = decoded.models.map(\.name).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+            selectSupportedModelIfNeeded()
             notifySelectedModelAvailability()
         } catch {
             loadError = "Ollama is not running. Open Ollama, then refresh."
@@ -2273,28 +2311,44 @@ private struct OllamaModelPicker: View {
         }
     }
 
-    nonisolated private static func pullOllamaModel(_ model: String) async -> String? {
+    nonisolated private static func pullOllamaModel(
+        _ model: String,
+        progress: @escaping @MainActor (String, Double?) -> Void
+    ) async -> String? {
         await Task.detached(priority: .userInitiated) {
             guard let executableURL = ollamaExecutableURL() else {
-            return "Ollama was not found. Install Ollama, open it once, then try again."
+                return "Ollama was not found. Install Ollama, open it once, then try again."
             }
 
             let process = Process()
             let pipe = Pipe()
+            let outputBuffer = PreferencesLockedOutputBuffer()
             process.executableURL = executableURL
             process.arguments = ["pull", model]
             process.standardOutput = pipe
             process.standardError = pipe
+            pipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty,
+                      let chunk = String(data: data, encoding: .utf8) else { return }
+                let snapshot = outputBuffer.appendAndRead(chunk)
+                if let update = Self.ollamaProgress(from: snapshot, model: model) {
+                    Task { @MainActor in
+                        progress(update.message, update.fraction)
+                    }
+                }
+            }
 
             do {
                 try process.run()
             } catch {
+                pipe.fileHandleForReading.readabilityHandler = nil
                 return "Could not open Ollama: \(error.localizedDescription)"
             }
 
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
-            let output = String(data: data, encoding: .utf8)?
+            pipe.fileHandleForReading.readabilityHandler = nil
+            let output = outputBuffer.read()
                 .replacingOccurrences(of: "\r", with: "\n")
                 .split(separator: "\n")
                 .map(String.init)
@@ -2303,11 +2357,42 @@ private struct OllamaModelPicker: View {
                 .joined(separator: " ")
 
             guard process.terminationStatus == 0 else {
-                let detail = output?.isEmpty == false ? " \(output!)" : ""
+                let detail = output.isEmpty ? "" : " \(output)"
                 return "Ollama could not download \(model).\(detail)"
             }
             return nil
         }.value
+    }
+
+    nonisolated private static func ollamaProgress(from output: String, model: String) -> (message: String, fraction: Double?)? {
+        let lines = output
+            .replacingOccurrences(of: "\r", with: "\n")
+            .split(separator: "\n")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard let last = lines.last else { return nil }
+
+        let display = displayName(forModelTag: model)
+        if let percentRange = last.range(of: #"\d{1,3}%"#, options: .regularExpression) {
+            let percentText = String(last[percentRange]).replacingOccurrences(of: "%", with: "")
+            let percent = min(max((Double(percentText) ?? 0) / 100, 0), 1)
+            return ("Downloading \(display)... \(Int(percent * 100))%", percent)
+        }
+
+        let lower = last.lowercased()
+        if lower.contains("pulling manifest") { return ("Preparing \(display) download...", nil) }
+        if lower.contains("verifying") { return ("Verifying \(display)...", nil) }
+        if lower.contains("writing manifest") { return ("Finishing \(display) install...", nil) }
+        if lower.contains("success") { return ("\(display) downloaded.", 1) }
+
+        return ("Downloading \(display)...", nil)
+    }
+
+    nonisolated private static func displayName(forModelTag model: String) -> String {
+        let tag = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if tag == "qwen3.5:2b" { return "Qwen 3.5 2B Lite" }
+        if tag == "qwen3.5:4b" { return "Qwen 3.5 4B" }
+        return tag
     }
 
     nonisolated private static func ollamaExecutableURL() -> URL? {
@@ -2328,6 +2413,26 @@ private struct OllamaTagsResponse: Decodable {
     }
 
     let models: [Model]
+}
+
+private final class PreferencesLockedOutputBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = ""
+
+    func appendAndRead(_ chunk: String) -> String {
+        lock.lock()
+        storage += chunk
+        let snapshot = storage
+        lock.unlock()
+        return snapshot
+    }
+
+    func read() -> String {
+        lock.lock()
+        let snapshot = storage
+        lock.unlock()
+        return snapshot
+    }
 }
 
 private struct OpenRouterModelPicker: View {
