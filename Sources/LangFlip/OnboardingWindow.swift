@@ -611,7 +611,16 @@ private struct OnboardingView: View {
             case .accessibility:
                 return "Lets LangFlip see the keys you press, so it can detect a wrong-layout word."
             case .inputMonitoring:
-                return "Lets LangFlip rewrite the word and switch your input source for you."
+                return "Lets LangFlip receive keyboard events even while you type in another app."
+            }
+        }
+
+        var instruction: LocalizedStringKey {
+            switch self {
+            case .accessibility:
+                return "Click below, find **LangFlip** in the list and toggle it on."
+            case .inputMonitoring:
+                return "Click below, press **+** if LangFlip is missing, add **/Applications/LangFlip.app**, then toggle it on."
             }
         }
 
@@ -624,10 +633,11 @@ private struct OnboardingView: View {
             case .accessibility:
                 PermissionStatus.openAccessibilityPane()
             case .inputMonitoring:
-                // The first call to IOHIDRequestAccess shows the system
-                // dialog and adds us to the Input Monitoring list, so the
-                // user has something to toggle when the pane opens.
-                PermissionStatus.requestInputMonitoring()
+                // Do not call CGRequestListenEventAccess here. On recent
+                // macOS builds it can make the privacy APIs report
+                // "granted" immediately even when LangFlip is not visible
+                // in the Input Monitoring list yet. Opening the pane and
+                // waiting for the real toggle keeps onboarding honest.
                 PermissionStatus.openInputMonitoringPane()
             }
         }
@@ -650,7 +660,7 @@ private struct OnboardingView: View {
                 .font(.callout)
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Click below, find **LangFlip** in the list and toggle it on.")
+            Text(step.instruction)
                 .font(.callout)
                 .foregroundColor(.primary)
                 .fixedSize(horizontal: false, vertical: true)
