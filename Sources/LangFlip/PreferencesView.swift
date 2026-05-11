@@ -1472,7 +1472,7 @@ private struct ModelsTab: View {
     @AppStorage("lf.screenTextCaptureHotkeyPreset") private var screenTextCaptureHotkeyPreset = GlobalShortcutPreset.commandShiftS.rawValue
     @AppStorage("lf.screenTextCaptureHotkeyCustom") private var screenTextCaptureHotkeyCustom = ""
     @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
-    @AppStorage("lf.ollamaModel") private var ollamaModel = "qwen3.5:4b"
+    @AppStorage("lf.ollamaModel") private var ollamaModel = "qwen3.5:2b"
     @AppStorage("lf.cloudProvider") private var cloudProvider = AICloudProvider.openRouter.rawValue
     @AppStorage("lf.openaiModel") private var openaiModel = "gpt-5-nano"
     @AppStorage("lf.openaiBaseURL") private var openaiBaseURL = "https://api.openai.com/v1"
@@ -1492,7 +1492,7 @@ private struct ModelsTab: View {
                         Text(mode.displayName).tag(mode.rawValue)
                     }
                 }
-                    helpText("AI is optional. Ollama with Qwen 3.5 4B is the recommended local setup for grammar fixes and screen text capture.")
+                    helpText("AI is optional. Ollama with Qwen 3.5 2B is the default local setup for fast grammar fixes and screen text capture.")
             }
 
             // Backend-specific config sits directly under Mode — that's
@@ -1643,7 +1643,7 @@ private struct ModelsTab: View {
         case .ollama:
             return "Ollama mode sends selected text only to the local Ollama app on this Mac."
         case .bundledModel:
-            return "Bundled MLX models are not part of this release. Use Ollama with Qwen 3.5 4B for local grammar fixes and screen text capture."
+            return "Bundled MLX models are not part of this release. Use Ollama with Qwen 3.5 2B for fast local grammar fixes and screen text capture."
         case .openai:
             return "Cloud mode sends only the text or image you explicitly process to the selected provider. Your API key is stored in macOS Keychain. Layout correction still runs locally."
         }
@@ -2034,16 +2034,16 @@ private struct OllamaModelPicker: View {
 
     private let recommendedModels: [RecommendedModel] = [
         RecommendedModel(
-            tag: "qwen3.5:4b",
-            menuLabel: "Qwen 3.5 4B Recommended (vision)",
-            displayName: "Qwen 3.5 4B",
-            detail: "Better proofreading stability; recommended for Macs with 12 GB+ RAM."
+            tag: "qwen3.5:2b",
+            menuLabel: "Qwen 3.5 2B Default (vision)",
+            displayName: "Qwen 3.5 2B",
+            detail: "Default fast option for short text fixes, screenshots, and lower memory use."
         ),
         RecommendedModel(
-            tag: "qwen3.5:2b",
-            menuLabel: "Qwen 3.5 2B Lite (vision)",
-            displayName: "Qwen 3.5 2B Lite",
-            detail: "Lower memory option for 8 GB Macs; useful for comparing speed and quality."
+            tag: "qwen3.5:4b",
+            menuLabel: "Qwen 3.5 4B Quality (vision)",
+            displayName: "Qwen 3.5 4B",
+            detail: "Heavier quality option for comparison on Macs with 12 GB+ RAM."
         )
     ]
 
@@ -2217,8 +2217,8 @@ private struct OllamaModelPicker: View {
 
     private func selectSupportedModelIfNeeded() {
         guard !isAllowedDropdownModel(selectedModel) else { return }
-        let fallback = installedModels.first { canonicalModelTag($0) == "qwen3.5:4b" }
-            ?? installedModels.first { canonicalModelTag($0) == "qwen3.5:2b" }
+        let fallback = installedModels.first { canonicalModelTag($0) == "qwen3.5:2b" }
+            ?? installedModels.first { canonicalModelTag($0) == "qwen3.5:4b" }
             ?? dropdownModels.first
         guard let fallback else { return }
         selectedModel = fallback
@@ -2390,7 +2390,7 @@ private struct OllamaModelPicker: View {
 
     nonisolated private static func displayName(forModelTag model: String) -> String {
         let tag = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        if tag == "qwen3.5:2b" { return "Qwen 3.5 2B Lite" }
+        if tag == "qwen3.5:2b" { return "Qwen 3.5 2B" }
         if tag == "qwen3.5:4b" { return "Qwen 3.5 4B" }
         return tag
     }

@@ -102,7 +102,7 @@ private struct SetupChecklist: View {
     @State private var screenshotPulse = false
 
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
-    private let qwenModel = "qwen3.5:4b"
+    private let qwenModel = "qwen3.5:2b"
     private let grammarSample = "World is wery gandgerous plsce to leave in!"
     private let screenshotSample = "SCAN THIS TEXT"
     private let grammarHint = "After this, just press Shift to fix the last sentence, or select any text and press Shift."
@@ -425,7 +425,7 @@ private struct SetupChecklist: View {
             return
         }
 
-        qwenState = .running("Downloading Qwen 3.5 4B. This can take a few minutes...")
+        qwenState = .running("Downloading Qwen 3.5 2B. This can take a few minutes...")
         if let failure = await Self.pullOllamaModel(qwenModel, progress: { message in
             qwenState = .running(message)
         }) {
@@ -624,7 +624,7 @@ private struct SetupChecklist: View {
 
         if let percentRange = last.range(of: #"\d{1,3}%"#, options: .regularExpression) {
             let percent = String(last[percentRange])
-            return "Downloading Qwen 3.5 4B... \(percent)"
+            return "Downloading Qwen 3.5 2B... \(percent)"
         }
 
         let lower = last.lowercased()
@@ -633,7 +633,7 @@ private struct SetupChecklist: View {
         if lower.contains("writing manifest") { return "Finishing Qwen 3.5 install..." }
         if lower.contains("success") { return "Qwen 3.5 downloaded." }
 
-        return "Downloading Qwen 3.5 4B..."
+        return "Downloading Qwen 3.5 2B..."
     }
 
     nonisolated private static func ollamaExecutableURL() -> URL? {

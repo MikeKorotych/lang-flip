@@ -903,7 +903,7 @@ final class EventTap {
                             Notifications.show(title: "Text copied", body: text.count > 60 ? "\(preview)…" : preview)
                         case .unsupported:
                             if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: assistant doesn't support OCR\n".utf8)) }
-                            Notifications.show(title: "LangFlip", body: "Copy text from screenshot needs a vision-capable model. Switch to Ollama with qwen3.5:4b in Preferences.")
+                            Notifications.show(title: "LangFlip", body: "Copy text from screenshot needs a vision-capable model. Switch to Ollama with Qwen 3.5 in Preferences.")
                         case .failed(let reason):
                             if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: failed: \(reason)\n".utf8)) }
                             Notifications.show(title: "Copy text from screenshot failed", body: reason)

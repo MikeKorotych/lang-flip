@@ -956,15 +956,15 @@ final class Settings {
         set { defaults.set(newValue.rawValue, forKey: Keys.translationTarget) }
     }
 
-    /// Ollama model tag (e.g. "qwen3.5:4b", "qwen2.5", "llama3.2").
-    /// Used only when `aiMode == .ollama`. Default `qwen3.5:4b` so
-    /// new users get one compact model that can handle both grammar
-    /// fixes and screen-text OCR. Users can switch to any pulled
-    /// Ollama model in Preferences and it picks up immediately.
+    /// Ollama model tag (e.g. "qwen3.5:2b", "qwen3.5:4b").
+    /// Used only when `aiMode == .ollama`. Default `qwen3.5:2b` so
+    /// new users get a fast, low-memory model that can handle both
+    /// grammar fixes and screen-text capture. Users can switch to the
+    /// heavier 4B quality option in Preferences.
     var ollamaModel: String {
         get {
             let raw = defaults.string(forKey: Keys.ollamaModel)?.trimmingCharacters(in: .whitespaces)
-            return (raw?.isEmpty == false) ? raw! : "qwen3.5:4b"
+            return (raw?.isEmpty == false) ? raw! : "qwen3.5:2b"
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespaces)
