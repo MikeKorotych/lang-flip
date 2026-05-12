@@ -69,6 +69,8 @@ private struct GeneralTab: View {
     @AppStorage("lf.soundEnabled") private var soundEnabled = false
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var permissions = PermissionStatus.current()
+    @State private var hasScreenRecording = PermissionStatus.hasScreenRecording()
+    @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
     @State private var learnedExceptions = GeneralTab.sortedExceptions()
     @State private var newException = ""
 
@@ -94,12 +96,29 @@ private struct GeneralTab: View {
                 permissionRow(
                     title: "Accessibility",
                     granted: permissions.accessibility,
+                    detail: nil,
                     open: PermissionStatus.openAccessibilityPane
                 )
                 permissionRow(
                     title: "Input Monitoring",
                     granted: permissions.inputMonitoring,
+                    detail: nil,
                     open: PermissionStatus.openInputMonitoringPane
+                )
+            }
+
+            Section("Optional permissions") {
+                permissionRow(
+                    title: "Screen Recording",
+                    granted: hasScreenRecording,
+                    detail: "Needed for Copy text from screenshot.",
+                    open: PermissionStatus.openScreenRecordingPane
+                )
+                permissionRow(
+                    title: "Microphone",
+                    granted: microphoneStatus == .authorized,
+                    detail: "Needed only for speech-to-text dictation. Install and configure voice features in the Voice tab.",
+                    open: openMicrophonePermission
                 )
             }
 
@@ -172,6 +191,8 @@ private struct GeneralTab: View {
         }
         .onReceive(timer) { _ in
             permissions = PermissionStatus.current()
+            hasScreenRecording = PermissionStatus.hasScreenRecording()
+            microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
             refreshLearning()
             launchAtLogin = LaunchAtLogin.isEnabled
         }
@@ -188,14 +209,35 @@ private struct GeneralTab: View {
     }
 
     @ViewBuilder
-    private func permissionRow(title: String, granted: Bool, open: @escaping () -> Void) -> some View {
-        HStack {
+    private func permissionRow(title: String, granted: Bool, detail: String?, open: @escaping () -> Void) -> some View {
+        HStack(alignment: .firstTextBaseline) {
             Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                 .foregroundColor(granted ? .green : .orange)
-            Text(title)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                if let detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             Spacer()
             Button("Open System Settings", action: open)
                 .controlSize(.small)
+        }
+    }
+
+    private func openMicrophonePermission() {
+        switch microphoneStatus {
+        case .notDetermined:
+            PermissionStatus.requestMicrophone { _ in
+                microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
+            }
+        case .authorized, .denied, .restricted:
+            PermissionStatus.openMicrophonePane()
+        @unknown default:
+            PermissionStatus.openMicrophonePane()
         }
     }
 }
