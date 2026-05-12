@@ -1028,7 +1028,7 @@ private struct HelpPopoverButton: View {
 
 private struct LanguagesTab: View {
     @AppStorage("lf.primaryLanguage") private var primary = "uk"
-    @AppStorage("lf.secondaryLanguage") private var secondary = ""
+    @AppStorage("lf.secondaryLanguage") private var secondary = "ru"
 
     var body: some View {
         Form {

@@ -1077,12 +1077,16 @@ final class Settings {
     }
 
     /// Optional second non-English language that triple-tap Shift swaps with.
-    /// nil means triple-tap is a no-op (and double-tap fires without grace
-    /// delay, since there's nothing to wait for).
+    /// Fresh installs default to the opposite Slavic language so double Shift
+    /// targets Ukrainian and triple Shift targets Russian out of the box.
+    /// If the user explicitly picks None, the stored empty string keeps
+    /// triple-tap as a no-op.
     var secondaryLanguage: Layout? {
         get {
-            guard let raw = defaults.string(forKey: Keys.secondary),
-                  !raw.isEmpty,
+            guard let raw = defaults.string(forKey: Keys.secondary) else {
+                return primaryLanguage == .uk ? .ru : .uk
+            }
+            guard !raw.isEmpty,
                   let layout = Layout(rawValue: raw),
                   layout != .en,
                   layout != primaryLanguage

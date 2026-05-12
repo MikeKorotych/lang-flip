@@ -63,7 +63,9 @@ Common shortcuts:
 - **Single Shift** - fix selected text, or the last sentence when nothing is
   selected.
 - **Double Shift** - flip selected text, or the last wrong-layout word run when
-  nothing is selected.
+  nothing is selected. By default, English-layout text flips to Ukrainian.
+- **Triple Shift** - same as Double Shift, but uses the secondary language. By
+  default, English-layout text flips to Russian.
 - **Shift+Space** - translate selected text.
 - **Shift+Command+S** - copy text from a selected screen region.
 - **Both Shift keys** - pause or resume LangFlip.
