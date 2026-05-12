@@ -499,6 +499,7 @@ final class Settings {
         static let doubleCapsFix = "lf.doubleCapsFix"
         static let soundEnabled = "lf.soundEnabled"
         static let onboardingDone = "lf.onboardingDone"
+        static let returnToOnboardingAfterScreenRecording = "lf.returnToOnboardingAfterScreenRecording"
         static let showOverlay = "lf.showOverlay"
         static let crossLayoutFix = "lf.crossLayoutFix"
         static let hotkeyPreset = "lf.hotkeyPreset"
@@ -594,6 +595,16 @@ final class Settings {
     var onboardingDone: Bool {
         get { defaults.object(forKey: Keys.onboardingDone) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.onboardingDone) }
+    }
+
+    /// Screen Recording is optional, but macOS often requires a relaunch
+    /// after the user grants it. When the onboarding screenshot test asks
+    /// for that permission, this flag brings the user back to the setup
+    /// checklist on the next launch instead of dropping them into the
+    /// menubar with no obvious next step.
+    var returnToOnboardingAfterScreenRecording: Bool {
+        get { defaults.object(forKey: Keys.returnToOnboardingAfterScreenRecording) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.returnToOnboardingAfterScreenRecording) }
     }
 
     /// Bouncy app-icon flourish at the bottom of the screen on every

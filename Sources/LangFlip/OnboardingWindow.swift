@@ -58,6 +58,7 @@ final class OnboardingWindowController: NSObject {
 
     private func markDoneAndClose(openPreferences: Bool) {
         Settings.shared.onboardingDone = true
+        Settings.shared.returnToOnboardingAfterScreenRecording = false
         window?.close()
         NSApp.setActivationPolicy(.accessory)
         let cb = onComplete
@@ -473,11 +474,13 @@ private struct SetupChecklist: View {
 
     private func startInteractiveScreenshotTextTest() {
         guard PermissionStatus.hasScreenRecording() else {
+            Settings.shared.returnToOnboardingAfterScreenRecording = true
             PermissionStatus.requestScreenRecording()
             PermissionStatus.openScreenRecordingPane()
-            ocrState = .failed("Screen Recording permission is required. Toggle LangFlip on and try again.")
+            ocrState = .failed("Screen Recording permission is required. Toggle LangFlip on. If macOS asks to restart LangFlip, reopen it and this setup screen will continue here.")
             return
         }
+        Settings.shared.returnToOnboardingAfterScreenRecording = false
 
         let pngURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("langflip-onboarding-screen-text-\(getpid())-\(Int(Date().timeIntervalSince1970)).png")

@@ -63,11 +63,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         log("Accessibility permission: \(perms.accessibility ? "GRANTED" : "MISSING")")
         log("Input Monitoring permission: \(perms.inputMonitoring ? "GRANTED" : "MISSING / NOT YET REQUESTED")")
 
-        // Show onboarding on first launch and whenever permissions are
-        // missing. The final all-granted screen now contains the quick
-        // setup checklist, so first-run users get a visible path from
-        // permissions to dictionaries / AI without hunting through menus.
-        if !perms.allGranted || !Settings.shared.onboardingDone {
+        let shouldReturnToSetup = Settings.shared.returnToOnboardingAfterScreenRecording
+
+        // Show onboarding on first launch, whenever permissions are
+        // missing, and after Screen Recording asks for a restart during
+        // the onboarding screenshot test. The final all-granted screen now
+        // contains the quick setup checklist, so first-run users get a
+        // visible path from permissions to dictionaries / AI without
+        // hunting through menus.
+        if !perms.allGranted || !Settings.shared.onboardingDone || shouldReturnToSetup {
             log("showing onboarding window — deferring tap/menubar startup until Continue")
             OnboardingWindowController.shared.show(onComplete: { [weak self] in
                 self?.startServices()
