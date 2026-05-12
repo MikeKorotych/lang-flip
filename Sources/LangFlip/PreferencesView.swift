@@ -1047,6 +1047,11 @@ private struct LanguagesTab: View {
                     if primary != "uk" { Text("Українська").tag("uk") }
                     if primary != "ru" { Text("Русский").tag("ru") }
                 }
+
+                Text("Double Shift uses the primary language for English-layout text. Triple Shift uses the secondary language. If the text is already Ukrainian or Russian, both gestures flip it back to English.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("Dictionaries") {
