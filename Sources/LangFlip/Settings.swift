@@ -810,7 +810,7 @@ final class Settings {
     }
 
     var dictationPushToTalkEnabled: Bool {
-        get { defaults.object(forKey: Keys.dictationPushToTalkEnabled) as? Bool ?? true }
+        get { defaults.object(forKey: Keys.dictationPushToTalkEnabled) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.dictationPushToTalkEnabled) }
     }
 
@@ -825,7 +825,7 @@ final class Settings {
     }
 
     var dictationHandsFreeEnabled: Bool {
-        get { defaults.object(forKey: Keys.dictationHandsFreeEnabled) as? Bool ?? true }
+        get { defaults.object(forKey: Keys.dictationHandsFreeEnabled) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.dictationHandsFreeEnabled) }
     }
 

@@ -231,9 +231,9 @@ private struct VoiceTab: View {
     @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
     @AppStorage("lf.whisperModelPath") private var whisperModelPath = ""
     @AppStorage("lf.whisperLanguage") private var whisperLanguage = "auto"
-    @AppStorage("lf.dictationPushToTalkEnabled") private var dictationPushToTalkEnabled = true
+    @AppStorage("lf.dictationPushToTalkEnabled") private var dictationPushToTalkEnabled = false
     @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
-    @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = true
+    @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = false
     @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.commandShift.rawValue
 
     @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
