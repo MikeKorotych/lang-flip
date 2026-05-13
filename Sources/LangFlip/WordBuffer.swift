@@ -5,6 +5,7 @@ import Foundation
 /// Comma and period stay inside the buffer until the next boundary because
 /// those same physical keys are letters ("б", "ю") when English text was
 /// actually intended as Ukrainian/Russian.
+/// Brackets stay inside for the same reason: "[" / "]" are physical "х" / "ї|ъ".
 final class WordBuffer {
     private(set) var current: String = ""
 
@@ -17,7 +18,7 @@ final class WordBuffer {
     private static let boundary: Set<Character> = [
         " ", "\t", "\n", "\r",
         ";", ":", "!", "?",
-        "(", ")", "[", "]", "{", "}",
+        "(", ")", "{", "}",
         "\"", "'", "`", "/", "\\", "|", "—", "–"
     ]
 
