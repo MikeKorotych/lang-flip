@@ -355,7 +355,7 @@ private struct SetupChecklist: View {
             hotkeyLine("Single Shift", "Fix selected text, or the last sentence when nothing is selected.")
             hotkeyLine("Double Shift", "Flip selected text or the last wrong-layout word run to Ukrainian.")
             hotkeyLine("Triple Shift", "Flip selected text or the last wrong-layout word run to Russian.")
-            hotkeyLine("Shift + Space", "Translate selected text.")
+            hotkeyLine("Shift + Space", "Translate selected text into the current keyboard layout language.")
             hotkeyLine("Shift + ⌘ + S", "Copy text from a selected screenshot area.")
         }
         .padding(.leading, 34)

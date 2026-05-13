@@ -1630,7 +1630,7 @@ private struct ModelsTab: View {
                         Text(layout.displayName).tag(layout.rawValue)
                     }
                 }
-                helpText("Used by the menu bar Translate action and the optional Shift+Space hotkey.")
+                helpText("Used by the menu bar Translate action. The Shift+Space hotkey translates into the language of your current keyboard layout.")
 
                 Toggle("Translate with \(translationShortcutName)", isOn: Binding(
                     get: { aiReadyForHotkeys && translationHotkeyEnabled },
@@ -1638,7 +1638,7 @@ private struct ModelsTab: View {
                 ))
                 .disabled(!aiReadyForHotkeys)
                 helpText(aiReadyForHotkeys
-                         ? "When AI is on, \(translationShortcutName) translates the current selection into the default target language."
+                         ? "When AI is on, \(translationShortcutName) translates the current selection into the language of your active keyboard layout."
                          : "Install and select a local model to enable this shortcut.")
             }
 

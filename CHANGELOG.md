@@ -19,7 +19,7 @@ in the first session.
 - Hotkey summary in onboarding:
   - Single Shift - fix selected text or the last sentence.
   - Double Shift - flip selected text or the last wrong-layout word run.
-  - Shift+Space - translate selected text.
+  - Shift+Space - translate selected text into the current keyboard layout language.
   - Shift+Command+S - copy text from a selected screenshot area.
 - Developer reset commands for testing first-run flows:
   - `make reset-onboarding`

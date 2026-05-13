@@ -892,7 +892,7 @@ final class Settings {
     }
 
     /// When true, ⇧Space (Shift+Space) translates the current text
-    /// selection into `translationTarget`. LangFlip enables this
+    /// selection into the active keyboard layout language. LangFlip enables this
     /// automatically after a local Ollama model is ready. Users can
     /// still turn it off and that choice sticks.
     var translationHotkeyEnabled: Bool {
@@ -953,10 +953,10 @@ final class Settings {
             ?? screenTextCaptureHotkeyPreset.shortcut
     }
 
-    /// Default target language for the translate-selection feature.
-    /// Used by Shift+Space and as the highlighted entry in the
-    /// menubar submenu. Defaults to English — most non-English users
-    /// most often translate INTO English for shared communication.
+    /// Default target language for menu-driven translate-selection.
+    /// Shift+Space follows the active keyboard layout instead.
+    /// Defaults to English — most non-English users most often translate
+    /// INTO English for shared communication.
     var translationTarget: Layout {
         get {
             guard let raw = defaults.string(forKey: Keys.translationTarget),

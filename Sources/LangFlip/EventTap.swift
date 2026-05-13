@@ -181,15 +181,14 @@ final class EventTap {
         }
 
         // Sprint G: translate-selection hotkey ⇧Space. Consume the event
-        // so the underlying app never sees the rogue space. Only active
-        // when AI is on and Settings.translationHotkeyEnabled allows it.
-        // For local Ollama setups the release default is on, because the
-        // action only applies to selected text and consumes the stray space.
+        // so the underlying app never sees the rogue space. The hotkey
+        // follows the user's active keyboard layout; the menu submenu still
+        // offers explicit target languages.
         if Settings.shared.translationHotkeyEnabled,
            Settings.shared.aiMode != .off,
            Settings.shared.translationShortcut.matches(keyCode: keyCode, flags: flags) {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate hotkey fired\n".utf8)) }
-            let target = Settings.shared.translationTarget
+            let target = InputSource.currentLayout() ?? Settings.shared.translationTarget
             DispatchQueue.main.async { [weak self] in
                 self?.translateSelectionWithAI(target: target)
             }
@@ -718,16 +717,17 @@ final class EventTap {
 
     // MARK: - Translate selection (Sprint G)
 
-    /// Capture the current text selection (Cmd+C round-trip), send it
-    /// to the AI for translation into `target`, paste the result back.
+    /// Capture the current text selection (Cmd+C round-trip), remove it,
+    /// send it to the AI for translation into `target`, paste the result
+    /// back.
     /// Public so the menubar's "Translate selection →" submenu can call
-    /// it with an explicit target. The hotkey path uses
-    /// `Settings.shared.translationTarget`.
+    /// it with an explicit target. The hotkey path passes the current
+    /// keyboard layout.
     ///
     /// On any failure (no selection, AI unavailable, model unsupported,
-    /// transient inference error) we restore the clipboard and bail
-    /// silently. There's no mechanical fallback for translation — it
-    /// simply requires AI.
+    /// transient inference error) we restore the original selected text if
+    /// it was already cut, then restore the clipboard. There's no mechanical
+    /// fallback for translation — it simply requires AI.
     func translateSelectionWithAI(target: Layout) {
         let pb = NSPasteboard.general
         let snapshot = PasteboardSnapshot.capture(pb)
@@ -762,35 +762,67 @@ final class EventTap {
                     return
                 }
 
-                let request = AITranslateRequest(text: text, target: target)
-                AIAssistantManager.shared.current.translateSelection(request) { [weak self] result in
+                let cutCountBefore = pb.changeCount
+                if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: posting Cmd+X before AI request\n".utf8)) }
+                self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_X))
+
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    guard let self else { return }
+                    let cutDeadline = Date().addingTimeInterval(Self.copyPollDeadline)
+                    while Date() < cutDeadline && pb.changeCount == cutCountBefore {
+                        Thread.sleep(forTimeInterval: Self.copyPollInterval)
+                    }
+                    let didCutSelection = pb.changeCount > cutCountBefore
+
                     DispatchQueue.main.async {
-                        guard let self else { return }
-                        switch result {
-                        case .translated(let translated):
-                            if self.debug {
-                                FileHandle.standardError.write(Data("lang-flip[debug]: translate \(text.count)→\(translated.count) chars\n".utf8))
-                                FileHandle.standardError.write(Data("lang-flip[debug]:   in:  '\(text.prefix(80))\(text.count > 80 ? "…" : "")'\n".utf8))
-                                FileHandle.standardError.write(Data("lang-flip[debug]:   out: '\(translated.prefix(80))\(translated.count > 80 ? "…" : "")'\n".utf8))
+                        if self.debug {
+                            FileHandle.standardError.write(Data("lang-flip[debug]: translate: cut selection=\(didCutSelection)\n".utf8))
+                        }
+
+                        let request = AITranslateRequest(text: text, target: target)
+                        AIAssistantManager.shared.current.translateSelection(request) { [weak self] result in
+                            DispatchQueue.main.async {
+                                guard let self else { return }
+                                switch result {
+                                case .translated(let translated):
+                                    if self.debug {
+                                        FileHandle.standardError.write(Data("lang-flip[debug]: translate \(text.count)→\(translated.count) chars\n".utf8))
+                                        FileHandle.standardError.write(Data("lang-flip[debug]:   in:  '\(text.prefix(80))\(text.count > 80 ? "…" : "")'\n".utf8))
+                                        FileHandle.standardError.write(Data("lang-flip[debug]:   out: '\(translated.prefix(80))\(translated.count > 80 ? "…" : "")'\n".utf8))
+                                    }
+                                    self.pasteTextThenRestoreClipboard(translated, snapshot: snapshot)
+                                    Sound.playFlip()
+                                    FlipOverlay.shared.show()
+                                case .unsupported:
+                                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: assistant unsupported\n".utf8)) }
+                                    if didCutSelection {
+                                        self.pasteTextThenRestoreClipboard(text, snapshot: snapshot)
+                                    } else {
+                                        snapshot.restore()
+                                    }
+                                case .failed(let reason):
+                                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: failed (\(reason))\n".utf8)) }
+                                    if didCutSelection {
+                                        self.pasteTextThenRestoreClipboard(text, snapshot: snapshot)
+                                    } else {
+                                        snapshot.restore()
+                                    }
+                                }
                             }
-                            pb.clearContents()
-                            pb.setString(translated, forType: .string)
-                            self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
-                            Sound.playFlip()
-                            FlipOverlay.shared.show()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
-                                snapshot.restore(to: pb)
-                            }
-                        case .unsupported:
-                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: assistant unsupported\n".utf8)) }
-                            snapshot.restore(to: pb)
-                        case .failed(let reason):
-                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: failed (\(reason))\n".utf8)) }
-                            snapshot.restore(to: pb)
                         }
                     }
                 }
             }
+        }
+    }
+
+    private func pasteTextThenRestoreClipboard(_ text: String, snapshot: PasteboardSnapshot) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
+            snapshot.restore(to: pb)
         }
     }
 

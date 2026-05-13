@@ -29,7 +29,8 @@ Supports **English, Ukrainian, and Russian** out of the box.
 - ⚡ **Fixes the last sentence without selecting text.** Tap Shift at the end of
   a sentence and LangFlip can clean up just that sentence.
 - 🌍 **Translates selected text.** Translate into English, Ukrainian, or Russian
-  from the menu or with the optional Shift+Space hotkey.
+  from the menu, or press Shift+Space to translate into your current keyboard
+  layout language.
 - 📸 **Captures text from the screen.** Press Shift+Command+S, select a screen
   region, and LangFlip copies recognized text to the clipboard.
 - ↩️ **Learns from Backspace.** If LangFlip flips something you did not want, press
@@ -66,7 +67,7 @@ Common shortcuts:
   nothing is selected. By default, English-layout text flips to Ukrainian.
 - **Triple Shift** - same as Double Shift, but uses the secondary language. By
   default, English-layout text flips to Russian.
-- **Shift+Space** - translate selected text.
+- **Shift+Space** - translate selected text into the current keyboard layout language.
 - **Shift+Command+S** - copy text from a selected screen region.
 - **Both Shift keys** - pause or resume LangFlip.
 
