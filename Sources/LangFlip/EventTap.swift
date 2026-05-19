@@ -297,22 +297,14 @@ final class EventTap {
     private func applyCrossLayoutFix(original: String, fix: CrossLayoutFix.Correction) {
         let eraseCount = original.count + 1
         postBackspaces(eraseCount)
-        InputSource.switchTo(fix.target)
         postUnicode(fix.corrected + " ")
-        Sound.playFlip()
-        FlipOverlay.shared.show()
 
         // Treat as a layout flip from the user's perspective: capture the
         // pre-fix layout (best effort — we use the *opposite* of the
         // target since the wrong-letter side of the pair effectively
         // implies that layout was active).
         let source: Layout = (fix.target == .uk) ? .ru : .uk
-        BackspaceLearner.shared.recordFlip(
-            original: original,
-            converted: fix.corrected,
-            source: source,
-            target: fix.target
-        )
+        finishRewriteAfterEventBurst(source: source, target: fix.target, original: original, converted: fix.corrected)
     }
 
     /// Physically undo an auto-flip the user just rejected. We're called from
@@ -1010,14 +1002,13 @@ final class EventTap {
     /// Erase + retype + record. Shared between the immediate-apply path
     /// (AI off) and the AI-confirmed-apply path.
     ///
-    /// We deliberately issue the InputSource switch AFTER the unicode
-    /// paste. The earlier order (switch between backspaces and
-    /// postUnicode) sporadically caused the very first auto-flip after
-    /// launch to lose its backspaces — switching mid-burst lets the
-    /// IME re-initialize, and the queued Delete events can vanish in
-    /// the transition. postUnicode uses keyboardSetUnicodeString and
-    /// bypasses the active layout anyway, so the switch is purely so
-    /// the user's NEXT keystroke types in the right script.
+    /// We deliberately defer the InputSource switch until after the
+    /// unicode paste has had a moment to land. `CGEvent.post` is async:
+    /// switching the input source immediately after posting the burst can
+    /// still reinitialize the IME before the target app processes the
+    /// queued Delete / Unicode events. postUnicode uses
+    /// keyboardSetUnicodeString and bypasses the active layout, so the
+    /// switch is only for the user's NEXT keystroke.
     private func applyAutoFlip(
         original: String,
         converted: String,
@@ -1028,18 +1019,23 @@ final class EventTap {
         let eraseCount = original.count + 1
         postBackspaces(eraseCount)
         postUnicode(converted + " ")
-        InputSource.switchTo(target)
-        Sound.playFlip()
-        FlipOverlay.shared.show()
+        finishRewriteAfterEventBurst(source: source, target: target, original: original, converted: converted)
+    }
 
+    private func finishRewriteAfterEventBurst(source: Layout, target: Layout, original: String, converted: String) {
         // Open the disagreement-watch window so the user can backspace this
         // away and have us learn from it.
-        BackspaceLearner.shared.recordFlip(
-            original: original,
-            converted: converted,
-            source: source,
-            target: target
-        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+            InputSource.switchTo(target)
+            Sound.playFlip()
+            FlipOverlay.shared.show()
+            BackspaceLearner.shared.recordFlip(
+                original: original,
+                converted: converted,
+                source: source,
+                target: target
+            )
+        }
     }
 
     // MARK: - Single-Shift grammar fix (Sprint C)
@@ -1627,13 +1623,10 @@ final class EventTap {
     /// based editors — they drop the back half of a fast burst, so the
     /// flip ends up rewriting only the tail of a long word.
     ///
-    /// We pick the inter-event gap based on the focused app: native
-    /// macOS targets handle bursts fine with 200 µs, Electron-based
-    /// editors need a more generous 500 µs to keep up reliably. The
-    /// table is intentionally conservative — when in doubt we fall to
-    /// the slower default. This whole helper runs synchronously on
-    /// the event-tap thread, so every microsecond shaved here is a
-    /// microsecond user keystrokes don't queue up in the kernel.
+    /// We pick the inter-event gap from a small allowlist: most apps get
+    /// the conservative 500 µs path, and only known-safe native apps get
+    /// 200 µs. This helper runs synchronously on the event-tap thread, so
+    /// the faster path is useful, but reliability wins everywhere else.
     private func postBackspaces(_ count: Int) {
         guard count > 0 else { return }
         let gap = perAppEventGap()

@@ -72,7 +72,10 @@ private struct GeneralTab: View {
     @State private var hasScreenRecording = PermissionStatus.hasScreenRecording()
     @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
     @State private var learnedExceptions = GeneralTab.sortedExceptions()
+    @State private var alwaysFlipRules = GeneralTab.sortedAlwaysFlipRules()
     @State private var newException = ""
+    @State private var newAlwaysFlipWord = ""
+    @State private var newAlwaysFlipTarget = Layout.uk.rawValue
 
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
@@ -133,6 +136,73 @@ private struct GeneralTab: View {
             }
 
             Section("Learning") {
+                HStack {
+                    Text("Always flip")
+                    Spacer()
+                    Text("\(alwaysFlipRules.count)").foregroundColor(.secondary)
+                    Button("Clear") {
+                        AlwaysFlipRules.shared.clear()
+                        refreshLearning()
+                    }
+                    .disabled(alwaysFlipRules.isEmpty)
+                }
+
+                HStack {
+                    TextField("Word to always flip", text: $newAlwaysFlipWord)
+                        .textFieldStyle(.roundedBorder)
+                    Picker("Target", selection: $newAlwaysFlipTarget) {
+                        ForEach(Layout.allCases, id: \.self) { layout in
+                            Text(layout.displayName).tag(layout.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 150)
+                    Button("Add") {
+                        if let target = Layout(rawValue: newAlwaysFlipTarget) {
+                            AlwaysFlipRules.shared.add(word: newAlwaysFlipWord, target: target)
+                            newAlwaysFlipWord = ""
+                            refreshLearning()
+                        }
+                    }
+                    .disabled(newAlwaysFlipWord.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .controlSize(.small)
+
+                if alwaysFlipRules.isEmpty {
+                    Text("Add words you always want LangFlip to rewrite to a specific layout, even before the full dictionaries finish loading.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    VStack(spacing: 6) {
+                        ForEach(alwaysFlipRules) { rule in
+                            HStack {
+                                Text(rule.word)
+                                    .font(.system(.body, design: .monospaced))
+                                    .lineLimit(1)
+                                Image(systemName: "arrow.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text(rule.target.displayName)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Button {
+                                    AlwaysFlipRules.shared.remove(rule)
+                                    refreshLearning()
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundColor(.secondary)
+                                .help("Remove \(rule.word) always-flip rule")
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+
+                Divider()
+
                 HStack {
                     Text("Remembered exceptions")
                     Spacer()
@@ -200,11 +270,21 @@ private struct GeneralTab: View {
 
     private func refreshLearning() {
         learnedExceptions = Self.sortedExceptions()
+        alwaysFlipRules = Self.sortedAlwaysFlipRules()
     }
 
     private static func sortedExceptions() -> [String] {
         BackspaceLearner.shared.exceptions.sorted {
             $0.localizedStandardCompare($1) == .orderedAscending
+        }
+    }
+
+    private static func sortedAlwaysFlipRules() -> [AlwaysFlipRules.Rule] {
+        AlwaysFlipRules.shared.rules.sorted { lhs, rhs in
+            if lhs.word == rhs.word {
+                return lhs.target.displayName.localizedStandardCompare(rhs.target.displayName) == .orderedAscending
+            }
+            return lhs.word.localizedStandardCompare(rhs.word) == .orderedAscending
         }
     }
 

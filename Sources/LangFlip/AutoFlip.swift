@@ -140,14 +140,6 @@ final class AutoFlip {
 
     /// Returns target layout if we should auto-flip; nil otherwise.
     func suggestedFlip(for word: String, currentLayout: Layout) -> Layout? {
-        // Refuse before the background dictionary load has finished.
-        // The EmbeddedDicts seed is too small to drive scoring — words
-        // like "hello"/"world" would score 1 (heuristic-only) instead
-        // of 2 (in dict), defeating the score-gap requirement and
-        // producing the "auto-flip sometimes silently doesn't work
-        // right after launch" bug.
-        guard isReady else { return nil }
-
         // Compute the lowercased form once. Earlier code rebuilt it
         // inside isForcedKeep, forcedFlip, looksLikePassword, and the
         // body below — that's a 4× Unicode walk per word boundary on
@@ -159,11 +151,24 @@ final class AutoFlip {
         // Hand-picked false positives that are common real words in the
         // source layout, even when the converted form also looks valid.
         if isForcedKeep(lower: lower, currentLayout: currentLayout) { return nil }
+        // User-managed and built-in forced rules are deterministic and do
+        // not depend on dictionary coverage, so they can run even while the
+        // heavy background dictionary load is still warming up.
+        if let target = AlwaysFlipRules.shared.target(for: lower, currentLayout: currentLayout) {
+            return target
+        }
         // Hand-picked short phrases where dictionary scoring is too
         // conservative but the intent is clear in day-to-day typing.
         if let forced = forcedFlip(lower: lower, currentLayout: currentLayout) {
             return forced
         }
+        // Refuse dictionary-scored auto-flips before the background load has
+        // finished. The EmbeddedDicts seed is too small to drive scoring —
+        // words like "hello"/"world" would score 1 (heuristic-only) instead
+        // of 2 (in dict), defeating the score-gap requirement and producing
+        // the "auto-flip sometimes silently doesn't work right after launch"
+        // bug.
+        guard isReady else { return nil }
         // Skip very short tokens — high false-positive rate ("я", "is", "и").
         guard word.count >= 3 else { return nil }
         // Skip anything with digits or non-letter cruft.
