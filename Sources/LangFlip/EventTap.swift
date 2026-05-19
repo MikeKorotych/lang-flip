@@ -1219,10 +1219,11 @@ final class EventTap {
 
     private func selectPreviousCharacters(_ count: Int) {
         guard count > 0 else { return }
+        let gap = perAppEventGap()
         for i in 0..<count {
             postKey(virtualKey: CGKeyCode(kVK_LeftArrow), flags: .maskShift)
-            if i + 1 < count {
-                Thread.sleep(forTimeInterval: 0.0005)
+            if i + 1 < count, gap > 0 {
+                Thread.sleep(forTimeInterval: gap)
             }
         }
     }
@@ -1611,16 +1612,49 @@ final class EventTap {
     /// based editors — they drop the back half of a fast burst, so the
     /// flip ends up rewriting only the tail of a long word.
     ///
-    /// Adding a sub-millisecond gap between events fixes it across every
-    /// app we've tested while staying invisible to the user (a 12-letter
-    /// word costs ~6 ms total).
+    /// We pick the inter-event gap based on the focused app: native
+    /// macOS targets handle bursts fine with 200 µs, Electron-based
+    /// editors need a more generous 500 µs to keep up reliably. The
+    /// table is intentionally conservative — when in doubt we fall to
+    /// the slower default. This whole helper runs synchronously on
+    /// the event-tap thread, so every microsecond shaved here is a
+    /// microsecond user keystrokes don't queue up in the kernel.
     private func postBackspaces(_ count: Int) {
+        guard count > 0 else { return }
+        let gap = perAppEventGap()
         for i in 0..<count {
             postKey(virtualKey: CGKeyCode(kVK_Delete))
-            if i + 1 < count {
-                Thread.sleep(forTimeInterval: 0.0005)
+            if i + 1 < count, gap > 0 {
+                Thread.sleep(forTimeInterval: gap)
             }
         }
+    }
+
+    /// Apps known to drop fast bursts of synthetic key events.
+    /// Bundle IDs are matched as substrings against the focused app
+    /// so e.g. `com.tinyspeck.slackmacgap` matches via "slack".
+    private static let slowEventBundlesSubstring: [String] = [
+        "slack",
+        "notion",
+        "electron",
+        "discord",
+        "obsidian",
+        "vscode",
+        "code",         // VS Code's main bundle is com.microsoft.VSCode
+    ]
+
+    /// Sleep between consecutive synthetic events. 200 µs for fast
+    /// native apps, 500 µs for Electron-class apps that need more
+    /// headroom. Falls back to the faster default when we can't
+    /// identify the frontmost app.
+    private func perAppEventGap() -> TimeInterval {
+        guard let bundleID = AppContext.frontmostBundleID()?.lowercased() else {
+            return 0.0002
+        }
+        for needle in Self.slowEventBundlesSubstring where bundleID.contains(needle) {
+            return 0.0005
+        }
+        return 0.0002
     }
 
     private func postKey(virtualKey: CGKeyCode, flags: CGEventFlags) {
