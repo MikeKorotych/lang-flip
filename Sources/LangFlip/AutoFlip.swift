@@ -80,14 +80,20 @@ final class AutoFlip {
 
     /// Returns target layout if we should auto-flip; nil otherwise.
     func suggestedFlip(for word: String, currentLayout: Layout) -> Layout? {
+        // Compute the lowercased form once. Earlier code rebuilt it
+        // inside isForcedKeep, forcedFlip, looksLikePassword, and the
+        // body below — that's a 4× Unicode walk per word boundary on
+        // the hot path. Helpers below now take `lower` as a parameter.
+        let lower = word.lowercased()
+
         // Words the user previously rejected via Backspace — never auto-flip.
         if BackspaceLearner.shared.isExcluded(word) { return nil }
         // Hand-picked false positives that are common real words in the
         // source layout, even when the converted form also looks valid.
-        if isForcedKeep(word, currentLayout: currentLayout) { return nil }
+        if isForcedKeep(lower: lower, currentLayout: currentLayout) { return nil }
         // Hand-picked short phrases where dictionary scoring is too
         // conservative but the intent is clear in day-to-day typing.
-        if let forced = forcedFlip(for: word, currentLayout: currentLayout) {
+        if let forced = forcedFlip(lower: lower, currentLayout: currentLayout) {
             return forced
         }
         // Skip very short tokens — high false-positive rate ("я", "is", "и").
@@ -96,9 +102,8 @@ final class AutoFlip {
         if word.contains(where: { $0.isNumber }) { return nil }
         // High-entropy strings (passwords, tokens, hashes) — keep them as-is
         // even if a layout flip would produce dictionary chars.
-        if looksLikePassword(word) { return nil }
+        if looksLikePassword(word, lower: lower) { return nil }
 
-        let lower = word.lowercased()
         let originalScore = score(lower, in: currentLayout)
 
         var bestLayout: Layout?
@@ -136,8 +141,7 @@ final class AutoFlip {
         return layout
     }
 
-    private func forcedFlip(for word: String, currentLayout: Layout) -> Layout? {
-        let lower = word.lowercased()
+    private func forcedFlip(lower: String, currentLayout: Layout) -> Layout? {
         switch (currentLayout, lower) {
         case (.uk, "бі"), (.uk, "ті"), (.uk, "єто"):
             return .ru
@@ -146,8 +150,7 @@ final class AutoFlip {
         }
     }
 
-    private func isForcedKeep(_ word: String, currentLayout: Layout) -> Bool {
-        let lower = word.lowercased()
+    private func isForcedKeep(lower: String, currentLayout: Layout) -> Bool {
         switch (currentLayout, lower) {
         case (.uk, "тексті"), (.uk, "еще"),
              (.ru, "доступы"):
@@ -238,7 +241,7 @@ final class AutoFlip {
     ///
     /// Words containing digits are already short-circuited by the
     /// caller, so digits don't appear in this function.
-    private func looksLikePassword(_ word: String) -> Bool {
+    private func looksLikePassword(_ word: String, lower: String) -> Bool {
         guard word.count >= 6 else { return false }
 
         let strongSpecials: Set<Character> = ["!", "@", "#", "$", "%", "^", "&", "*",
@@ -254,7 +257,7 @@ final class AutoFlip {
         let vowels: Set<Character> = ["a", "e", "i", "o", "u", "y",
                                       "а", "е", "и", "і", "ї", "о", "у", "ю", "я",
                                       "ы", "э", "ё", "є"]
-        let hasVowel = word.lowercased().contains { vowels.contains($0) }
+        let hasVowel = lower.contains { vowels.contains($0) }
 
         if word.count > 10 && isMixedCase && !hasVowel { return true }
 

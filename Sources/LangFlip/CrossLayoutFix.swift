@@ -107,11 +107,15 @@ enum CrossLayoutFix {
         // otherwise-Russian sentence ("Это новій iPhone") while leaving
         // it alone inside an otherwise-Ukrainian sentence ("у новій
         // книзі").
+        // Lowercase the candidate exactly once per direction — earlier
+        // code re-walked the Unicode string twice (alphabet check +
+        // dictionary check), which is wasted work on every word
+        // boundary. Hot path optimization, no behaviour change.
         if hasRuExclusive {
             guard let candidate = substitute(word, mode: .ruToUk) else { return nil }
-            guard candidate.lowercased().allSatisfy({ ukAlphabet.contains($0) }) else { return nil }
             guard candidate != word else { return nil }
             let candidateLower = candidate.lowercased()
+            guard candidateLower.allSatisfy({ ukAlphabet.contains($0) }) else { return nil }
             guard autoFlip.isKnownInUk(candidateLower) else { return nil }
 
             let originalIsRussian = autoFlip.isKnownInRu(lower)
@@ -125,9 +129,9 @@ enum CrossLayoutFix {
             }
         } else {
             guard let candidate = substitute(word, mode: .ukToRu) else { return nil }
-            guard candidate.lowercased().allSatisfy({ ruAlphabet.contains($0) }) else { return nil }
             guard candidate != word else { return nil }
             let candidateLower = candidate.lowercased()
+            guard candidateLower.allSatisfy({ ruAlphabet.contains($0) }) else { return nil }
             guard autoFlip.isKnownInRu(candidateLower) else { return nil }
 
             let originalIsUkrainian = autoFlip.isKnownInUk(lower)
