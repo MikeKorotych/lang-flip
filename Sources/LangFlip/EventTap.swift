@@ -1025,16 +1025,20 @@ final class EventTap {
     private func finishRewriteAfterEventBurst(source: Layout, target: Layout, original: String, converted: String) {
         // Open the disagreement-watch window so the user can backspace this
         // away and have us learn from it.
+        Sound.playFlip()
+        FlipOverlay.shared.show()
+        BackspaceLearner.shared.recordFlip(
+            original: original,
+            converted: converted,
+            source: source,
+            target: target
+        )
+
+        // Keep only the input-source switch delayed. Switching layout is the
+        // part that can reinitialize the IME before the target app consumes
+        // the synthetic Delete / Unicode burst; feedback can happen right away.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
             InputSource.switchTo(target)
-            Sound.playFlip()
-            FlipOverlay.shared.show()
-            BackspaceLearner.shared.recordFlip(
-                original: original,
-                converted: converted,
-                source: source,
-                target: target
-            )
         }
     }
 
