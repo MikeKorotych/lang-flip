@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.6 - Patch Release
+
+This patch release tightens the new-user flow and fixes a few high-impact
+typing and translation edge cases found during daily use.
+
+### Improved
+
+- Shift+Space now translates selected text into the language of the active
+  keyboard layout.
+- Triple Shift defaults to Russian as the secondary language, while Double
+  Shift keeps Ukrainian as the primary default.
+- General settings now show optional Screen Recording and Microphone
+  permissions with short explanations.
+- Onboarding returns to the setup checklist after the macOS Screen Recording
+  permission flow requires a restart.
+
+### Fixed
+
+- Prevented Shift+Space translations from appending translated text after the
+  original selection.
+- Disabled speech-to-text hotkeys by default so voice features stay opt-in.
+- Kept bracket keys inside auto-flip words, fixing cases like `[jxe` → `хочу`.
+- Clarified layout-target explanations in README, onboarding, and preferences.
+
 ## 0.2.5 - Release Candidate
 
 This release focuses on making LangFlip easier to install, understand, and use
