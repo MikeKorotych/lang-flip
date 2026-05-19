@@ -1026,6 +1026,7 @@ final class EventTap {
         // Open the disagreement-watch window so the user can backspace this
         // away and have us learn from it.
         Sound.playFlip()
+        FlipOverlay.shared.show()
         BackspaceLearner.shared.recordFlip(
             original: original,
             converted: converted,
@@ -1033,13 +1034,10 @@ final class EventTap {
             target: target
         )
 
-        // Delay the visual overlay and input-source switch until the target
-        // app has had a moment to consume the synthetic Delete / Unicode
-        // burst. Showing the overlay immediately can still race the very first
-        // flip after launch because macOS lazily creates the panel/SwiftUI
-        // view on first use.
+        // Keep only the input-source switch delayed. Switching layout is the
+        // part that can reinitialize the IME before the target app consumes
+        // the synthetic Delete / Unicode burst; feedback can happen right away.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
-            FlipOverlay.shared.show()
             InputSource.switchTo(target)
         }
     }
