@@ -1009,16 +1009,26 @@ final class EventTap {
 
     /// Erase + retype + record. Shared between the immediate-apply path
     /// (AI off) and the AI-confirmed-apply path.
+    ///
+    /// We deliberately issue the InputSource switch AFTER the unicode
+    /// paste. The earlier order (switch between backspaces and
+    /// postUnicode) sporadically caused the very first auto-flip after
+    /// launch to lose its backspaces — switching mid-burst lets the
+    /// IME re-initialize, and the queued Delete events can vanish in
+    /// the transition. postUnicode uses keyboardSetUnicodeString and
+    /// bypasses the active layout anyway, so the switch is purely so
+    /// the user's NEXT keystroke types in the right script.
     private func applyAutoFlip(
         original: String,
         converted: String,
         source: Layout,
         target: Layout
     ) {
+        AppLog.write("auto-flip apply original='\(original)' converted='\(converted)' \(source)→\(target)")
         let eraseCount = original.count + 1
         postBackspaces(eraseCount)
-        InputSource.switchTo(target)
         postUnicode(converted + " ")
+        InputSource.switchTo(target)
         Sound.playFlip()
         FlipOverlay.shared.show()
 
@@ -1535,8 +1545,14 @@ final class EventTap {
             return false
         }
 
+        let ns = context.value as NSString
+        let rangeNS = NSRange(location: replacement.range.location, length: replacement.range.length)
+        let original = ns.substring(with: rangeNS)
+        let bundleID = AppContext.frontmostBundleID() ?? "?"
+        AppLog.write("double-shift focus path: bundle=\(bundleID) cursor=\(context.selectedRange.location) range=(\(rangeNS.location),\(rangeNS.length)) original='\(original)' replacement='\(replacement.text)'")
+
         let snapshot = PasteboardSnapshot.capture()
-        if let source = detectLayout((context.value as NSString).substring(with: NSRange(location: replacement.range.location, length: replacement.range.length))) {
+        if let source = detectLayout(original) {
             InputSource.switchTo(resolveTarget(source: source, configured: targetNonEnglish))
         }
         pasteFocusedReplacement(replacement.text, range: replacement.range, context: context, snapshot: snapshot)
