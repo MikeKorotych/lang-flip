@@ -10,18 +10,37 @@ import Foundation
 final class AutoFlip {
     static let shared = AutoFlip()
 
+    /// All three sets are guarded by `lock`. Readers take a copy of
+    /// the three Set references under the lock, then perform the
+    /// `.contains` lookup outside it — Swift Sets are COW so the copy
+    /// is just a ref bump, and a concurrent writer replacing the
+    /// property doesn't affect a reader that already grabbed a ref to
+    /// the old storage.
     private var enWords: Set<String> = []
     private var ukCommon: Set<String> = []
     private var ruCommon: Set<String> = []
+    private let lock = NSLock()
 
     private init() {
-        reloadDictionaries()
+        // Seed UK / RU synchronously from the tiny embedded fallback
+        // (a few hundred high-frequency words) so the very first
+        // keystrokes after launch have something to check against
+        // before the background load completes. EN starts empty because
+        // EmbeddedDicts only carries UK / RU.
+        ukCommon = Set(EmbeddedDicts.ukrainian.map { $0.lowercased() })
+        ruCommon = Set(EmbeddedDicts.russian.map { $0.lowercased() })
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.reloadDictionaries()
+        }
         _ = NotificationCenter.default.addObserver(
             forName: .langFlipDictionariesChanged,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.reloadDictionaries()
+            DispatchQueue.global(qos: .userInitiated).async {
+                self?.reloadDictionaries()
+            }
         }
     }
 
@@ -30,25 +49,49 @@ final class AutoFlip {
         // If absent (chrooted env, customized macOS, etc.), auto-flip can still
         // work but loses its strongest "is this a real English word?" signal.
         let dictPath = "/usr/share/dict/words"
+        var newEn: Set<String> = []
         if let raw = try? String(contentsOfFile: dictPath, encoding: .utf8) {
-            enWords = Set(raw.split(separator: "\n").map { $0.lowercased() })
+            newEn = Set(raw.split(separator: "\n").map { $0.lowercased() })
         } else {
             FileHandle.standardError.write(Data(
                 "lang-flip: could not read \(dictPath); auto-flip will rely on heuristics for English.\n".utf8
             ))
-            enWords = []
         }
-        enWords.formUnion(DictionaryManager.installedWords(for: .en))
+        newEn.formUnion(DictionaryManager.installedWords(for: .en))
 
         // UK / RU lists shipped as bundled resources (built by
         // Scripts/build-dicts.sh). If a file is missing — e.g. running from
         // outside the .app or from a fresh checkout where the script hasn't
         // been run — fall back to the much smaller embedded list so the
         // negative signal still works for the most common words.
-        ukCommon = Self.loadResource(name: "uk-words", fallback: EmbeddedDicts.ukrainian)
-        ruCommon = Self.loadResource(name: "ru-words", fallback: EmbeddedDicts.russian)
-        ukCommon.formUnion(DictionaryManager.installedWords(for: .uk))
-        ruCommon.formUnion(DictionaryManager.installedWords(for: .ru))
+        var newUk = Self.loadResource(name: "uk-words", fallback: EmbeddedDicts.ukrainian)
+        var newRu = Self.loadResource(name: "ru-words", fallback: EmbeddedDicts.russian)
+        newUk.formUnion(DictionaryManager.installedWords(for: .uk))
+        newRu.formUnion(DictionaryManager.installedWords(for: .ru))
+
+        // Atomically swap. Readers will see either old or new sets,
+        // never a partially-populated state.
+        lock.lock()
+        enWords = newEn
+        ukCommon = newUk
+        ruCommon = newRu
+        lock.unlock()
+
+        // Refresh any UI that was showing word counts (Preferences >
+        // Languages dictionary status).
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .langFlipDictionariesReloaded, object: nil)
+        }
+    }
+
+    /// Snapshot the three sets under the lock and return references.
+    /// COW means the cost is just a ref-count bump per Set. Callers
+    /// perform `.contains` on the local copies — no further locking
+    /// needed, even if a concurrent reload swaps in new sets.
+    private func dictSnapshot() -> (Set<String>, Set<String>, Set<String>) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (enWords, ukCommon, ruCommon)
     }
 
     private static func loadResource(name: String, fallback: [String]) -> Set<String> {
@@ -164,9 +207,10 @@ final class AutoFlip {
     /// DoubleCapsFix to confirm a sticky-shift correction would land on a
     /// real word rather than mangling an intentional acronym like "OAuth".
     func isKnownWord(_ lowercased: String) -> Bool {
-        return enWords.contains(lowercased)
-            || ukCommon.contains(lowercased)
-            || ruCommon.contains(lowercased)
+        let (en, uk, ru) = dictSnapshot()
+        return en.contains(lowercased)
+            || uk.contains(lowercased)
+            || ru.contains(lowercased)
     }
 
     /// Per-language lookups, used by CrossLayoutFix to disambiguate
@@ -174,22 +218,29 @@ final class AutoFlip {
     /// substitution ("новый") is real Russian. The bare isKnownWord
     /// can't tell them apart.
     func isKnownInUk(_ lowercased: String) -> Bool {
-        return ukCommon.contains(lowercased)
+        lock.lock()
+        let set = ukCommon
+        lock.unlock()
+        return set.contains(lowercased)
     }
 
     func isKnownInRu(_ lowercased: String) -> Bool {
-        return ruCommon.contains(lowercased)
+        lock.lock()
+        let set = ruCommon
+        lock.unlock()
+        return set.contains(lowercased)
     }
 
     /// 2 = in dictionary, 1 = plausibly word-shaped, 0 = noise.
     private func score(_ word: String, in layout: Layout) -> Int {
+        let (en, uk, ru) = dictSnapshot()
         switch layout {
         case .en:
-            return enWords.contains(word) ? 2 : (looksLikeEnglish(word) ? 1 : 0)
+            return en.contains(word) ? 2 : (looksLikeEnglish(word) ? 1 : 0)
         case .uk:
-            return ukCommon.contains(word) ? 2 : (looksLikeCyrillic(word, allowed: ukAlphabet) ? 1 : 0)
+            return uk.contains(word) ? 2 : (looksLikeCyrillic(word, allowed: ukAlphabet) ? 1 : 0)
         case .ru:
-            return ruCommon.contains(word) ? 2 : (looksLikeCyrillic(word, allowed: ruAlphabet) ? 1 : 0)
+            return ru.contains(word) ? 2 : (looksLikeCyrillic(word, allowed: ruAlphabet) ? 1 : 0)
         }
     }
 

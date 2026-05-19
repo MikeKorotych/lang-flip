@@ -11,6 +11,12 @@ extension Notification.Name {
     /// requiring an app restart.
     static let langFlipDictionariesChanged = Notification.Name("LangFlipDictionariesChanged")
 
+    /// Posted by AutoFlip after the background dictionary load finishes
+    /// (initial startup and every subsequent reload). UI surfaces that
+    /// display word counts (Preferences > Languages) listen for this to
+    /// refresh without polling.
+    static let langFlipDictionariesReloaded = Notification.Name("LangFlipDictionariesReloaded")
+
     /// Posted when the voice recorder starts, stops, or fails so
     /// Preferences can refresh without polling tight loops.
     static let langFlipVoiceRecorderChanged = Notification.Name("LangFlipVoiceRecorderChanged")
