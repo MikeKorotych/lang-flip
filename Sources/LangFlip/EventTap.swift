@@ -1026,7 +1026,6 @@ final class EventTap {
         // Open the disagreement-watch window so the user can backspace this
         // away and have us learn from it.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
-            InputSource.switchTo(target)
             Sound.playFlip()
             FlipOverlay.shared.show()
             BackspaceLearner.shared.recordFlip(
@@ -1035,6 +1034,12 @@ final class EventTap {
                 source: source,
                 target: target
             )
+        }
+        // TISSelectInputSource can be slow on the first switch after launch.
+        // Keep it out of the feedback block so the user hears/sees the flip
+        // promptly, while still avoiding the original mid-rewrite IME race.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
+            InputSource.switchTo(target)
         }
     }
 
