@@ -38,7 +38,9 @@ final class EventTap {
     /// How long the polling loop waits for the focused app to update the
     /// pasteboard after we synthesize Cmd+C.
     private static let copyPollDeadline: TimeInterval = 0.25
-    private static let copyPollInterval: TimeInterval = 0.015
+    // Pasteboard poll cadence is now driven by pasteboardBackoffSchedule
+    // in pollPasteboardChange — the fixed copyPollInterval constant is
+    // gone. Keep copyPollDeadline as the hard cap.
 
     /// How long to wait after synthesizing Cmd+V before restoring the user's
     /// original clipboard. Some slow apps (Pages, MS Word) read the
@@ -650,9 +652,7 @@ final class EventTap {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
-            while Date() < deadline && pb.changeCount == countBefore {
-                Thread.sleep(forTimeInterval: Self.copyPollInterval)
-            }
+            self.pollPasteboardChange(pb, before: countBefore, deadline: deadline)
             let pollDuration = Date().timeIntervalSince(deadline.addingTimeInterval(-Self.copyPollDeadline))
 
             DispatchQueue.main.async {
@@ -744,9 +744,7 @@ final class EventTap {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
-            while Date() < deadline && pb.changeCount == countBefore {
-                Thread.sleep(forTimeInterval: Self.copyPollInterval)
-            }
+            self.pollPasteboardChange(pb, before: countBefore, deadline: deadline)
 
             DispatchQueue.main.async {
                 guard pb.changeCount > countBefore else {
@@ -769,9 +767,7 @@ final class EventTap {
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     guard let self else { return }
                     let cutDeadline = Date().addingTimeInterval(Self.copyPollDeadline)
-                    while Date() < cutDeadline && pb.changeCount == cutCountBefore {
-                        Thread.sleep(forTimeInterval: Self.copyPollInterval)
-                    }
+                    self.pollPasteboardChange(pb, before: cutCountBefore, deadline: cutDeadline)
                     let didCutSelection = pb.changeCount > cutCountBefore
 
                     DispatchQueue.main.async {
@@ -841,9 +837,7 @@ final class EventTap {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
-            while Date() < deadline && NSPasteboard.general.changeCount == countBefore {
-                Thread.sleep(forTimeInterval: Self.copyPollInterval)
-            }
+            self.pollPasteboardChange(NSPasteboard.general, before: countBefore, deadline: deadline)
 
             DispatchQueue.main.async {
                 let pb = NSPasteboard.general
@@ -1068,9 +1062,7 @@ final class EventTap {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
-            while Date() < deadline && pb.changeCount == countBefore {
-                Thread.sleep(forTimeInterval: Self.copyPollInterval)
-            }
+            self.pollPasteboardChange(pb, before: countBefore, deadline: deadline)
 
             DispatchQueue.main.async {
                 if pb.changeCount > countBefore,
@@ -1203,11 +1195,13 @@ final class EventTap {
             }
             self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_C))
 
-            DispatchQueue.global(qos: .userInitiated).async {
-                let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
-                while Date() < deadline && pb.changeCount == countBefore {
-                    Thread.sleep(forTimeInterval: Self.copyPollInterval)
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self else {
+                    completion(nil)
+                    return
                 }
+                let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
+                self.pollPasteboardChange(pb, before: countBefore, deadline: deadline)
                 let text = pb.changeCount > countBefore ? pb.string(forType: .string) : nil
                 DispatchQueue.main.async {
                     let usable = text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? text : nil
@@ -1627,6 +1621,31 @@ final class EventTap {
             if i + 1 < count, gap > 0 {
                 Thread.sleep(forTimeInterval: gap)
             }
+        }
+    }
+
+    /// Poll the pasteboard until `pb.changeCount` differs from
+    /// `before`, or until `copyPollDeadline` elapses. Uses exponential
+    /// backoff so fast apps (Notes, Safari) get their answer in a
+    /// handful of ms, while slow apps (Slack, Notion) still get the
+    /// full deadline. Earlier code spun at a fixed 15 ms interval —
+    /// 17 wakeups when paste landed at 50 ms.
+    ///
+    /// Caller must invoke from a background queue. Returns the final
+    /// changeCount difference (positive on change, 0 on timeout) so
+    /// the caller can branch without re-reading the property.
+    private static let pasteboardBackoffSchedule: [TimeInterval] = [
+        0.003, 0.005, 0.010, 0.015, 0.020, 0.030, 0.050, 0.050, 0.050
+    ]
+
+    fileprivate func pollPasteboardChange(_ pb: NSPasteboard, before: Int, deadline: Date) {
+        var step = 0
+        while Date() < deadline && pb.changeCount == before {
+            let interval = step < Self.pasteboardBackoffSchedule.count
+                ? Self.pasteboardBackoffSchedule[step]
+                : Self.pasteboardBackoffSchedule.last!
+            Thread.sleep(forTimeInterval: interval)
+            step += 1
         }
     }
 
