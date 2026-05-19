@@ -1213,11 +1213,16 @@ final class EventTap {
 
     private func selectPreviousCharacters(_ count: Int) {
         guard count > 0 else { return }
-        let gap = perAppEventGap()
+        // Selection events are far less forgiving than backspaces: one
+        // dropped Shift+Left means the highlighted range is off by a
+        // character, which corrupts the subsequent paste/replace. Keep
+        // the original conservative 500 µs gap here REGARDLESS of the
+        // focused app — the perf win from the tighter gap was
+        // appropriate for postBackspaces, not for this helper.
         for i in 0..<count {
             postKey(virtualKey: CGKeyCode(kVK_LeftArrow), flags: .maskShift)
-            if i + 1 < count, gap > 0 {
-                Thread.sleep(forTimeInterval: gap)
+            if i + 1 < count {
+                Thread.sleep(forTimeInterval: 0.0005)
             }
         }
     }
@@ -1649,31 +1654,35 @@ final class EventTap {
         }
     }
 
-    /// Apps known to drop fast bursts of synthetic key events.
-    /// Bundle IDs are matched as substrings against the focused app
-    /// so e.g. `com.tinyspeck.slackmacgap` matches via "slack".
-    private static let slowEventBundlesSubstring: [String] = [
-        "slack",
-        "notion",
-        "electron",
-        "discord",
-        "obsidian",
-        "vscode",
-        "code",         // VS Code's main bundle is com.microsoft.VSCode
+    /// Apps known to be SAFE with the tighter 200 µs gap. We use an
+    /// allow-list rather than a deny-list because the universe of
+    /// "apps that drop fast bursts" turns out to be huge (Chrome,
+    /// Telegram, Cursor, ChatGPT Atlas, Zen, every webview, every
+    /// Electron variant, SwiftUI TextField with autocorrect, ...).
+    /// Defaulting to 500 µs keeps things reliable everywhere; the
+    /// faster path activates only for targets we've explicitly
+    /// verified.
+    ///
+    /// Exact bundle ID match (no substring fuzz) so e.g.
+    /// "com.notnative.notes" doesn't accidentally inherit the faster
+    /// path because of "com.apple.Notes".
+    private static let fastEventBundlesExact: Set<String> = [
+        "com.apple.Notes",
+        "com.apple.TextEdit",
+        "com.apple.mail",
+        "com.apple.Stickies",
     ]
 
-    /// Sleep between consecutive synthetic events. 200 µs for fast
-    /// native apps, 500 µs for Electron-class apps that need more
-    /// headroom. Falls back to the faster default when we can't
-    /// identify the frontmost app.
+    /// Sleep between consecutive synthetic events. 500 µs default
+    /// (reliable everywhere we know about), 200 µs only for the small
+    /// set of native macOS targets where bursts are known to be safe.
+    /// Falls back to the conservative default when we can't identify
+    /// the frontmost app.
     private func perAppEventGap() -> TimeInterval {
-        guard let bundleID = AppContext.frontmostBundleID()?.lowercased() else {
-            return 0.0002
-        }
-        for needle in Self.slowEventBundlesSubstring where bundleID.contains(needle) {
+        guard let bundleID = AppContext.frontmostBundleID() else {
             return 0.0005
         }
-        return 0.0002
+        return Self.fastEventBundlesExact.contains(bundleID) ? 0.0002 : 0.0005
     }
 
     private func postKey(virtualKey: CGKeyCode, flags: CGEventFlags) {

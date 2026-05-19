@@ -19,14 +19,21 @@ final class AutoFlip {
     private var enWords: Set<String> = []
     private var ukCommon: Set<String> = []
     private var ruCommon: Set<String> = []
+    /// False until the background `reloadDictionaries` finishes. The
+    /// EmbeddedDicts seed is too small (only a few hundred high-freq
+    /// UK/RU words, no English) to power dictionary-based scoring —
+    /// we'd score "hello" at 1 (looksLikeEnglish heuristic) instead of
+    /// 2 (in dict), losing the score gap that triggers auto-flip. Hold
+    /// off entirely until the real dicts are in.
+    private var dictsReady = false
     private let lock = NSLock()
 
     private init() {
         // Seed UK / RU synchronously from the tiny embedded fallback
-        // (a few hundred high-frequency words) so the very first
-        // keystrokes after launch have something to check against
-        // before the background load completes. EN starts empty because
-        // EmbeddedDicts only carries UK / RU.
+        // so cross-layout heuristics have *something* to query while
+        // the heavy load runs in the background. Auto-flip stays
+        // gated behind `dictsReady` regardless — see the early-return
+        // at the top of suggestedFlip.
         ukCommon = Set(EmbeddedDicts.ukrainian.map { $0.lowercased() })
         ruCommon = Set(EmbeddedDicts.russian.map { $0.lowercased() })
 
@@ -42,6 +49,15 @@ final class AutoFlip {
                 self?.reloadDictionaries()
             }
         }
+    }
+
+    /// True once the background dictionary load has populated the
+    /// real EN/UK/RU sets. Callers that NEED dictionary coverage
+    /// (auto-flip scoring) check this and skip otherwise.
+    var isReady: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return dictsReady
     }
 
     func reloadDictionaries() {
@@ -75,6 +91,7 @@ final class AutoFlip {
         enWords = newEn
         ukCommon = newUk
         ruCommon = newRu
+        dictsReady = true
         lock.unlock()
 
         // Refresh any UI that was showing word counts (Preferences >
@@ -123,6 +140,14 @@ final class AutoFlip {
 
     /// Returns target layout if we should auto-flip; nil otherwise.
     func suggestedFlip(for word: String, currentLayout: Layout) -> Layout? {
+        // Refuse before the background dictionary load has finished.
+        // The EmbeddedDicts seed is too small to drive scoring — words
+        // like "hello"/"world" would score 1 (heuristic-only) instead
+        // of 2 (in dict), defeating the score-gap requirement and
+        // producing the "auto-flip sometimes silently doesn't work
+        // right after launch" bug.
+        guard isReady else { return nil }
+
         // Compute the lowercased form once. Earlier code rebuilt it
         // inside isForcedKeep, forcedFlip, looksLikePassword, and the
         // body below — that's a 4× Unicode walk per word boundary on
