@@ -147,10 +147,79 @@ enum AppContext {
 
     /// Returns the reason auto-flip should be suppressed for the focused
     /// context, or nil if it should fire normally.
+    ///
+    /// Result is cached and invalidated on NSWorkspace activation /
+    /// active-space-change notifications, plus a 500 ms safety timer in
+    /// case the notifications get dropped. Inside a typing burst (which
+    /// keeps focus on one app) this means every keystroke after the
+    /// first lookup is a free hash-lookup of the cached value instead
+    /// of a fresh NSWorkspace.frontmostApplication IPC call.
     static func suppressionCause() -> SuppressionCause? {
+        installCacheObserversIfNeeded()
+        cacheLock.lock()
+        if let cached = cachedCause {
+            cacheLock.unlock()
+            return cached
+        }
+        cacheLock.unlock()
+
+        // Compute outside the lock so other threads aren't blocked on
+        // an AX / NSWorkspace round-trip.
+        let cause = computeSuppressionCause()
+
+        cacheLock.lock()
+        cachedCause = .some(cause)
+        cacheLock.unlock()
+        return cause
+    }
+
+    /// True when auto-flip should stay silent for the focused context.
+    static func shouldSuppressAutoFlip() -> Bool {
+        return suppressionCause() != nil
+    }
+
+    // MARK: - Cache plumbing
+
+    /// Double-optional: nil = not cached yet, .some(nil) = cached "no
+    /// cause", .some(.some(...)) = cached cause.
+    private static var cachedCause: SuppressionCause?? = nil
+    private static let cacheLock = NSLock()
+    private static var observersInstalled = false
+    private static var safetyTimer: DispatchSourceTimer?
+
+    private static func installCacheObserversIfNeeded() {
+        cacheLock.lock()
+        guard !observersInstalled else { cacheLock.unlock(); return }
+        observersInstalled = true
+        cacheLock.unlock()
+
+        let nc = NSWorkspace.shared.notificationCenter
+        nc.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                       object: nil, queue: nil) { _ in invalidateSuppressionCache() }
+        nc.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
+                       object: nil, queue: nil) { _ in invalidateSuppressionCache() }
+
+        // Safety net: AppKit notifications can be dropped under load,
+        // and we don't want a stale cache to keep the app silent in a
+        // password manager that just lost focus. 500 ms is short enough
+        // that a single missed notification can't cause a real bug.
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+        timer.schedule(deadline: .now() + 0.5, repeating: 0.5)
+        timer.setEventHandler { invalidateSuppressionCache() }
+        timer.resume()
+        safetyTimer = timer
+    }
+
+    private static func invalidateSuppressionCache() {
+        cacheLock.lock()
+        cachedCause = nil
+        cacheLock.unlock()
+    }
+
+    private static func computeSuppressionCause() -> SuppressionCause? {
         if let bundleID = frontmostBundleID() {
             switch blockReason(for: bundleID) {
-            case .builtin:    return .builtinApp(bundleID)
+            case .builtin:     return .builtinApp(bundleID)
             case .userBlocked: return .userApp(bundleID)
             case .none:        break
             }
@@ -159,10 +228,5 @@ enum AppContext {
             return .fullscreen
         }
         return nil
-    }
-
-    /// True when auto-flip should stay silent for the focused context.
-    static func shouldSuppressAutoFlip() -> Bool {
-        return suppressionCause() != nil
     }
 }
