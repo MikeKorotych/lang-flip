@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.2.7 - Stability Release
+
+This release focuses on typing stability after the performance work in 0.2.6,
+especially the first auto-flip after launch and double-Shift word rewrites.
+
+### Added
+
+- Manual “Always flip” rules in General > Learning, with a target language per
+  word.
+
+### Improved
+
+- Faster startup by loading larger dictionaries in the background while keeping
+  deterministic built-in and manual rules available immediately.
+- Lower per-keystroke overhead by caching repeated lowercase work and frontmost
+  app suppression checks.
+- Faster selected-text actions with exponential pasteboard polling.
+- More reliable synthetic rewrites by keeping conservative event timing where
+  apps are known to drop fast key bursts.
+
+### Fixed
+
+- Stabilized the first auto-flip after app launch so the word rewrite lands
+  before LangFlip switches the active input source.
+- Fixed double-Shift focused-word rewrites that could miss the first character
+  or select too much text after the performance changes.
+- Kept flip feedback smooth by decoupling the visual/audio confirmation from
+  the slower first keyboard-layout switch.
+
 ## 0.2.6 - Patch Release
 
 This patch release tightens the new-user flow and fixes a few high-impact
