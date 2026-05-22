@@ -1234,44 +1234,48 @@ final class EventTap {
         let snapshot = PasteboardSnapshot.capture(pb)
         let countBefore = pb.changeCount
 
-        AppLog.write("double-shift falling back to keyboard line selection")
-        postKey(virtualKey: CGKeyCode(kVK_LeftArrow), flags: [.maskCommand, .maskShift])
-        tryCopyAfterKeyboardSelection(countBefore: countBefore) { [weak self] selectedLine in
+        AppLog.write("double-shift falling back to keyboard word selection")
+        postKey(virtualKey: CGKeyCode(kVK_LeftArrow), flags: [.maskAlternate, .maskShift])
+        tryCopyAfterKeyboardSelection(countBefore: countBefore) { [weak self] selectedToken in
             guard let self else { return }
-            self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
 
-            guard let selectedLine,
+            guard let selectedToken,
+                  !selectedToken.contains(where: { $0.isWhitespace || $0.isNewline }),
                   let replacement = self.lastWrongLayoutRunBeforeCursor(
-                      in: selectedLine,
-                      cursorUTF16: selectedLine.utf16.count,
+                      in: selectedToken,
+                      cursorUTF16: selectedToken.utf16.count,
                       targetNonEnglish: targetNonEnglish
                   )
             else {
-                AppLog.write("double-shift keyboard fallback found no flippable suffix")
+                AppLog.write("double-shift keyboard fallback found no flippable token")
+                self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
                 snapshot.restore(to: pb)
                 return
             }
 
-            let nsLine = selectedLine as NSString
+            let nsToken = selectedToken as NSString
             let range = NSRange(location: replacement.range.location, length: replacement.range.length)
-            let original = nsLine.substring(with: range)
-            let replacementEnd = range.location + range.length
-            let suffixLength = max(0, nsLine.length - replacementEnd)
-            let suffix = suffixLength > 0
-                ? nsLine.substring(with: NSRange(location: replacementEnd, length: suffixLength))
+            let original = nsToken.substring(with: range)
+            let prefix = range.location > 0
+                ? nsToken.substring(with: NSRange(location: 0, length: range.location))
                 : ""
-            let replaceLength = nsLine.length - range.location
+            let replacementEnd = range.location + range.length
+            let suffixLength = max(0, nsToken.length - replacementEnd)
+            let suffix = suffixLength > 0
+                ? nsToken.substring(with: NSRange(location: replacementEnd, length: suffixLength))
+                : ""
 
             AppLog.write("double-shift keyboard fallback original='\(original)' replacement='\(replacement.text)'")
-            self.postBackspaces(replaceLength)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-                self.postUnicode(replacement.text + suffix)
-                self.playRewriteFeedback()
-                if let source = detectLayout(original) {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                        InputSource.switchTo(self.resolveTarget(source: source, configured: targetNonEnglish))
-                    }
+            pb.clearContents()
+            pb.setString(prefix + replacement.text + suffix, forType: .string)
+            self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+            self.playRewriteFeedback()
+            if let source = detectLayout(original) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                    InputSource.switchTo(self.resolveTarget(source: source, configured: targetNonEnglish))
                 }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
                 snapshot.restore(to: pb)
             }
         }
