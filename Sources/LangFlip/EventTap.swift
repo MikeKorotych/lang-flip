@@ -1584,48 +1584,16 @@ final class EventTap {
         let target = resolveTarget(source: source, configured: targetNonEnglish)
         let convertedLastToken = convert(lastToken, from: source, to: target)
         guard convertedLastToken != lastToken else { return nil }
-        if !tokenLooksFlippable(lastToken, source: source, target: target) {
-            // Manual no-selection double Shift should still fix unknown
-            // Latin wrong-layout runs like "ghbdtn", but it must not mangle
-            // real English words at the end of mixed-language text, e.g.
-            // "Покращення візуалу Journey".
-            let lowerLastToken = lastToken.lowercased()
-            guard source == .en,
-                  !AutoFlip.shared.isKnownWord(lowerLastToken)
-            else {
-                return nil
-            }
-        }
 
-        var includedStart = lastTokenRange.location
-        var scanEnd = lastTokenRange.location
-        while scanEnd > 0 {
-            var previousEnd = scanEnd
-            while previousEnd > 0, isWhitespaceOrNewline(ns.character(at: previousEnd - 1)) {
-                previousEnd -= 1
-            }
-            guard previousEnd > 0 else { break }
-            let previousRange = whitespaceTokenRangeEnding(at: previousEnd, in: ns)
-            guard previousRange.length > 0 else { break }
-            let previousToken = ns.substring(with: previousRange)
-            if tokenEndsSentence(previousToken) { break }
-            guard let previousSource = detectLayout(previousToken),
-                  previousSource == source,
-                  resolveTarget(source: previousSource, configured: targetNonEnglish) == target,
-                  tokenLooksFlippable(previousToken, source: previousSource, target: target)
-                else {
-                    break
-                }
-            includedStart = previousRange.location
-            scanEnd = previousRange.location
-        }
-
-        let range = NSRange(location: includedStart, length: end - includedStart)
-        guard range.length > 0 else { return nil }
-        let original = ns.substring(with: range)
-        let converted = convert(original, from: source, to: target)
-        guard converted != original else { return nil }
-        return FocusedTextSlice(range: CFRange(location: range.location, length: range.length), text: converted)
+        // Manual no-selection double/triple Shift is an explicit layout
+        // conversion, not dictionary auto-flip. Always convert the last
+        // whitespace-delimited token:
+        //   - English source: double -> primary, triple -> secondary.
+        //   - Non-English source: always -> English.
+        return FocusedTextSlice(
+            range: CFRange(location: lastTokenRange.location, length: lastTokenRange.length),
+            text: convertedLastToken
+        )
     }
 
     private func whitespaceTokenRangeEnding(at end: Int, in ns: NSString) -> NSRange {
@@ -1634,29 +1602,6 @@ final class EventTap {
             start -= 1
         }
         return NSRange(location: start, length: end - start)
-    }
-
-    private func tokenLooksFlippable(_ token: String, source: Layout, target: Layout) -> Bool {
-        guard convert(token, from: source, to: target) != token else { return false }
-        if AutoFlip.shared.suggestedFlip(for: token, currentLayout: source) == target {
-            return true
-        }
-        let lettersOnly = String(token.filter { $0.isLetter || $0 == "'" || $0 == "-" })
-        guard !lettersOnly.isEmpty, lettersOnly != token else { return false }
-        return AutoFlip.shared.suggestedFlip(for: lettersOnly, currentLayout: source) == target
-    }
-
-    private func tokenEndsSentence(_ token: String) -> Bool {
-        for scalar in token.unicodeScalars.reversed() {
-            if CharacterSet.whitespacesAndNewlines.contains(scalar) { continue }
-            switch scalar.value {
-            case 46, 33, 63, 8230:
-                return true
-            default:
-                return false
-            }
-        }
-        return false
     }
 
     private func flipFocusedLastWords(targetNonEnglish: Layout) -> Bool {
