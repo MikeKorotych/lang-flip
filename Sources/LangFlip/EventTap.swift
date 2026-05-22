@@ -614,6 +614,10 @@ final class EventTap {
                    self.flipFocusedLastWords(targetNonEnglish: targetNonEnglish) {
                     return
                 }
+                if Settings.shared.flipLastWordsOnDoubleShift,
+                   self.tryKeyboardLineDoubleShiftFallback(targetNonEnglish: targetNonEnglish) {
+                    return
+                }
                 if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: no selection — double-shift layout flip skipped\n".utf8)) }
             }
         }
@@ -634,6 +638,24 @@ final class EventTap {
     // MARK: - Selection-based flip (Cmd+C / convert / Cmd+V)
 
     private func convertSelectionIfPresent(targetNonEnglish: Layout, completion: @escaping (Bool) -> Void) {
+        switch focusedSelectionState() {
+        case .none:
+            completion(false)
+            return
+        case .selected:
+            break
+        case .unknown:
+            // Obsidian copies the current line on Cmd+C even when nothing is
+            // selected. If AX cannot tell us that there is a real selection,
+            // skip the clipboard "selection" path and let the no-selection
+            // fallback decide what to do.
+            if let bundleID = AppContext.frontmostBundleID(),
+               bundleID.localizedCaseInsensitiveContains("obsidian") {
+                completion(false)
+                return
+            }
+        }
+
         // Some editors (VS Code/Cursor-style command fields, Markdown editors)
         // copy the whole current line when Cmd+C is pressed with no selection.
         // If Accessibility can see a focused text field and it reports an
@@ -1207,6 +1229,55 @@ final class EventTap {
         }
     }
 
+    private func tryKeyboardLineDoubleShiftFallback(targetNonEnglish: Layout) -> Bool {
+        let pb = NSPasteboard.general
+        let snapshot = PasteboardSnapshot.capture(pb)
+        let countBefore = pb.changeCount
+
+        AppLog.write("double-shift falling back to keyboard line selection")
+        postKey(virtualKey: CGKeyCode(kVK_LeftArrow), flags: [.maskCommand, .maskShift])
+        tryCopyAfterKeyboardSelection(countBefore: countBefore) { [weak self] selectedLine in
+            guard let self else { return }
+            self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
+
+            guard let selectedLine,
+                  let replacement = self.lastWrongLayoutRunBeforeCursor(
+                      in: selectedLine,
+                      cursorUTF16: selectedLine.utf16.count,
+                      targetNonEnglish: targetNonEnglish
+                  )
+            else {
+                AppLog.write("double-shift keyboard fallback found no flippable suffix")
+                snapshot.restore(to: pb)
+                return
+            }
+
+            let nsLine = selectedLine as NSString
+            let range = NSRange(location: replacement.range.location, length: replacement.range.length)
+            let original = nsLine.substring(with: range)
+            let replacementEnd = range.location + range.length
+            let suffixLength = max(0, nsLine.length - replacementEnd)
+            let suffix = suffixLength > 0
+                ? nsLine.substring(with: NSRange(location: replacementEnd, length: suffixLength))
+                : ""
+            let replaceLength = nsLine.length - range.location
+
+            AppLog.write("double-shift keyboard fallback original='\(original)' replacement='\(replacement.text)'")
+            self.postBackspaces(replaceLength)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+                self.postUnicode(replacement.text + suffix)
+                self.playRewriteFeedback()
+                if let source = detectLayout(original) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                        InputSource.switchTo(self.resolveTarget(source: source, configured: targetNonEnglish))
+                    }
+                }
+                snapshot.restore(to: pb)
+            }
+        }
+        return true
+    }
+
     private func tryCopyAfterKeyboardSelection(countBefore: Int, completion: @escaping (String?) -> Void) {
         let pb = NSPasteboard.general
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in
@@ -1306,7 +1377,13 @@ final class EventTap {
         let text: String
     }
 
-    private func focusedTextContext() -> FocusedTextContext? {
+    private enum FocusedSelectionState {
+        case none
+        case selected
+        case unknown
+    }
+
+    private func focusedElement() -> AXUIElement? {
         let systemWide = AXUIElementCreateSystemWide()
         var focusedRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
@@ -1314,11 +1391,33 @@ final class EventTap {
             kAXFocusedUIElementAttribute as CFString,
             &focusedRef
         ) == .success, let focusedRef else {
+            return nil
+        }
+        return (focusedRef as! AXUIElement)
+    }
+
+    private func focusedSelectionState() -> FocusedSelectionState {
+        guard let element = focusedElement() else { return .unknown }
+
+        var selectedTextRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &selectedTextRef) == .success,
+           let selectedText = selectedTextRef as? String {
+            return selectedText.isEmpty ? .none : .selected
+        }
+
+        if let range = focusedSelection(in: element) {
+            return range.length == 0 ? .none : .selected
+        }
+
+        return .unknown
+    }
+
+    private func focusedTextContext() -> FocusedTextContext? {
+        guard let element = focusedElement() else {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: focused text: no focused AX element\n".utf8)) }
             return nil
         }
 
-        let element = focusedRef as! AXUIElement
         var valueRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
               let value = valueRef as? String else {
