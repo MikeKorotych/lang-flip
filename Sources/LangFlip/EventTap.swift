@@ -634,6 +634,16 @@ final class EventTap {
     // MARK: - Selection-based flip (Cmd+C / convert / Cmd+V)
 
     private func convertSelectionIfPresent(targetNonEnglish: Layout, completion: @escaping (Bool) -> Void) {
+        // Some editors (VS Code/Cursor-style command fields, Markdown editors)
+        // copy the whole current line when Cmd+C is pressed with no selection.
+        // If Accessibility can see a focused text field and it reports an
+        // empty selection, trust that and skip the clipboard selection path;
+        // otherwise we would convert+paste the copied line next to itself.
+        if let context = focusedTextContext(), context.selectedRange.length == 0 {
+            completion(false)
+            return
+        }
+
         let pb = NSPasteboard.general
         let snapshot = PasteboardSnapshot.capture(pb)
         let countBefore = pb.changeCount
@@ -1471,6 +1481,18 @@ final class EventTap {
         let target = resolveTarget(source: source, configured: targetNonEnglish)
         let convertedLastToken = convert(lastToken, from: source, to: target)
         guard convertedLastToken != lastToken else { return nil }
+        if !tokenLooksFlippable(lastToken, source: source, target: target) {
+            // Manual no-selection double Shift should still fix unknown
+            // Latin wrong-layout runs like "ghbdtn", but it must not mangle
+            // real English words at the end of mixed-language text, e.g.
+            // "Покращення візуалу Journey".
+            let lowerLastToken = lastToken.lowercased()
+            guard source == .en,
+                  !AutoFlip.shared.isKnownWord(lowerLastToken)
+            else {
+                return nil
+            }
+        }
 
         var includedStart = lastTokenRange.location
         var scanEnd = lastTokenRange.location
