@@ -1240,7 +1240,7 @@ final class EventTap {
             guard let self else { return }
 
             guard let selectedToken,
-                  !selectedToken.contains(where: { $0.isWhitespace || $0.isNewline }),
+                  !selectedToken.contains(where: { $0.isNewline }),
                   let replacement = self.lastWrongLayoutRunBeforeCursor(
                       in: selectedToken,
                       cursorUTF16: selectedToken.utf16.count,
