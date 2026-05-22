@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.8 - Double Shift Hotfix
+
+This hotfix tightens manual double/triple Shift behavior in editors that do not
+expose normal macOS Accessibility text ranges, including Obsidian and web-based
+chat inputs.
+
+### Fixed
+
+- Prevented Obsidian-style Cmd+C-without-selection behavior from duplicating
+  and converting the whole current line.
+- Added a keyboard fallback for Codex/Claude-style inputs that do not expose
+  focused text through Accessibility.
+- Limited the fallback to the previous word/token instead of selecting the whole
+  line.
+- Preserved leading spaces when replacing the previous token.
+- Made manual double/triple Shift deterministic:
+  - English token + double Shift -> primary language.
+  - English token + triple Shift -> secondary language.
+  - Non-English token + double/triple Shift -> English.
+- Removed dictionary checks from manual no-selection Shift flips. Explicit
+  Shift gestures now convert the last token regardless of whether it is a known
+  word.
+
 ## 0.2.7 - Stability Release
 
 This release focuses on typing stability after the performance work in 0.2.6,
