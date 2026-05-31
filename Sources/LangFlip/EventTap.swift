@@ -90,12 +90,9 @@ final class EventTap {
     // MARK: - Voice dictation gestures
 
     private static let speechHoldDelay: TimeInterval = 0.45
-    private static let commandShiftToggleDelay: TimeInterval = 0.35
-
     private var speechHoldWork: DispatchWorkItem?
     private var speechPushToTalkActive = false
-    private var commandShiftSpeechWork: DispatchWorkItem?
-    private var commandShiftSpeechTriggered = false
+    private var handsFreeToggleCandidate: DictationHandsFreeShortcut?
 
     func start() throws {
         let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.flagsChanged.rawValue)
@@ -161,8 +158,7 @@ final class EventTap {
         // avoids stealing Save As / Duplicate shortcuts when screen text capture is not
         // available.
         if Settings.shared.screenTextCaptureHotkeyEnabled,
-           Settings.shared.aiMode == .ollama,
-           Self.isVisionOllamaModel(Settings.shared.ollamaModel),
+           Self.canCaptureScreenTextWithCurrentAI(),
            Settings.shared.screenTextCaptureShortcut.matches(keyCode: keyCode, flags: flags) {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: screen OCR hotkey fired\n".utf8)) }
             DispatchQueue.main.async { [weak self] in
@@ -339,10 +335,15 @@ final class EventTap {
         let preset = Settings.shared.hotkeyPreset
         let isWatchedKey = preset.watchedKeys.contains { $0.keyCode == keyCode }
         guard isWatchedKey else {
-            // Modifier changed but it isn't part of the hotkey — cancel
-            // any in-progress tap sequence so a stray press doesn't
-            // accidentally extend it.
-            if !isShiftKey { cancelPendingTaps() }
+            // Modifier changed but it isn't part of the hotkey.
+            if !isShiftKey {
+                // A ⌘/⌃/⌥ press while our Shift tap is mid-flight means
+                // Shift is being used as a combo modifier (e.g. ⌘⇧4), not a
+                // standalone tap — disqualify the sequence so the eventual
+                // Shift release doesn't fire the single/double-Shift action.
+                if hotkeyCurrentlyHeld { hotkeyUsedAsModifier = true }
+                cancelPendingTaps()
+            }
             return
         }
 
@@ -362,9 +363,13 @@ final class EventTap {
         }
 
         if anyHeldNow && !anyHeldBefore {
-            // First key in a new sequence going down.
+            // First key in a new sequence going down. If another modifier
+            // (⌘/⌃/⌥) is already held, this Shift is part of a combo, not a
+            // standalone tap — disqualify the sequence up front.
             hotkeyCurrentlyHeld = true
-            hotkeyUsedAsModifier = false
+            hotkeyUsedAsModifier = flags.contains(.maskCommand)
+                || flags.contains(.maskControl)
+                || flags.contains(.maskAlternate)
             return
         }
 
@@ -420,12 +425,21 @@ final class EventTap {
         let pushShortcut = Settings.shared.dictationPushToTalkShortcut
         let handsFreeShortcut = Settings.shared.dictationHandsFreeShortcut
         let shiftHeld = flags.contains(.maskShift)
-        let handsFreeReleased = handsFreeShortcut.isReleased(flags: flags)
-        let hasOtherModifiers = flags.contains(.maskAlternate) || flags.contains(.maskControl)
+        let hasOtherModifiers = flags.contains(.maskAlternate) ||
+            flags.contains(.maskControl) ||
+            flags.contains(.maskCommand)
 
-        if commandShiftSpeechTriggered {
-            if handsFreeReleased {
-                commandShiftSpeechTriggered = false
+        if let candidate = handsFreeToggleCandidate {
+            if candidate.isReleased(flags: flags) {
+                handsFreeToggleCandidate = nil
+                hotkeyUsedAsModifier = true
+                cancelPendingTaps()
+                VoiceDictationController.shared.toggleRecording()
+                return true
+            }
+            if !candidate.isRelevantKey(keyCode) || !candidate.allowsIntermediate(flags: flags) {
+                handsFreeToggleCandidate = nil
+                return false
             }
             return true
         }
@@ -434,27 +448,14 @@ final class EventTap {
            handsFreeShortcut.matches(keyCode: keyCode, flags: flags) {
             speechHoldWork?.cancel()
             speechHoldWork = nil
-            if commandShiftSpeechWork == nil {
-                let work = DispatchWorkItem { [weak self] in
-                    guard let self else { return }
-                    self.commandShiftSpeechWork = nil
-                    self.commandShiftSpeechTriggered = true
-                    self.hotkeyUsedAsModifier = true
-                    self.cancelPendingTaps()
-                    VoiceDictationController.shared.toggleRecording()
-                }
-                commandShiftSpeechWork = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.commandShiftToggleDelay, execute: work)
-            }
-            return false
+            handsFreeToggleCandidate = handsFreeShortcut
+            return true
         }
-        commandShiftSpeechWork?.cancel()
-        commandShiftSpeechWork = nil
+        handsFreeToggleCandidate = nil
 
         guard Settings.shared.dictationPushToTalkEnabled,
               pushShortcut.isWatchedKey(keyCode),
               shiftHeld,
-              !flags.contains(.maskCommand),
               !hasOtherModifiers
         else {
             if !shiftHeld {
@@ -489,8 +490,7 @@ final class EventTap {
     private func cancelSpeechModifierCandidates() {
         speechHoldWork?.cancel()
         speechHoldWork = nil
-        commandShiftSpeechWork?.cancel()
-        commandShiftSpeechWork = nil
+        handsFreeToggleCandidate = nil
     }
 
     // MARK: - Tap counting
@@ -1817,5 +1817,16 @@ private extension EventTap {
             || tag.contains(":vl")
             || tag.contains("llava")
             || tag.contains("gemma4")
+    }
+
+    static func canCaptureScreenTextWithCurrentAI() -> Bool {
+        switch Settings.shared.aiMode {
+        case .ollama:
+            return isVisionOllamaModel(Settings.shared.ollamaModel)
+        case .openai:
+            return !(Settings.shared.openaiAPIKey?.isEmpty ?? true)
+        case .off, .appleFoundation, .bundledModel:
+            return false
+        }
     }
 }

@@ -33,6 +33,8 @@ Supports **English, Ukrainian, and Russian** out of the box.
   layout language.
 - 📸 **Captures text from the screen.** Press Shift+Command+S, select a screen
   region, and LangFlip copies recognized text to the clipboard.
+- 🔊 **Reads selected text aloud.** Use macOS system voices, local OmniVoice,
+  or a BYOK cloud TTS model through OpenRouter/OpenAI-compatible APIs.
 - ↩️ **Learns from Backspace.** If LangFlip flips something you did not want, press
   Backspace and it remembers that word as an exception.
 - 📚 **Installs extended dictionaries.** Download larger EN/UK/RU word lists
@@ -69,6 +71,8 @@ Common shortcuts:
   default, English-layout text flips to Russian.
 - **Shift+Space** - translate selected text into the current keyboard layout language.
 - **Shift+Command+S** - copy text from a selected screen region.
+- **Control+Option+X** - read selected text aloud with the selected voice backend.
+- **Fn+Option** - tap once to toggle hands-free dictation by default.
 - **Both Shift keys** - pause or resume LangFlip.
 
 The selection-based actions are the most predictable. The no-selection
@@ -108,21 +112,49 @@ Manual setup:
 
 In Ollama mode, LangFlip talks to `127.0.0.1:11434`. Your text and screenshots
 are sent to the local Ollama daemon on your Mac, not to LangFlip servers.
+In OpenRouter/OpenAI-compatible mode, Single Shift text fixes and Fix Selected
+Text use the selected cloud text-correction model. The OpenRouter default is
+`google/gemini-3.1-flash-lite`, with cheaper and higher-quality fallback models
+available in Preferences.
+
+## 🔊 Text-to-Speech Setup
+
+Open **LangFlip → Preferences → Voice** to choose how selected text is read aloud:
+
+- **System voices** - instant macOS voices, fully local.
+- **Cloud TTS** - BYOK OpenRouter/OpenAI-compatible speech models. The default is
+  `openai/gpt-4o-mini-tts-2025-12-15` via OpenRouter. The model picker also
+  includes richer multilingual and low-cost options with pricing notes.
+- **OmniVoice local** - heavier local generation with more style controls.
+
+Cloud TTS sends only the text you explicitly choose to read. API keys are stored
+in macOS Keychain.
+
+Dictation can use either local Whisper models or Cloud STT through the same
+OpenRouter/OpenAI-compatible key. The current Cloud STT default is
+`nvidia/parakeet-tdt-0.6b-v3` because it is very low-cost and strong for
+multilingual speech-to-text.
+
+Screen text capture can stay local through Ollama vision models or use a cloud
+vision model when AI mode is set to OpenRouter/OpenAI-compatible cloud. The
+cloud OCR default is `google/gemini-3.1-flash-lite`; the picker also includes
+low-cost Qwen, Gemma, and Perceptron vision options.
 
 ## 🔒 Privacy
 
 - The core layout correction is local and rule-based.
 - Ollama AI mode runs locally on your Mac.
 - Cloud AI providers are optional and only used if you configure them.
+- Cloud TTS is optional and only used when selected in Voice settings.
 - API keys are stored in macOS Keychain.
 - LangFlip does not collect analytics by default.
 
 ## 🛠️ Current Status
 
 LangFlip is usable as a daily writing helper. The current release candidate is
-focused on a much smoother first session: clearer onboarding, easier model
-setup, built-in tests, better hotkey explanation, and safer reset commands for
-development.
+focused on opt-in cloud provider flexibility: Cloud TTS, Cloud STT, Cloud OCR,
+and faster OpenRouter-powered text fixes, while keeping local mode as the safe
+default.
 
 Planned improvements include:
 

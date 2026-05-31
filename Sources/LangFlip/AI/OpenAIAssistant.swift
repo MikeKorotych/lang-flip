@@ -82,7 +82,7 @@ final class OpenAIAssistant: AIAssistant {
                 ["role": "system", "content": Self.rewriteSystemPrompt(language: lang, allowLayoutRepair: false)],
                 ["role": "user",   "content": input.text],
             ],
-            options: ["temperature": 0.1, "max_tokens": 256]
+            options: Self.fastTextEditOptions(inputCharacterCount: input.text.count, cap: 256)
         ) { result in
             switch result {
             case .success(let raw):
@@ -105,7 +105,7 @@ final class OpenAIAssistant: AIAssistant {
                 ["role": "system", "content": Self.rewriteSystemPrompt(language: lang, allowLayoutRepair: true)],
                 ["role": "user",   "content": input.text],
             ],
-            options: ["temperature": 0.2, "max_tokens": 1024]
+            options: Self.fastTextEditOptions(inputCharacterCount: input.text.count, cap: 512)
         ) { result in
             switch result {
             case .success(let raw):
@@ -146,12 +146,47 @@ final class OpenAIAssistant: AIAssistant {
         }
     }
 
-    // OCR via OpenAI-compatible vision is provider-specific (image_url
-    // vs base64 content blocks). We deliberately leave the default
-    // .unsupported impl in place for v1 — Ollama gemma4 already covers
-    // the OCR flow and most cloud providers charge a meaningful
-    // surcharge for vision tokens that we'd want to expose explicitly
-    // before quietly burning through the user's quota.
+    func extractTextFromImage(_ input: AIOcrRequest, completion: @escaping (AIOcrResult) -> Void) {
+        let visionModel = Settings.shared.cloudOCRModel
+        let dataURL = "data:image/png;base64,\(input.imageBase64)"
+        chatCompletion(
+            modelOverride: visionModel,
+            messages: [
+                [
+                    "role": "system",
+                    "content": "You are an OCR engine. Output only the text visible in the image. Preserve line breaks. No commentary."
+                ],
+                [
+                    "role": "user",
+                    "content": [
+                        [
+                            "type": "text",
+                            "text": "Read the text in this screenshot. Output only the text exactly as it appears."
+                        ],
+                        [
+                            "type": "image_url",
+                            "image_url": [
+                                "url": dataURL
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            options: ["temperature": 0, "max_tokens": 512]
+        ) { result in
+            switch result {
+            case .success(let raw):
+                let cleaned = Self.unwrapModelOutput(raw)
+                if cleaned.isEmpty {
+                    completion(.failed(reason: "model returned no text"))
+                } else {
+                    completion(.extracted(cleaned))
+                }
+            case .failure(let reason):
+                completion(.failed(reason: reason))
+            }
+        }
+    }
 
     // MARK: - HTTP
 
@@ -169,6 +204,14 @@ final class OpenAIAssistant: AIAssistant {
         """
     }
 
+    private static func fastTextEditOptions(inputCharacterCount: Int, cap: Int) -> [String: Any] {
+        let estimatedOutputTokens = max(64, min(cap, (inputCharacterCount / 2) + 64))
+        return [
+            "temperature": 0,
+            "max_tokens": estimatedOutputTokens,
+        ]
+    }
+
     private enum InferenceResult {
         case success(String)
         case failure(String)
@@ -178,15 +221,30 @@ final class OpenAIAssistant: AIAssistant {
     /// content of choices[0].message.content, or a short failure
     /// reason. Errors include network failures, non-2xx, malformed
     /// JSON, refusal-style empty content.
-    private func chatCompletion(messages: [[String: String]], options: [String: Any], completion: @escaping (InferenceResult) -> Void) {
+    private func chatCompletion(
+        modelOverride: String? = nil,
+        messages: [[String: Any]],
+        options: [String: Any],
+        completion: @escaping (InferenceResult) -> Void
+    ) {
         let endpoint = baseURL.appendingPathComponent("chat/completions")
 
         var body: [String: Any] = [
-            "model":    model,
+            "model":    modelOverride?.isEmpty == false ? modelOverride! : model,
             "messages": messages,
             "stream":   false,
         ]
         for (k, v) in options { body[k] = v }
+
+        let usesOpenRouter = baseURL.host?.localizedCaseInsensitiveContains("openrouter.ai") == true
+        if usesOpenRouter {
+            if body["provider"] == nil {
+                body["provider"] = ["sort": "latency"]
+            }
+            if body["reasoning"] == nil {
+                body["reasoning"] = ["exclude": true]
+            }
+        }
 
         var req = URLRequest(url: endpoint)
         req.httpMethod = "POST"
@@ -195,7 +253,7 @@ final class OpenAIAssistant: AIAssistant {
         if authorize {
             req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
-        if baseURL.host?.localizedCaseInsensitiveContains("openrouter.ai") == true {
+        if usesOpenRouter {
             req.setValue("LangFlip", forHTTPHeaderField: "X-Title")
             req.setValue("https://github.com/MikeKorotych/lang-flip", forHTTPHeaderField: "HTTP-Referer")
         }

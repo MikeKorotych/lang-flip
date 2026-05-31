@@ -26,6 +26,30 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.2.9</title>
+      <pubDate>Sun, 31 May 2026 21:53:26 +0000</pubDate>
+      <sparkle:version>0.2.9</sparkle:version>
+      <sparkle:shortVersionString>0.2.9</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cloud speech and AI providers</h2>
+        <ul>
+          <li>Added opt-in Cloud TTS with curated OpenRouter/OpenAI-compatible speech models, voice selection, speed, instructions, and a built-in sample generator.</li>
+          <li>Added Cloud STT for dictation through /audio/transcriptions with provider-side language auto-detection.</li>
+          <li>Added Cloud OCR for screenshot text capture with a dedicated vision-model picker.</li>
+          <li>Added curated OpenRouter model choices for AI text correction and selected text fixes.</li>
+          <li>Changed hands-free dictation to default to Fn+Option and added a picker for alternate hands-free shortcuts.</li>
+          <li>Removed weak or unreliable Cloud STT choices from the curated list, including Whisper 1, GPT-4o Mini Transcribe, and Whisper Large V3.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.9/LangFlip-0.2.9.dmg"
+        length="4370616"
+        type="application/octet-stream"
+        sparkle:edSignature="k2KY7mziQ9AlAIGgC3rnFAaIOn7vW5aTduOsbbUMV99X0KN/btHyQhaCz0ebmaF0YEeiBfzlQmVIgJWU/SANDQ==" />
+    </item>
+
+    <item>
       <title>v0.2.8</title>
       <pubDate>Fri, 22 May 2026 12:36:19 +0000</pubDate>
       <sparkle:version>0.2.8</sparkle:version>

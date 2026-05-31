@@ -46,6 +46,7 @@ enum HotkeyPreset: String, CaseIterable, Identifiable {
 enum TextToSpeechBackend: String, CaseIterable, Identifiable {
     case system
     case omniVoice
+    case cloud
 
     var id: Self { self }
 
@@ -53,6 +54,21 @@ enum TextToSpeechBackend: String, CaseIterable, Identifiable {
         switch self {
         case .system: return "System voices"
         case .omniVoice: return "OmniVoice local"
+        case .cloud: return "Cloud TTS"
+        }
+    }
+}
+
+enum DictationTranscriptionBackend: String, CaseIterable, Identifiable {
+    case localWhisper
+    case cloud
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .localWhisper: return "Local Whisper"
+        case .cloud: return "Cloud STT"
         }
     }
 }
@@ -88,6 +104,9 @@ enum DictationHandsFreeShortcut: String, CaseIterable, Identifiable {
     case commandShift
     case controlShift
     case optionShift
+    case fnOption
+    case leftOption
+    case leftCommand
 
     var id: Self { self }
 
@@ -96,6 +115,9 @@ enum DictationHandsFreeShortcut: String, CaseIterable, Identifiable {
         case .commandShift: return "Command+Shift"
         case .controlShift: return "Control+Shift"
         case .optionShift: return "Option+Shift"
+        case .fnOption: return "Fn+Option"
+        case .leftOption: return "Left Option"
+        case .leftCommand: return "Left Command"
         }
     }
 
@@ -123,6 +145,82 @@ enum DictationHandsFreeShortcut: String, CaseIterable, Identifiable {
                    !flags.contains(.maskCommand) &&
                    !flags.contains(.maskControl) &&
                    (isShiftKey || isOptionKey)
+        case .fnOption:
+            let isOptionKey = keyCode == CGKeyCode(kVK_Option) || keyCode == CGKeyCode(kVK_RightOption)
+            let isFunctionKey = keyCode == CGKeyCode(kVK_Function)
+            return flags.contains(.maskSecondaryFn) &&
+                   flags.contains(.maskAlternate) &&
+                   !flags.contains(.maskShift) &&
+                   !flags.contains(.maskCommand) &&
+                   !flags.contains(.maskControl) &&
+                   (isOptionKey || isFunctionKey)
+        case .leftOption:
+            return keyCode == CGKeyCode(kVK_Option) &&
+                   flags.contains(.maskAlternate) &&
+                   !flags.contains(.maskShift) &&
+                   !flags.contains(.maskCommand) &&
+                   !flags.contains(.maskControl)
+        case .leftCommand:
+            return keyCode == CGKeyCode(kVK_Command) &&
+                   flags.contains(.maskCommand) &&
+                   !flags.contains(.maskShift) &&
+                   !flags.contains(.maskAlternate) &&
+                   !flags.contains(.maskControl)
+        }
+    }
+
+    func isRelevantKey(_ keyCode: CGKeyCode) -> Bool {
+        switch self {
+        case .commandShift:
+            return keyCode == CGKeyCode(kVK_Shift) ||
+                   keyCode == CGKeyCode(kVK_RightShift) ||
+                   keyCode == CGKeyCode(kVK_Command) ||
+                   keyCode == CGKeyCode(kVK_RightCommand)
+        case .controlShift:
+            return keyCode == CGKeyCode(kVK_Shift) ||
+                   keyCode == CGKeyCode(kVK_RightShift) ||
+                   keyCode == CGKeyCode(kVK_Control) ||
+                   keyCode == CGKeyCode(kVK_RightControl)
+        case .optionShift:
+            return keyCode == CGKeyCode(kVK_Shift) ||
+                   keyCode == CGKeyCode(kVK_RightShift) ||
+                   keyCode == CGKeyCode(kVK_Option) ||
+                   keyCode == CGKeyCode(kVK_RightOption)
+        case .fnOption:
+            return keyCode == CGKeyCode(kVK_Option) ||
+                   keyCode == CGKeyCode(kVK_RightOption) ||
+                   keyCode == CGKeyCode(kVK_Function)
+        case .leftOption:
+            return keyCode == CGKeyCode(kVK_Option)
+        case .leftCommand:
+            return keyCode == CGKeyCode(kVK_Command)
+        }
+    }
+
+    func allowsIntermediate(flags: CGEventFlags) -> Bool {
+        switch self {
+        case .commandShift:
+            return !flags.contains(.maskAlternate) && !flags.contains(.maskControl)
+        case .controlShift:
+            return !flags.contains(.maskAlternate) && !flags.contains(.maskCommand)
+        case .optionShift:
+            return !flags.contains(.maskCommand) && !flags.contains(.maskControl)
+        case .fnOption:
+            return flags.contains(.maskSecondaryFn) &&
+                   flags.contains(.maskAlternate) &&
+                   !flags.contains(.maskShift) &&
+                   !flags.contains(.maskCommand) &&
+                   !flags.contains(.maskControl)
+        case .leftOption:
+            return flags.contains(.maskAlternate) &&
+                   !flags.contains(.maskShift) &&
+                   !flags.contains(.maskCommand) &&
+                   !flags.contains(.maskControl)
+        case .leftCommand:
+            return flags.contains(.maskCommand) &&
+                   !flags.contains(.maskShift) &&
+                   !flags.contains(.maskAlternate) &&
+                   !flags.contains(.maskControl)
         }
     }
 
@@ -134,6 +232,12 @@ enum DictationHandsFreeShortcut: String, CaseIterable, Identifiable {
             return !flags.contains(.maskShift) && !flags.contains(.maskControl)
         case .optionShift:
             return !flags.contains(.maskShift) && !flags.contains(.maskAlternate)
+        case .fnOption:
+            return !flags.contains(.maskSecondaryFn) || !flags.contains(.maskAlternate)
+        case .leftOption:
+            return !flags.contains(.maskAlternate)
+        case .leftCommand:
+            return !flags.contains(.maskCommand)
         }
     }
 }
@@ -518,9 +622,15 @@ final class Settings {
         static let ollamaModel = "lf.ollamaModel"
         static let openaiModel = "lf.openaiModel"
         static let openaiBaseURL = "lf.openaiBaseURL"
+        static let cloudOCRModel = "lf.cloudOCRModel"
         static let ttsBackend = "lf.ttsBackend"
         static let speechVoiceIdentifier = "lf.speechVoiceIdentifier"
         static let speechRate = "lf.speechRate"
+        static let cloudTTSBaseURL = "lf.cloudTTSBaseURL"
+        static let cloudTTSModel = "lf.cloudTTSModel"
+        static let cloudTTSVoice = "lf.cloudTTSVoice"
+        static let cloudTTSSpeed = "lf.cloudTTSSpeed"
+        static let cloudTTSInstructions = "lf.cloudTTSInstructions"
         static let omniVoiceLanguage = "lf.omniVoiceLanguage"
         static let omniVoiceGender = "lf.omniVoiceGender"
         static let omniVoiceAge = "lf.omniVoiceAge"
@@ -545,6 +655,9 @@ final class Settings {
         static let readSelectionHotkeyPreset = "lf.readSelectionHotkeyPreset"
         static let readSelectionHotkeyCustom = "lf.readSelectionHotkeyCustom"
         static let microphoneDeviceID = "lf.microphoneDeviceID"
+        static let dictationTranscriptionBackend = "lf.dictationTranscriptionBackend"
+        static let cloudSTTBaseURL = "lf.cloudSTTBaseURL"
+        static let cloudSTTModel = "lf.cloudSTTModel"
         static let whisperModelPath = "lf.whisperModelPath"
         static let whisperLanguage = "lf.whisperLanguage"
         static let dictationPushToTalkEnabled = "lf.dictationPushToTalkEnabled"
@@ -641,6 +754,57 @@ final class Settings {
     var speechRate: Double {
         get { defaults.object(forKey: Keys.speechRate) as? Double ?? 190 }
         set { defaults.set(newValue, forKey: Keys.speechRate) }
+    }
+
+    /// OpenAI-compatible TTS endpoint. OpenRouter is the default because
+    /// it lets the user switch between OpenAI, Gemini, Grok, Voxtral, and
+    /// other speech models with one BYOK token.
+    var cloudTTSBaseURL: String {
+        get {
+            let raw = defaults.string(forKey: Keys.cloudTTSBaseURL)?.trimmingCharacters(in: .whitespaces)
+            return (raw?.isEmpty == false) ? raw! : "https://openrouter.ai/api/v1"
+        }
+        set {
+            var trimmed = newValue.trimmingCharacters(in: .whitespaces)
+            while trimmed.hasSuffix("/") { trimmed.removeLast() }
+            defaults.set(trimmed, forKey: Keys.cloudTTSBaseURL)
+        }
+    }
+
+    /// Default is the cost-efficient, OpenAI-compatible model that
+    /// OpenRouter documents for `/audio/speech`. Users can switch to
+    /// `google/gemini-3.1-flash-tts-preview` or another speech model
+    /// from Preferences when they want higher multilingual/style range.
+    var cloudTTSModel: String {
+        get {
+            let raw = defaults.string(forKey: Keys.cloudTTSModel)?.trimmingCharacters(in: .whitespaces)
+            return (raw?.isEmpty == false) ? raw! : "openai/gpt-4o-mini-tts-2025-12-15"
+        }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+            defaults.set(trimmed, forKey: Keys.cloudTTSModel)
+        }
+    }
+
+    var cloudTTSVoice: String {
+        get {
+            let raw = defaults.string(forKey: Keys.cloudTTSVoice)?.trimmingCharacters(in: .whitespaces)
+            return (raw?.isEmpty == false) ? raw! : "nova"
+        }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+            defaults.set(trimmed, forKey: Keys.cloudTTSVoice)
+        }
+    }
+
+    var cloudTTSSpeed: Double {
+        get { defaults.object(forKey: Keys.cloudTTSSpeed) as? Double ?? 1.0 }
+        set { defaults.set(newValue, forKey: Keys.cloudTTSSpeed) }
+    }
+
+    var cloudTTSInstructions: String {
+        get { defaults.string(forKey: Keys.cloudTTSInstructions) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.cloudTTSInstructions) }
     }
 
     var omniVoiceLanguage: OmniVoiceLanguage {
@@ -810,6 +974,47 @@ final class Settings {
         set { defaults.set(newValue, forKey: Keys.microphoneDeviceID) }
     }
 
+    var dictationTranscriptionBackend: DictationTranscriptionBackend {
+        get {
+            guard let raw = defaults.string(forKey: Keys.dictationTranscriptionBackend),
+                  let value = DictationTranscriptionBackend(rawValue: raw)
+            else { return .localWhisper }
+            return value
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.dictationTranscriptionBackend) }
+    }
+
+    var cloudSTTBaseURL: String {
+        get {
+            let raw = defaults.string(forKey: Keys.cloudSTTBaseURL)?.trimmingCharacters(in: .whitespaces)
+            return (raw?.isEmpty == false) ? raw! : "https://openrouter.ai/api/v1"
+        }
+        set {
+            var trimmed = newValue.trimmingCharacters(in: .whitespaces)
+            while trimmed.hasSuffix("/") { trimmed.removeLast() }
+            defaults.set(trimmed, forKey: Keys.cloudSTTBaseURL)
+        }
+    }
+
+    /// Best default for LangFlip dictation right now: fast, cheap, robust
+    /// automatic speech recognition with broad multilingual coverage.
+    var cloudSTTModel: String {
+        get {
+            let raw = defaults.string(forKey: Keys.cloudSTTModel)?.trimmingCharacters(in: .whitespaces)
+            guard let raw, !raw.isEmpty else { return "nvidia/parakeet-tdt-0.6b-v3" }
+            switch raw {
+            case "openai/whisper-1", "openai/gpt-4o-mini-transcribe", "openai/whisper-large-v3":
+                return "nvidia/parakeet-tdt-0.6b-v3"
+            default:
+                return raw
+            }
+        }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+            defaults.set(trimmed, forKey: Keys.cloudSTTModel)
+        }
+    }
+
     var whisperModelPath: String {
         get { defaults.string(forKey: Keys.whisperModelPath) ?? "" }
         set { defaults.set(newValue, forKey: Keys.whisperModelPath) }
@@ -844,7 +1049,7 @@ final class Settings {
         get {
             guard let raw = defaults.string(forKey: Keys.dictationHandsFreeShortcut),
                   let shortcut = DictationHandsFreeShortcut(rawValue: raw)
-            else { return .commandShift }
+            else { return .fnOption }
             return shortcut
         }
         set { defaults.set(newValue.rawValue, forKey: Keys.dictationHandsFreeShortcut) }
@@ -1027,6 +1232,21 @@ final class Settings {
             var trimmed = newValue.trimmingCharacters(in: .whitespaces)
             while trimmed.hasSuffix("/") { trimmed.removeLast() }
             defaults.set(trimmed, forKey: Keys.openaiBaseURL)
+        }
+    }
+
+    /// Separate vision-capable model for screenshot text extraction.
+    /// Keeping OCR separate from the text-fix model lets users run a
+    /// tiny cheap proofreader while sending images to a faster vision
+    /// model only when they explicitly capture a screen region.
+    var cloudOCRModel: String {
+        get {
+            let raw = defaults.string(forKey: Keys.cloudOCRModel)?.trimmingCharacters(in: .whitespaces)
+            return (raw?.isEmpty == false) ? raw! : "google/gemini-3.1-flash-lite"
+        }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+            defaults.set(trimmed, forKey: Keys.cloudOCRModel)
         }
     }
 

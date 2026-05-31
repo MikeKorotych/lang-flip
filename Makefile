@@ -34,7 +34,7 @@ NOTARY_PROFILE := lang-flip-notarize
 
 ENTITLEMENTS := Resources/lang-flip.entitlements
 
-.PHONY: all build app clean run install dev dicts icon \
+.PHONY: all build app clean run install dev dicts icon plan \
         reset-onboarding reset-onboarding-fresh reset-onboarding-empty \
         run-onboarding run-onboarding-empty \
         sign dmg notarize-app notarize-dmg staple staple-app release version \
@@ -54,6 +54,9 @@ dicts:
 # at Resources/lang-flip-logo.png. Run after replacing the master.
 icon:
 	./Scripts/build-icon.sh
+
+plan:
+	@open docs/plan.html
 
 # ─── Dev reset helpers ────────────────────────────────────────────
 

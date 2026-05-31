@@ -1,0 +1,2417 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>LangFlip — Plan & Architecture</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@300..700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-0: #08090a;
+        --bg-1: #0c0d0f;
+        --bg-2: #131418;
+        --bg-3: #1a1b20;
+        --border-1: #1d1e23;
+        --border-2: #2a2c32;
+        --text-1: #ededee;
+        --text-2: #9a9ba1;
+        --text-3: #6a6b71;
+        --text-4: #45464a;
+        --accent-green: #8fd4a8;
+        --accent-blue: #9eb7ff;
+        --accent-gold: #f0ca7a;
+        --accent-red: #ee8f8f;
+        --accent-cyan: #8bd7e8;
+        --sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        background: var(--bg-0);
+        color: var(--text-1);
+      }
+
+      body {
+        min-height: 100vh;
+        font-family: var(--sans);
+        font-size: 14px;
+        font-weight: 400;
+        line-height: 1.55;
+        letter-spacing: -0.005em;
+        font-feature-settings: "ss01", "cv11";
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      .wrap {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 56px 56px 120px;
+      }
+
+      .masthead {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 32px;
+        align-items: end;
+        padding-bottom: 40px;
+        border-bottom: 1px solid var(--border-1);
+        animation: rise 0.5s 0.05s both;
+      }
+
+      .mast-left {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .badge {
+        display: inline-block;
+        width: max-content;
+        padding: 4px 10px;
+        border: 1px solid var(--border-2);
+        border-radius: 4px;
+        background: var(--bg-1);
+        color: var(--text-2);
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+      }
+
+      .title {
+        color: var(--text-1);
+        font-size: clamp(40px, 5.5vw, 68px);
+        font-weight: 500;
+        line-height: 1;
+        letter-spacing: -0.045em;
+      }
+
+      .title em {
+        color: var(--text-2);
+        font-style: normal;
+        font-weight: 300;
+      }
+
+      .deck {
+        max-width: 680px;
+        color: var(--text-2);
+        font-size: 16px;
+        line-height: 1.55;
+      }
+
+      .mast-right {
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 11px;
+        line-height: 1.85;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .mast-right strong {
+        color: var(--text-2);
+        font-weight: 500;
+      }
+
+      .meta-row {
+        display: flex;
+        gap: 18px;
+        justify-content: flex-end;
+      }
+
+      .tabs {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        display: flex;
+        margin-right: -56px;
+        margin-left: -56px;
+        padding: 0 56px;
+        overflow-x: auto;
+        border-bottom: 1px solid var(--border-1);
+        background: color-mix(in srgb, var(--bg-0) 92%, transparent);
+        backdrop-filter: blur(16px);
+        animation: rise 0.5s 0.12s both;
+        scrollbar-color: var(--border-2) transparent;
+        scrollbar-width: thin;
+      }
+
+      .tab {
+        position: relative;
+        padding: 18px 16px 16px;
+        border: 0;
+        background: transparent;
+        color: var(--text-3);
+        font-family: var(--sans);
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: -0.005em;
+        cursor: pointer;
+        transition: color 0.15s;
+        appearance: none;
+        white-space: nowrap;
+      }
+
+      .tab:hover,
+      .tab[aria-selected="true"] {
+        color: var(--text-1);
+      }
+
+      .tab[aria-selected="true"]::after {
+        content: "";
+        position: absolute;
+        right: 16px;
+        bottom: -1px;
+        left: 16px;
+        height: 1.5px;
+        background: var(--text-1);
+      }
+
+      .tab .n {
+        margin-right: 8px;
+        color: var(--text-4);
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 400;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .tab[aria-selected="true"] .n {
+        color: var(--text-2);
+      }
+
+      .panel {
+        display: none;
+        padding: 56px 0 0;
+      }
+
+      .panel[aria-hidden="false"] {
+        display: block;
+        animation: rise 0.4s both;
+      }
+
+      .eyebrow {
+        margin-bottom: 14px;
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow .dot {
+        color: var(--text-2);
+      }
+
+      h2.section {
+        max-width: 820px;
+        margin-bottom: 22px;
+        color: var(--text-1);
+        font-size: clamp(30px, 4vw, 48px);
+        font-weight: 500;
+        line-height: 1.06;
+        letter-spacing: -0.04em;
+      }
+
+      h2.section em {
+        color: var(--text-2);
+        font-style: normal;
+        font-weight: 300;
+      }
+
+      h3.sub {
+        margin: 52px 0 14px;
+        color: var(--text-1);
+        font-size: 21px;
+        font-weight: 500;
+        letter-spacing: -0.025em;
+      }
+
+      p,
+      li {
+        color: var(--text-2);
+      }
+
+      p {
+        max-width: 760px;
+        margin-bottom: 16px;
+      }
+
+      p.lead {
+        max-width: 880px;
+        margin-bottom: 22px;
+        color: var(--text-2);
+        font-size: 18px;
+        line-height: 1.62;
+      }
+
+      strong {
+        color: var(--text-1);
+        font-weight: 500;
+      }
+
+      code,
+      .mono-inline {
+        padding: 1px 5px;
+        border: 1px solid var(--border-1);
+        border-radius: 4px;
+        background: var(--bg-1);
+        color: var(--text-1);
+        font-family: var(--mono);
+        font-size: 0.92em;
+      }
+
+      .grid-2,
+      .grid-3,
+      .grid-4 {
+        display: grid;
+        gap: 12px;
+      }
+
+      .grid-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .grid-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .grid-4 {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .card,
+      .metric,
+      .decision,
+      .release,
+      .retro-day {
+        position: relative;
+        min-width: 0;
+        padding: 18px;
+        border: 1px solid var(--border-1);
+        border-radius: 6px;
+        background: var(--bg-1);
+        transition:
+          border-color 0.15s,
+          background 0.15s,
+          transform 0.15s;
+      }
+
+      .card:hover,
+      .metric:hover,
+      .decision:hover,
+      .release:hover {
+        border-color: var(--border-2);
+        background: var(--bg-2);
+      }
+
+      .card.is-mvp::before,
+      .card.is-live::before,
+      .card.is-risk::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        left: 0;
+        height: 2px;
+        border-radius: 6px 6px 0 0;
+      }
+
+      .card.is-mvp::before {
+        background: var(--accent-green);
+      }
+
+      .card.is-live::before {
+        background: var(--accent-blue);
+      }
+
+      .card.is-risk::before {
+        background: var(--accent-red);
+      }
+
+      .label,
+      .d-label {
+        margin-bottom: 8px;
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .title-md,
+      .d-value,
+      .release-title {
+        margin-bottom: 8px;
+        color: var(--text-1);
+        font-size: 17px;
+        font-weight: 500;
+        line-height: 1.22;
+        letter-spacing: -0.02em;
+      }
+
+      .desc,
+      .d-rationale,
+      .release-body {
+        color: var(--text-2);
+        font-size: 13.5px;
+        line-height: 1.55;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0;
+        margin: 36px 0 12px;
+        border-top: 1px solid var(--border-1);
+        border-bottom: 1px solid var(--border-1);
+      }
+
+      .metric {
+        border-width: 0 1px 0 0;
+        border-radius: 0;
+        background: transparent;
+      }
+
+      .metric:last-child {
+        border-right: 0;
+      }
+
+      .metric .num {
+        color: var(--text-1);
+        font-family: var(--mono);
+        font-size: 28px;
+        font-weight: 500;
+        line-height: 1;
+      }
+
+      .metric .num small {
+        margin-left: 4px;
+        color: var(--text-3);
+        font-size: 12px;
+        font-weight: 400;
+      }
+
+      .metric .label {
+        margin: 12px 0 6px;
+      }
+
+      .pullquote {
+        max-width: 880px;
+        margin: 44px 0 0;
+        padding: 24px 0 0;
+        border-top: 1px solid var(--border-1);
+        color: var(--text-1);
+        font-size: 20px;
+        font-weight: 300;
+        line-height: 1.55;
+        letter-spacing: -0.025em;
+      }
+
+      .arch-frame,
+      .flow-frame {
+        margin: 32px 0 40px;
+        overflow: hidden;
+        border: 1px solid var(--border-1);
+        border-radius: 6px;
+        background: var(--bg-1);
+      }
+
+      .arch-toolbar,
+      .flow-toolbar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border-1);
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+
+      .controls,
+      .flow-controls {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .arch-btn,
+      .flow-btn,
+      .phase-detail-toggle {
+        border: 1px solid var(--border-2);
+        border-radius: 4px;
+        background: var(--bg-2);
+        color: var(--text-2);
+        font-family: var(--mono);
+        font-size: 11px;
+        cursor: pointer;
+        transition:
+          color 0.15s,
+          border-color 0.15s,
+          background 0.15s;
+      }
+
+      .arch-btn,
+      .flow-btn {
+        min-width: 34px;
+        height: 28px;
+        padding: 0 9px;
+      }
+
+      .arch-btn:hover,
+      .flow-btn:hover,
+      .phase-detail-toggle:hover {
+        border-color: var(--text-4);
+        background: var(--bg-3);
+        color: var(--text-1);
+      }
+
+      .zoom-readout,
+      .flow-counter {
+        min-width: 52px;
+        color: var(--text-2);
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+
+      svg.arch,
+      svg.flow {
+        display: block;
+        width: 100%;
+        height: 560px;
+        background:
+          radial-gradient(circle at 1px 1px, #25272c 1px, transparent 0) 0 0 / 24px 24px,
+          var(--bg-0);
+        cursor: grab;
+        user-select: none;
+      }
+
+      svg.arch.is-panning {
+        cursor: grabbing;
+      }
+
+      .node,
+      .flow-node {
+        cursor: move;
+      }
+
+      .node-bg,
+      .flow-node-bg {
+        fill: var(--bg-2);
+        stroke: var(--border-2);
+        stroke-width: 1;
+        rx: 4;
+      }
+
+      .node.is-external .node-bg {
+        fill: #11151a;
+      }
+
+      .node.is-highlighted .node-bg,
+      .node.is-dragging .node-bg,
+      .flow-node.is-flow-active .flow-node-bg {
+        stroke: var(--text-1);
+        stroke-width: 1.5;
+      }
+
+      .node-tag,
+      .flow-tag {
+        fill: var(--text-3);
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.04em;
+      }
+
+      .node-title,
+      .flow-title {
+        fill: var(--text-1);
+        font-family: var(--sans);
+        font-size: 17px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+
+      .node-meta,
+      .flow-meta {
+        fill: var(--text-2);
+        font-family: var(--sans);
+        font-size: 12px;
+      }
+
+      .edge,
+      .flow-edge {
+        fill: none;
+        stroke: #3a3d45;
+        stroke-width: 1.2;
+        marker-end: url(#arrow);
+      }
+
+      .edge-label {
+        fill: var(--text-3);
+        font-family: var(--mono);
+        font-size: 10px;
+      }
+
+      .flow-edge.is-flow-active {
+        stroke: var(--accent-green);
+        stroke-width: 2;
+      }
+
+      .arch-caption,
+      .flow-caption {
+        padding: 14px 16px;
+        border-top: 1px solid var(--border-1);
+        color: var(--text-3);
+        font-size: 13px;
+      }
+
+      .seq-tabs {
+        display: flex;
+        gap: 0;
+        margin: 18px 0 0;
+        border-bottom: 1px solid var(--border-1);
+      }
+
+      .seq-tab {
+        position: relative;
+        padding: 14px 16px 13px;
+        border: 0;
+        background: transparent;
+        color: var(--text-3);
+        font-family: var(--sans);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+
+      .seq-tab.is-active {
+        color: var(--text-1);
+      }
+
+      .seq-tab.is-active::after {
+        content: "";
+        position: absolute;
+        right: 16px;
+        bottom: -1px;
+        left: 16px;
+        height: 1.5px;
+        background: var(--text-1);
+      }
+
+      .sequence {
+        list-style: none;
+        margin: 0;
+      }
+
+      .sequence[data-active="first-run"] .seq-step[data-flow="daily"],
+      .sequence[data-active="daily"] .seq-step[data-flow="first-run"] {
+        display: none;
+      }
+
+      .seq-step {
+        display: grid;
+        grid-template-columns: 56px 1fr;
+        gap: 16px;
+        padding: 18px 0;
+        border-bottom: 1px solid var(--border-1);
+      }
+
+      .seq-n {
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+
+      .seq-title {
+        color: var(--text-1);
+        font-size: 16px;
+        font-weight: 500;
+      }
+
+      .seq-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 8px 0;
+      }
+
+      .seq-pill,
+      .mark {
+        display: inline-flex;
+        align-items: center;
+        width: max-content;
+        padding: 3px 7px;
+        border: 1px solid var(--border-1);
+        border-radius: 4px;
+        background: var(--bg-1);
+        color: var(--text-2);
+        font-family: var(--mono);
+        font-size: 10.5px;
+      }
+
+      .mark.good {
+        color: var(--accent-green);
+      }
+
+      .mark.warn {
+        color: var(--accent-gold);
+      }
+
+      .mark.bad {
+        color: var(--accent-red);
+      }
+
+      .seq-desc {
+        max-width: 820px;
+        color: var(--text-2);
+        font-size: 13.5px;
+      }
+
+      .compare-table {
+        width: 100%;
+        margin-top: 20px;
+        border-collapse: collapse;
+        border: 1px solid var(--border-1);
+        font-size: 13px;
+      }
+
+      .compare-table th,
+      .compare-table td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border-1);
+        border-right: 1px solid var(--border-1);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .compare-table th {
+        color: var(--text-1);
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .compare-table td {
+        color: var(--text-2);
+      }
+
+      .compare-table td:first-child {
+        color: var(--text-1);
+        font-weight: 500;
+      }
+
+      .phases {
+        margin-top: 22px;
+        border-top: 1px solid var(--border-1);
+      }
+
+      .phase {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 28px;
+        padding: 28px 0;
+        border-bottom: 1px solid var(--border-1);
+      }
+
+      .phase-meta {
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+
+      .phase-num {
+        margin-bottom: 10px;
+        color: var(--text-1);
+        font-size: 30px;
+        line-height: 1;
+      }
+
+      .phase-tag {
+        display: inline-block;
+        padding: 3px 7px;
+        border: 1px solid var(--border-2);
+        border-radius: 4px;
+        color: var(--text-2);
+      }
+
+      .phase h3 {
+        margin-bottom: 8px;
+        color: var(--text-1);
+        font-size: 22px;
+        font-weight: 500;
+        letter-spacing: -0.025em;
+      }
+
+      .phase .summary {
+        max-width: 850px;
+        margin-bottom: 18px;
+      }
+
+      .deliverables {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .deliv-col h5 {
+        margin-bottom: 8px;
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .deliv-col ul,
+      .retro-block ul {
+        list-style: none;
+      }
+
+      .deliv-col li,
+      .retro-block li {
+        position: relative;
+        margin-bottom: 6px;
+        padding-left: 14px;
+        color: var(--text-2);
+        font-size: 13.5px;
+      }
+
+      .deliv-col li::before,
+      .retro-block li::before {
+        content: "";
+        position: absolute;
+        top: 0.72em;
+        left: 0;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--text-4);
+      }
+
+      .phase-detail {
+        margin-top: 16px;
+      }
+
+      .phase-detail-toggle {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px;
+        text-align: left;
+      }
+
+      .phase-detail-body {
+        display: none;
+        padding: 14px 12px 0;
+      }
+
+      .phase-detail[data-expanded="true"] .phase-detail-body {
+        display: block;
+      }
+
+      .phase-detail[data-expanded="true"] .chevron {
+        transform: rotate(90deg);
+      }
+
+      .chevron {
+        display: inline-block;
+        transition: transform 0.15s;
+      }
+
+      .flow-stage {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+        gap: 0;
+      }
+
+      svg.flow {
+        height: 460px;
+        border-right: 1px solid var(--border-1);
+        cursor: default;
+      }
+
+      .flow-caption {
+        display: flex;
+        min-height: 460px;
+        flex-direction: column;
+        justify-content: center;
+        border-top: 0;
+      }
+
+      .flow-caption-num {
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+
+      .flow-caption-title {
+        margin: 12px 0;
+        color: var(--text-1);
+        font-size: 24px;
+        font-weight: 500;
+        line-height: 1.15;
+        letter-spacing: -0.03em;
+      }
+
+      .flow-caption-text {
+        max-width: 42ch;
+        color: var(--text-2);
+      }
+
+      .flow-steplist {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 6px;
+        margin-top: 22px;
+        list-style: none;
+      }
+
+      .flow-step-pill {
+        padding: 8px 4px;
+        border: 1px solid var(--border-1);
+        border-radius: 3px;
+        background: var(--bg-1);
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.04em;
+        text-align: center;
+        cursor: pointer;
+      }
+
+      .flow-step-pill.is-current {
+        border-color: var(--text-1);
+        background: var(--text-1);
+        color: var(--bg-0);
+        font-weight: 600;
+      }
+
+      .decision,
+      .release,
+      .retro-day {
+        margin-bottom: 10px;
+      }
+
+      .release {
+        display: grid;
+        grid-template-columns: 110px 1fr auto;
+        gap: 18px;
+        align-items: start;
+      }
+
+      .release-version {
+        color: var(--text-1);
+        font-family: var(--mono);
+        font-size: 15px;
+      }
+
+      .release-date {
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+
+      .retro-day-head {
+        display: flex;
+        gap: 12px;
+        align-items: baseline;
+        margin-bottom: 12px;
+      }
+
+      .retro-day-head .date {
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+
+      .retro-day-head .title {
+        color: var(--text-1);
+        font-size: 18px;
+        font-weight: 500;
+      }
+
+      .footer {
+        margin-top: 72px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border-1);
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-width: 980px) {
+        .wrap {
+          padding: 34px 22px 80px;
+        }
+
+        .masthead {
+          grid-template-columns: 1fr;
+        }
+
+        .mast-right {
+          text-align: left;
+        }
+
+        .meta-row {
+          justify-content: flex-start;
+        }
+
+        .tabs {
+          margin-right: -22px;
+          margin-left: -22px;
+          padding: 0 22px;
+        }
+
+        .grid-2,
+        .grid-3,
+        .grid-4,
+        .metrics,
+        .deliverables,
+        .flow-stage {
+          grid-template-columns: 1fr;
+        }
+
+        .metric {
+          border-right: 0;
+          border-bottom: 1px solid var(--border-1);
+        }
+
+        .phase {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+
+        .release {
+          grid-template-columns: 1fr;
+        }
+
+        svg.arch,
+        svg.flow {
+          height: 430px;
+        }
+
+        svg.flow {
+          border-right: 0;
+          border-bottom: 1px solid var(--border-1);
+        }
+
+        .flow-caption {
+          min-height: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="masthead">
+        <div class="mast-left">
+          <span class="badge">Personal product · macOS writing assistant</span>
+          <h1 class="title">LangFlip<br /><em>Plan</em></h1>
+          <p class="deck">
+            Живой план, архитектурная карта и летопись решений для macOS menu-bar
+            ассистента, который исправляет раскладку, чистит текст, переводит,
+            читает с экрана и постепенно обрастает локальным voice layer.
+          </p>
+        </div>
+        <aside class="mast-right">
+          <div class="meta-row"><span><strong>Owner</strong></span><span>Mike Korotych</span></div>
+          <div class="meta-row"><span><strong>Platform</strong></span><span>macOS 13+ · Swift 5.9</span></div>
+          <div class="meta-row"><span><strong>Status</strong></span><span>Daily-use RC · 2026-05-31</span></div>
+          <div class="meta-row"><span><strong>Current</strong></span><span>0.2.9 cloud speech and AI providers</span></div>
+          <div class="meta-row"><span><strong>Build</strong></span><span>SwiftPM · Makefile · Sparkle</span></div>
+          <div class="meta-row"><span><strong>Doctrine</strong></span><span>Local-first · explicit intent · no surprise network</span></div>
+        </aside>
+      </header>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab" role="tab" aria-selected="true" data-tab="overview">
+          <span class="n">01</span>Overview
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="architecture">
+          <span class="n">02</span>Architecture
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="product">
+          <span class="n">03</span>Product
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="plan">
+          <span class="n">04</span>Plan
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="stack">
+          <span class="n">05</span>Stack
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="backlog">
+          <span class="n">06</span>Backlog
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="decisions">
+          <span class="n">07</span>Decisions
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="release">
+          <span class="n">08</span>Release
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="voice">
+          <span class="n">09</span>AI & Voice
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="retro">
+          <span class="n">10</span>Chronicle
+        </button>
+      </nav>
+
+      <section class="panel" id="overview" role="tabpanel" aria-hidden="false">
+        <div class="eyebrow"><span class="dot">●</span> 01 · Vision</div>
+        <h2 class="section">Что мы <em>строим</em> и почему это должно ощущаться магически</h2>
+
+        <p class="lead">
+          LangFlip снимает самый раздражающий налог с людей, которые весь день живут между
+          английским, украинским и русским: неправильная раскладка, мелкие ошибки,
+          перевод выделенного текста, текст с картинки и быстрые локальные AI-исправления.
+        </p>
+
+        <p>
+          Продуктовая формула простая: <strong>исправлять там, где уверенность высокая</strong>,
+          просить явное действие там, где риск выше, и всегда оставаться локальным по умолчанию.
+          Авто-флип работает на правилах и словарях, AI включается только когда пользователь
+          настроил Ollama, OpenAI-compatible endpoint или Apple Foundation Models.
+        </p>
+
+        <div class="metrics">
+          <div class="metric">
+            <div class="num">3<small>langs</small></div>
+            <div class="label">Core languages</div>
+            <div class="desc">English, Ukrainian, Russian из коробки, с расширяемыми словарями.</div>
+          </div>
+          <div class="metric">
+            <div class="num">0<small>server</small></div>
+            <div class="label">Local-first core</div>
+            <div class="desc">Раскладка, словари, правила и обучение Backspace живут на машине.</div>
+          </div>
+          <div class="metric">
+            <div class="num">5<small>hotkeys</small></div>
+            <div class="label">Daily gestures</div>
+            <div class="desc">Shift, double Shift, triple Shift, Shift+Space, Shift+Command+S.</div>
+          </div>
+          <div class="metric">
+            <div class="num">0.2.9<small>rc</small></div>
+            <div class="label">Current release</div>
+            <div class="desc">Стабилизация double/triple Shift в сложных редакторах и чатах.</div>
+          </div>
+        </div>
+
+        <h3 class="sub">MVP сейчас означает</h3>
+        <div class="grid-4">
+          <div class="card is-mvp">
+            <div class="label">Typing</div>
+            <div class="title-md">Auto-flip with guardrails</div>
+            <div class="desc">
+              Словари, confidence scoring, парольный фильтр, блоклист рискованных приложений,
+              rollback через Backspace.
+            </div>
+          </div>
+          <div class="card is-mvp">
+            <div class="label">Selection</div>
+            <div class="title-md">Manual flip and cleanup</div>
+            <div class="desc">
+              Выделенный текст конвертируется через Cmd+C/Cmd+V с восстановлением pasteboard.
+              Single Shift запускает AI cleanup.
+            </div>
+          </div>
+          <div class="card is-mvp">
+            <div class="label">Onboarding</div>
+            <div class="title-md">Permission-first start</div>
+            <div class="desc">
+              Пользователь проходит Accessibility, Input Monitoring, словари, Qwen setup и
+              быстрые тесты прямо в первом запуске.
+            </div>
+          </div>
+          <div class="card is-mvp">
+            <div class="label">Privacy</div>
+            <div class="title-md">No silent cloud</div>
+            <div class="desc">
+              Ollama локально, ключи в Keychain, облачные провайдеры только после явной настройки.
+            </div>
+          </div>
+        </div>
+
+        <h3 class="sub">Северная звезда</h3>
+        <p class="pullquote">
+          LangFlip должен быть тем самым маленьким menu-bar приложением, которое не просит
+          внимания, но каждый день возвращает пользователю десятки микросекунд концентрации.
+        </p>
+      </section>
+
+      <section class="panel" id="architecture" role="tabpanel" aria-hidden="true">
+        <div class="eyebrow"><span class="dot">●</span> 02 · System Architecture</div>
+        <h2 class="section">Компоненты, события и <em>границы ответственности</em></h2>
+
+        <p class="lead">
+          Архитектура держится на одном главном loop: EventTap видит явные жесты или завершение
+          слова, принимает решение через локальные политики, затем аккуратно пишет обратно в
+          активное приложение синтетическими клавишами.
+        </p>
+
+        <div class="arch-frame" id="arch-frame">
+          <div class="arch-toolbar">
+            <div class="hint">drag nodes · pan canvas · hover steps below to highlight</div>
+            <div class="controls">
+              <button class="arch-btn" data-action="zoom-out" title="Zoom out">−</button>
+              <span class="zoom-readout" id="zoom-readout">100%</span>
+              <button class="arch-btn" data-action="zoom-in" title="Zoom in">+</button>
+              <button class="arch-btn" data-action="fit" title="Fit to view">fit</button>
+              <button class="arch-btn" data-action="reset" title="Reset positions">reset</button>
+            </div>
+          </div>
+          <svg class="arch" id="arch-svg" viewBox="0 0 1160 560" role="img" aria-label="LangFlip architecture map">
+            <defs>
+              <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L0,6 L9,3 z" fill="#3a3d45"></path>
+              </marker>
+            </defs>
+            <g class="canvas" id="arch-canvas">
+              <g class="edges" id="arch-edges"></g>
+              <g class="edge-labels" id="arch-edge-labels"></g>
+              <g class="nodes" id="arch-nodes">
+                <g class="node is-external" data-id="macos" data-x="40" data-y="52" data-w="260" data-h="122">
+                  <rect class="node-bg" width="260" height="122"></rect>
+                  <text class="node-tag" x="16" y="23">▸ system boundary</text>
+                  <text class="node-title" x="16" y="45">MACOS</text>
+                  <text class="node-meta" x="16" y="67">CGEventTap · TIS input sources</text>
+                  <text class="node-meta" x="16" y="85">Accessibility · Input Monitoring</text>
+                  <text class="node-meta" x="16" y="103">Screen Recording · Microphone</text>
+                </g>
+                <g class="node" data-id="app" data-x="390" data-y="36" data-w="320" data-h="154">
+                  <rect class="node-bg" width="320" height="154"></rect>
+                  <text class="node-tag" x="16" y="23">▸ process root</text>
+                  <text class="node-title" x="16" y="45">APP DELEGATE</text>
+                  <text class="node-meta" x="16" y="67">defers services until permissions</text>
+                  <text class="node-meta" x="16" y="85">starts EventTap and menubar</text>
+                  <text class="node-meta" x="16" y="103">warms selected AI assistant</text>
+                  <text class="node-meta" x="16" y="121">Sparkle updater lifetime owner</text>
+                </g>
+                <g class="node" data-id="tap" data-x="800" data-y="42" data-w="300" data-h="158">
+                  <rect class="node-bg" width="300" height="158"></rect>
+                  <text class="node-tag" x="16" y="23">▸ hot path</text>
+                  <text class="node-title" x="16" y="45">EVENT TAP</text>
+                  <text class="node-meta" x="16" y="67">Shift gesture state machine</text>
+                  <text class="node-meta" x="16" y="85">WordBuffer and boundary detection</text>
+                  <text class="node-meta" x="16" y="103">synthetic event magic stamp</text>
+                  <text class="node-meta" x="16" y="121">pasteboard selection workflows</text>
+                  <text class="node-meta" x="16" y="139">voice and OCR hotkeys</text>
+                </g>
+                <g class="node" data-id="policy" data-x="70" data-y="260" data-w="300" data-h="148">
+                  <rect class="node-bg" width="300" height="148"></rect>
+                  <text class="node-tag" x="16" y="23">▸ safety layer</text>
+                  <text class="node-title" x="16" y="45">CONTEXT POLICY</text>
+                  <text class="node-meta" x="16" y="67">AppContext blocklist and fullscreen</text>
+                  <text class="node-meta" x="16" y="85">password and entropy detector</text>
+                  <text class="node-meta" x="16" y="103">Settings toggles</text>
+                  <text class="node-meta" x="16" y="121">Backspace learned exceptions</text>
+                </g>
+                <g class="node" data-id="flip" data-x="430" data-y="258" data-w="320" data-h="168">
+                  <rect class="node-bg" width="320" height="168"></rect>
+                  <text class="node-tag" x="16" y="23">▸ local intelligence</text>
+                  <text class="node-title" x="16" y="45">LAYOUT ENGINE</text>
+                  <text class="node-meta" x="16" y="67">AutoFlip dictionary scoring</text>
+                  <text class="node-meta" x="16" y="85">CrossLayoutFix UK/RU swaps</text>
+                  <text class="node-meta" x="16" y="103">AlwaysFlip rules</text>
+                  <text class="node-meta" x="16" y="121">DictionaryManager install packs</text>
+                  <text class="node-meta" x="16" y="139">physical-key map conversion</text>
+                </g>
+                <g class="node is-external" data-id="ai" data-x="820" data-y="284" data-w="280" data-h="140">
+                  <rect class="node-bg" width="280" height="140"></rect>
+                  <text class="node-tag" x="16" y="23">▸ optional provider</text>
+                  <text class="node-title" x="16" y="45">AI ASSISTANT</text>
+                  <text class="node-meta" x="16" y="67">Ollama Qwen 3.5 local</text>
+                  <text class="node-meta" x="16" y="85">OpenAI-compatible endpoint</text>
+                  <text class="node-meta" x="16" y="103">Apple Foundation Models</text>
+                  <text class="node-meta" x="16" y="121">Noop when unavailable</text>
+                </g>
+                <g class="node" data-id="ui" data-x="260" data-y="462" data-w="300" data-h="90">
+                  <rect class="node-bg" width="300" height="90"></rect>
+                  <text class="node-tag" x="16" y="23">▸ user surfaces</text>
+                  <text class="node-title" x="16" y="45">MENUBAR / PREFS / ONBOARDING</text>
+                  <text class="node-meta" x="16" y="67">SwiftUI windows with NSWindow control</text>
+                </g>
+                <g class="node" data-id="storage" data-x="660" data-y="466" data-w="260" data-h="86">
+                  <rect class="node-bg" width="260" height="86"></rect>
+                  <text class="node-tag" x="16" y="23">▸ local state</text>
+                  <text class="node-title" x="16" y="45">USER DEFAULTS / KEYCHAIN</text>
+                  <text class="node-meta" x="16" y="67">settings, rules, keys, exceptions</text>
+                </g>
+              </g>
+            </g>
+          </svg>
+          <div class="arch-caption">
+            <b>Правило карты:</b> EventTap остается тонким диспетчером. Решения про риск, язык,
+            AI readiness и пользовательские исключения живут в отдельных компонентах.
+          </div>
+        </div>
+
+        <h3 class="sub">Две основные последовательности</h3>
+        <div class="seq-tabs">
+          <button class="seq-tab is-active" data-seq="first-run">First run</button>
+          <button class="seq-tab" data-seq="daily">Daily typing</button>
+        </div>
+        <ol class="sequence" data-active="first-run">
+          <li class="seq-step" data-flow="first-run" data-nodes="macos,app,ui">
+            <span class="seq-n">01</span>
+            <div>
+              <div class="seq-title">Launch without permission prompts racing the UI</div>
+              <div class="seq-pills"><span class="seq-pill">PermissionStatus</span><span class="seq-pill">OnboardingWindow</span></div>
+              <p class="seq-desc">AppDelegate reads permission state without prompt, shows onboarding, and starts services only after Continue.</p>
+            </div>
+          </li>
+          <li class="seq-step" data-flow="first-run" data-nodes="ui,flip,ai,storage">
+            <span class="seq-n">02</span>
+            <div>
+              <div class="seq-title">Setup checklist turns a raw app into a ready assistant</div>
+              <div class="seq-pills"><span class="seq-pill">dictionaries</span><span class="seq-pill">Qwen 3.5</span><span class="seq-pill">tests</span></div>
+              <p class="seq-desc">Пользователь ставит расширенные словари, выбирает локальный AI, проверяет grammar fix и screen text capture.</p>
+            </div>
+          </li>
+          <li class="seq-step" data-flow="daily" data-nodes="macos,tap,policy">
+            <span class="seq-n">01</span>
+            <div>
+              <div class="seq-title">Key event enters the hot path</div>
+              <div class="seq-pills"><span class="seq-pill">CGEventTap</span><span class="seq-pill">WordBuffer</span><span class="seq-pill">flagsChanged</span></div>
+              <p class="seq-desc">EventTap игнорирует свои synthetic events, проверяет enabled state, распознает Shift gestures и word boundaries.</p>
+            </div>
+          </li>
+          <li class="seq-step" data-flow="daily" data-nodes="policy,flip">
+            <span class="seq-n">02</span>
+            <div>
+              <div class="seq-title">Policy and dictionary scoring decide whether to act</div>
+              <div class="seq-pills"><span class="seq-pill">AppContext</span><span class="seq-pill">AutoFlip</span><span class="seq-pill">BackspaceLearner</span></div>
+              <p class="seq-desc">Авто-исправление молчит в рискованных местах, пропускает пароли и уважает выученные исключения.</p>
+            </div>
+          </li>
+          <li class="seq-step" data-flow="daily" data-nodes="tap,macos,storage">
+            <span class="seq-n">03</span>
+            <div>
+              <div class="seq-title">Rewrite lands in the focused app</div>
+              <div class="seq-pills"><span class="seq-pill">input source switch</span><span class="seq-pill">synthetic keys</span><span class="seq-pill">rollback watch</span></div>
+              <p class="seq-desc">После успешного flip приложение может переключить раскладку, показать feedback и поставить окно Backspace-learning.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="panel" id="product" role="tabpanel" aria-hidden="true">
+        <div class="eyebrow"><span class="dot">●</span> 03 · Product Surface</div>
+        <h2 class="section">Поведение, которое пользователь <em>должен запомнить телом</em></h2>
+
+        <div class="grid-3">
+          <div class="card is-live">
+            <div class="label">Single Shift</div>
+            <div class="title-md">AI cleanup</div>
+            <div class="desc">Исправляет выделенный текст или последнюю фразу без выделения, если AI provider готов.</div>
+          </div>
+          <div class="card is-live">
+            <div class="label">Double Shift</div>
+            <div class="title-md">Primary layout flip</div>
+            <div class="desc">Выделение или последний token. English по умолчанию уходит в Ukrainian, non-English в English.</div>
+          </div>
+          <div class="card is-live">
+            <div class="label">Triple Shift</div>
+            <div class="title-md">Secondary layout flip</div>
+            <div class="desc">Тот же ручной путь, но с secondary language. Сейчас дефолтно Russian.</div>
+          </div>
+          <div class="card is-live">
+            <div class="label">Shift + Space</div>
+            <div class="title-md">Translate to current layout</div>
+            <div class="desc">Переводит выделение в язык активной раскладки и съедает rogue space.</div>
+          </div>
+          <div class="card is-live">
+            <div class="label">Shift + Command + S</div>
+            <div class="title-md">Copy text from screenshot</div>
+            <div class="desc">Работает только с vision-capable Ollama model, чтобы не красть системные shortcuts зря.</div>
+          </div>
+          <div class="card is-live">
+            <div class="label">Both Shifts</div>
+            <div class="title-md">Pause / resume</div>
+            <div class="desc">Моментальный режим тишины для mixed-language текста или чувствительных контекстов.</div>
+          </div>
+        </div>
+
+        <h3 class="sub">Ожидаемое качество</h3>
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Сценарий</th>
+              <th>Должно происходить</th>
+              <th>Нельзя допустить</th>
+              <th>Текущий статус</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Обычная печать</td>
+              <td>Авто-флип только при clear dictionary win.</td>
+              <td>Ломать код, пароли, терминальные команды.</td>
+              <td><span class="mark good">guarded</span></td>
+            </tr>
+            <tr>
+              <td>Manual no-selection flip</td>
+              <td>Брать последний word/token даже в редакторах без нормального AX selection.</td>
+              <td>Конвертировать всю строку или дублировать текст.</td>
+              <td><span class="mark good">0.2.9 release</span></td>
+            </tr>
+            <tr>
+              <td>Local AI</td>
+              <td>Грамматика, перевод, screenshot text через Qwen 3.5.</td>
+              <td>Молчаливые сетевые вызовы и непонятные ошибки readiness.</td>
+              <td><span class="mark good">usable</span></td>
+            </tr>
+            <tr>
+              <td>Voice</td>
+              <td>Push-to-talk диктовка, затем cleanup и вставка.</td>
+              <td>Захватывать микрофон без явного включения.</td>
+              <td><span class="mark warn">experimental</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel" id="plan" role="tabpanel" aria-hidden="true">
+        <div class="eyebrow"><span class="dot">●</span> 04 · Execution Plan</div>
+        <h2 class="section">Следующие спринты <em>в порядке реального риска</em></h2>
+
+        <div class="phases">
+          <article class="phase">
+            <aside class="phase-meta">
+              <div class="phase-num">00</div>
+              <span class="phase-tag">same day</span>
+            </aside>
+            <div>
+              <h3>Current trunk cleanup</h3>
+              <p class="summary">Закрыть хвосты вокруг cloud speech, OCR и text-fix providers, затем подготовить стабильный релиз 0.2.9.</p>
+              <div class="deliverables">
+                <div class="deliv-col">
+                  <h5>Ship</h5>
+                  <ul>
+                    <li>Проверить новые built-in layout rules.</li>
+                    <li>Сверить README и changelog.</li>
+                    <li>Запустить daily build path.</li>
+                  </ul>
+                </div>
+                <div class="deliv-col">
+                  <h5>Verify</h5>
+                  <ul>
+                    <li><code>make dev</code> на установленном app bundle.</li>
+                    <li>Manual pass в Obsidian, Codex/Claude input, Notes.</li>
+                  </ul>
+                </div>
+                <div class="deliv-col">
+                  <h5>Risk</h5>
+                  <ul>
+                    <li>Регрессия no-selection selection fallback.</li>
+                    <li>Stale TCC state при запуске build copy.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="phase">
+            <aside class="phase-meta">
+              <div class="phase-num">01</div>
+              <span class="phase-tag">1-2 weeks</span>
+            </aside>
+            <div>
+              <h3>Smart heuristics core</h3>
+              <p class="summary">Сделать авто-флип достаточно умным, чтобы его можно было включать шире без страха за терминалы, пароли и mixed-language текст.</p>
+              <div class="deliverables">
+                <div class="deliv-col">
+                  <h5>Done / Mostly done</h5>
+                  <ul>
+                    <li>Backspace self-learning.</li>
+                    <li>Context blocklist and fullscreen suppression.</li>
+                    <li>Password entropy filter.</li>
+                  </ul>
+                </div>
+                <div class="deliv-col">
+                  <h5>Next</h5>
+                  <ul>
+                    <li>Double-caps polish across languages.</li>
+                    <li>Confidence logs for near misses.</li>
+                    <li>Sound feedback tuning.</li>
+                  </ul>
+                </div>
+                <div class="deliv-col">
+                  <h5>Definition</h5>
+                  <ul>
+                    <li>Можно держать app включенным весь день.</li>
+                    <li>Ошибки исправляются одним Backspace и не повторяются.</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="phase-detail" data-expanded="false">
+                <button class="phase-detail-toggle" aria-expanded="false">
+                  <span>Implementation notes</span><span class="chevron">›</span>
+                </button>
+                <div class="phase-detail-body">
+                  <p>
+                    Hot path нельзя утяжелять. Новые проверки должны кэшироваться как AppContext,
+                    а словарные lookup должны работать по snapshot sets без долгих locks.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="phase">
+            <aside class="phase-meta">
+              <div class="phase-num">02</div>
+              <span class="phase-tag">3-4 days</span>
+            </aside>
+            <div>
+              <h3>Reliability uplift</h3>
+              <p class="summary">Поднять качество словарей и сделать поведение предсказуемым после холодного старта.</p>
+              <div class="deliverables">
+                <div class="deliv-col">
+                  <h5>Inputs</h5>
+                  <ul>
+                    <li>FrequencyWords EN/UK/RU pack.</li>
+                    <li>Hunspell evaluation spike.</li>
+                    <li>Installed dictionaries reload without restart.</li>
+                  </ul>
+                </div>
+                <div class="deliv-col">
+                  <h5>Outputs</h5>
+                  <ul>
+                    <li>Better win-rate for real typing.</li>
+                    <li>Clear dictionary counts in Preferences.</li>
+                    <li>Safer default auto-flip decision.</li>
+                  </ul>
+                </div>
+                <div class="deliv-col">
+                  <h5>Tradeoff</h5>
+                  <ul>
+                    <li>Bigger lists improve recall but increase ambiguity.</li>
+                    <li>False positives must stay cheaper than false negatives.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="phase">
+            <aside class="phase-meta">
+              <div class="phase-num">03</div>
+              <span class="phase-tag">1 week</span>
+            </aside>
+            <div>
+              <h3>Distribution-ready UX</h3>
+              <p class="summary">Сделать приложение понятным для не-технического коллеги: icon, onboarding, preferences, launch at login, release packaging.</p>
+              <div class="deliverables">
+                <div class="deliv-col">
+                  <h5>Product</h5>
+                  <ul>
+                    <li>First-run wizard already exists, polish copy and edge states.</li>
+                    <li>Preferences are the control center.</li>
+                    <li>Menu stays only for quick actions.</li>
+                  </ul>
+                </div>
+                <div class="deliv-col">
+                  <h5>Release</h5>
+                  <ul>
+                    <li>Notarized DMG when Developer ID is present.</li>
+                    <li>Sparkle appcast and signing flow.</li>
+                    <li>Homebrew Cask after demand is clear.</li>
+                  </ul>
+                </div>
+                <div class="deliv-col">
+                  <h5>Acceptance</h5>
+                  <ul>
+                    <li>Install, grant permissions, type, understand hotkeys.</li>
+                    <li>No terminal required for normal usage.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="phase">
+            <aside class="phase-meta">
+              <div class="phase-num">04</div>
+              <span class="phase-tag">1-2 weeks</span>
+            </aside>
+            <div>
+              <h3>Voice MVP</h3>
+              <p class="summary">Расширить LangFlip из typing assistant в speaking/listening assistant, не ломая принцип явного включения.</p>
+              <div class="deliverables">
+                <div class="deliv-col">
+                  <h5>Dictation</h5>
+                  <ul>
+                    <li>Microphone permission onboarding.</li>
+                    <li>Push-to-talk record on hold, transcribe on release.</li>
+                    <li>Cleanup pass before insertion.</li>
+                  </ul>
+                </div>
+                <div class="deliv-col">
+                  <h5>Listen</h5>
+                  <ul>
+                    <li>Read selected text aloud.</li>
+                    <li>Native AVSpeechSynthesizer for instant local playback.</li>
+                    <li>Curated Cloud TTS dropdown with accurate pricing notes.</li>
+                    <li>Voice selection is a dropdown matched to the selected model.</li>
+                    <li>OmniVoice remains the heavier local quality path.</li>
+                  </ul>
+                </div>
+                <div class="deliv-col">
+                  <h5>Guardrails</h5>
+                  <ul>
+                    <li>No surprise microphone capture.</li>
+                    <li>Models outside app bundle.</li>
+                    <li>Storage and deletion are visible.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel" id="stack" role="tabpanel" aria-hidden="true">
+        <div class="eyebrow"><span class="dot">●</span> 05 · Stack</div>
+        <h2 class="section">Технический стек <em>без лишней магии</em></h2>
+
+        <div class="grid-3">
+          <div class="card">
+            <div class="label">Language</div>
+            <div class="title-md">Swift 5.9 · macOS 13+</div>
+            <div class="desc">SwiftPM executable target, AppKit for lifecycle and system APIs, SwiftUI for windows.</div>
+          </div>
+          <div class="card">
+            <div class="label">System APIs</div>
+            <div class="title-md">CGEventTap · AX · TIS</div>
+            <div class="desc">Global key observation, focused-window context, stable input-source switching by language properties.</div>
+          </div>
+          <div class="card">
+            <div class="label">State</div>
+            <div class="title-md">UserDefaults · Keychain</div>
+            <div class="desc">Settings, rules and learned exceptions in defaults. API keys stay in macOS Keychain.</div>
+          </div>
+          <div class="card">
+            <div class="label">AI</div>
+            <div class="title-md">Ollama · OpenAI · Foundation Models</div>
+            <div class="desc">AIAssistant protocol isolates providers; NoopAssistant keeps UI honest when unavailable.</div>
+          </div>
+          <div class="card">
+            <div class="label">Distribution</div>
+            <div class="title-md">Makefile · codesign · Sparkle</div>
+            <div class="desc">Daily path is installed signed app. Release path signs, packages, notarizes and updates appcast.</div>
+          </div>
+          <div class="card">
+            <div class="label">Docs</div>
+            <div class="title-md">README · ROADMAP · CHANGELOG · plan.html</div>
+            <div class="desc">Markdown remains source-of-truth for linear docs; this HTML is the visual operating manual.</div>
+          </div>
+        </div>
+
+        <h3 class="sub">Useful commands</h3>
+        <table class="compare-table">
+          <tbody>
+            <tr>
+              <td><code>make dev</code></td>
+              <td>Build, sign, install to /Applications, launch, verify process survived startup.</td>
+            </tr>
+            <tr>
+              <td><code>make run-onboarding</code></td>
+              <td>Reset first-run state, rebuild, install and open onboarding flow.</td>
+            </tr>
+            <tr>
+              <td><code>make reset-onboarding-empty</code></td>
+              <td>Full new-user reset including dictionaries, generated audio and local LangFlip models.</td>
+            </tr>
+            <tr>
+              <td><code>make release</code></td>
+              <td>Build, Developer ID sign, DMG package, notarize, staple and prepare distribution artifact.</td>
+            </tr>
+            <tr>
+              <td><code>make plan</code></td>
+              <td>Open this interactive plan in the browser.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel" id="backlog" role="tabpanel" aria-hidden="true">
+        <div class="eyebrow"><span class="dot">●</span> 06 · Backlog</div>
+        <h2 class="section">Что лежит дальше <em>и почему оно пока не первое</em></h2>
+
+        <div class="grid-3">
+          <div class="card">
+            <div class="label">Languages</div>
+            <div class="title-md">More language pairs</div>
+            <div class="desc">PL, CZ, SK, BG, SR/HR, DE, FR, ES, IT по спросу. Сначала нужен надежный механизм словарей.</div>
+          </div>
+          <div class="card">
+            <div class="label">Hotkeys</div>
+            <div class="title-md">Custom recorder everywhere</div>
+            <div class="desc">Переназначение OCR, translate, grammar fix, pause, voice. Требует аккуратного conflict detection.</div>
+          </div>
+          <div class="card">
+            <div class="label">Sync</div>
+            <div class="title-md">iCloud settings and exceptions</div>
+            <div class="desc">Полезно после стабилизации локальной модели данных, особенно для learned exceptions.</div>
+          </div>
+          <div class="card">
+            <div class="label">Hints</div>
+            <div class="title-md">Inline conversion hint</div>
+            <div class="desc">Мягкая подсказка до авто-флипа. Может быть сильной, но не должна раздражать или перекрывать UI.</div>
+          </div>
+          <div class="card">
+            <div class="label">Model</div>
+            <div class="title-md">Bigram-frequency layer</div>
+            <div class="desc">Следующий слой для неоднозначных случаев, когда словари обеих языков дают похожую уверенность.</div>
+          </div>
+          <div class="card">
+            <div class="label">Power users</div>
+            <div class="title-md">Plugin / scripting hooks</div>
+            <div class="desc">Regex-based локальные правила, но только после понятной UI-модели для обычных always/never rules.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="decisions" role="tabpanel" aria-hidden="true">
+        <div class="eyebrow"><span class="dot">●</span> 07 · Decisions</div>
+        <h2 class="section">Архитектурные решения <em>которые не хочется забыть</em></h2>
+
+        <div class="decision">
+          <div class="d-label">Lifecycle</div>
+          <div class="d-value">Defer EventTap until onboarding grants permissions</div>
+          <div class="d-rationale">Иначе macOS системный prompt появляется поверх нашего окна и ломает первый опыт.</div>
+        </div>
+        <div class="decision">
+          <div class="d-label">Development</div>
+          <div class="d-value">Never test the raw build copy as the daily path</div>
+          <div class="d-rationale">TCC permissions привязаны к установленному signed app bundle, поэтому <code>make dev</code> копирует в /Applications.</div>
+        </div>
+        <div class="decision">
+          <div class="d-label">Manual intent</div>
+          <div class="d-value">Manual double/triple Shift does not require dictionary confidence</div>
+          <div class="d-rationale">Когда пользователь явно просит flip, словарь не должен блокировать rare names, slang, commands or mixed tokens.</div>
+        </div>
+        <div class="decision">
+          <div class="d-label">Privacy</div>
+          <div class="d-value">Cloud AI is opt-in, local Ollama is the recommended path</div>
+          <div class="d-rationale">Текст и screenshots остаются локальными, пока пользователь сам не внесет API key и provider.</div>
+        </div>
+        <div class="decision">
+          <div class="d-label">Docs practice</div>
+          <div class="d-value">Keep <code>docs/plan.html</code> as the visual operating manual</div>
+          <div class="d-rationale">README отвечает на "что это", ROADMAP на "куда идем", CHANGELOG на "что изменилось", plan.html на "как все связано".</div>
+        </div>
+      </section>
+
+      <section class="panel" id="release" role="tabpanel" aria-hidden="true">
+        <div class="eyebrow"><span class="dot">●</span> 08 · Release Notes</div>
+        <h2 class="section">Последние релизы <em>и смысл каждого</em></h2>
+
+        <article class="release">
+          <div>
+            <div class="release-version">0.2.9</div>
+            <div class="release-date">current</div>
+          </div>
+          <div>
+            <div class="release-title">Cloud Speech and AI Providers</div>
+            <div class="release-body">
+              Добавлены opt-in Cloud TTS, Cloud STT, Cloud OCR и curated OpenRouter-модели для text-fix.
+              Hands-free dictation теперь по умолчанию использует Fn+Option, а слабые STT-модели убраны из списка.
+            </div>
+          </div>
+          <span class="mark good">cloud ai</span>
+        </article>
+        <article class="release">
+          <div>
+            <div class="release-version">0.2.8</div>
+            <div class="release-date">hotfix</div>
+          </div>
+          <div>
+            <div class="release-title">Double Shift Hotfix</div>
+            <div class="release-body">
+              Сделал no-selection double/triple Shift надежнее в Obsidian и web-based chat inputs:
+              fallback берет предыдущий token, сохраняет leading spaces и больше не конвертирует всю строку.
+            </div>
+          </div>
+          <span class="mark good">stability</span>
+        </article>
+        <article class="release">
+          <div>
+            <div class="release-version">0.2.7</div>
+            <div class="release-date">stability</div>
+          </div>
+          <div>
+            <div class="release-title">Typing stability after performance work</div>
+            <div class="release-body">
+              Manual Always flip rules, faster startup, faster pasteboard polling, stabilized first auto-flip after launch.
+            </div>
+          </div>
+          <span class="mark good">daily use</span>
+        </article>
+        <article class="release">
+          <div>
+            <div class="release-version">0.2.6</div>
+            <div class="release-date">patch</div>
+          </div>
+          <div>
+            <div class="release-title">New-user flow and translation fixes</div>
+            <div class="release-body">
+              Shift+Space follows active layout language, triple Shift defaults to Russian, voice hotkeys stay opt-in.
+            </div>
+          </div>
+          <span class="mark good">ux</span>
+        </article>
+        <article class="release">
+          <div>
+            <div class="release-version">0.2.5</div>
+            <div class="release-date">rc</div>
+          </div>
+          <div>
+            <div class="release-title">First-session release candidate</div>
+            <div class="release-body">
+              Onboarding checklist, one-click dictionaries, Qwen setup, grammar test, screenshot text test and reset commands.
+            </div>
+          </div>
+          <span class="mark good">onboarding</span>
+        </article>
+      </section>
+
+      <section class="panel" id="voice" role="tabpanel" aria-hidden="true">
+        <div class="eyebrow"><span class="dot">●</span> 09 · AI & Voice</div>
+        <h2 class="section">Локальный AI слой <em>и будущая голосовая ось</em></h2>
+
+        <div class="flow-frame">
+          <div class="flow-toolbar">
+            <div>animated journey · click steps</div>
+            <div class="flow-controls">
+              <button class="flow-btn is-active" data-flow-action="play">pause</button>
+              <button class="flow-btn" data-flow-action="prev">prev</button>
+              <span class="flow-counter" id="flow-counter">01 / 07</span>
+              <button class="flow-btn" data-flow-action="next">next</button>
+              <button class="flow-btn" data-flow-action="reset">reset</button>
+            </div>
+          </div>
+          <div class="flow-stage">
+            <svg class="flow" id="flow-svg" viewBox="0 0 760 460" aria-label="AI and voice flow">
+              <defs>
+                <marker id="flow-arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                  <path d="M0,0 L0,6 L9,3 z" fill="#3a3d45"></path>
+                </marker>
+              </defs>
+              <path class="flow-edge" data-edge="gesture-policy" d="M165 100 C230 100 250 180 315 180" marker-end="url(#flow-arrow)"></path>
+              <path class="flow-edge" data-edge="policy-ai" d="M445 180 C510 180 520 100 585 100" marker-end="url(#flow-arrow)"></path>
+              <path class="flow-edge" data-edge="ai-output" d="M585 165 C520 250 260 250 165 165" marker-end="url(#flow-arrow)"></path>
+              <path class="flow-edge" data-edge="voice-ai" d="M380 345 C460 335 530 265 585 165" marker-end="url(#flow-arrow)"></path>
+              <path class="flow-edge" data-edge="storage-ai" d="M165 345 C270 330 425 245 585 165" marker-end="url(#flow-arrow)"></path>
+
+              <g class="flow-node" data-node="gesture" transform="translate(45 60)">
+                <rect class="flow-node-bg" width="150" height="105"></rect>
+                <text class="flow-tag" x="14" y="23">input</text>
+                <text class="flow-title" x="14" y="47">Gesture</text>
+                <text class="flow-meta" x="14" y="70">Shift / hotkey</text>
+                <text class="flow-meta" x="14" y="88">selection or cursor</text>
+              </g>
+              <g class="flow-node" data-node="policy" transform="translate(305 140)">
+                <rect class="flow-node-bg" width="150" height="105"></rect>
+                <text class="flow-tag" x="14" y="23">gate</text>
+                <text class="flow-title" x="14" y="47">Policy</text>
+                <text class="flow-meta" x="14" y="70">ready?</text>
+                <text class="flow-meta" x="14" y="88">safe to intercept?</text>
+              </g>
+              <g class="flow-node" data-node="ai" transform="translate(565 60)">
+                <rect class="flow-node-bg" width="150" height="105"></rect>
+                <text class="flow-tag" x="14" y="23">provider</text>
+                <text class="flow-title" x="14" y="47">Assistant</text>
+                <text class="flow-meta" x="14" y="70">Ollama / OpenAI</text>
+                <text class="flow-meta" x="14" y="88">Foundation Models</text>
+              </g>
+              <g class="flow-node" data-node="storage" transform="translate(45 300)">
+                <rect class="flow-node-bg" width="150" height="105"></rect>
+                <text class="flow-tag" x="14" y="23">state</text>
+                <text class="flow-title" x="14" y="47">Models</text>
+                <text class="flow-meta" x="14" y="70">Ollama daemon</text>
+                <text class="flow-meta" x="14" y="88">local downloads</text>
+              </g>
+              <g class="flow-node" data-node="voice" transform="translate(305 300)">
+                <rect class="flow-node-bg" width="150" height="105"></rect>
+                <text class="flow-tag" x="14" y="23">voice</text>
+                <text class="flow-title" x="14" y="47">STT / TTS</text>
+                <text class="flow-meta" x="14" y="70">push-to-talk</text>
+                <text class="flow-meta" x="14" y="88">read selected</text>
+              </g>
+            </svg>
+            <aside class="flow-caption">
+              <div class="flow-caption-num" id="flow-caption-num">01</div>
+              <div class="flow-caption-title" id="flow-caption-title">Gesture starts explicit intent</div>
+              <p class="flow-caption-text" id="flow-caption-text">
+                AI work starts from a user gesture: selected text, last sentence, screenshot region, or future push-to-talk.
+              </p>
+              <ol class="flow-steplist" id="flow-steplist"></ol>
+            </aside>
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <div class="card is-live">
+            <div class="label">Recommended local model</div>
+            <div class="title-md">Qwen 3.5 2B</div>
+            <div class="desc">Fast enough for short grammar fixes. 4B remains a heavier quality option for 16 GB+ Macs.</div>
+          </div>
+          <div class="card">
+            <div class="label">Dictation baseline</div>
+            <div class="title-md">Whisper large-v3-turbo</div>
+            <div class="desc">Good multilingual baseline for push-to-talk MVP, likely out-of-process first.</div>
+          </div>
+          <div class="card">
+            <div class="label">TTS path</div>
+            <div class="title-md">System · Cloud · OmniVoice</div>
+            <div class="desc">System voices are instant; OpenRouter cloud TTS gives better BYOK voices; OmniVoice stays local and heavier.</div>
+          </div>
+          <div class="card is-live">
+            <div class="label">Cloud TTS default</div>
+            <div class="title-md">GPT-4o Mini TTS via OpenRouter</div>
+            <div class="desc">Use <code>openai/gpt-4o-mini-tts-2025-12-15</code> for cost/compatibility, try Gemini 3.1 Flash TTS for richer multilingual speech, or Kokoro for cheap lightweight playback.</div>
+          </div>
+          <div class="card is-live">
+            <div class="label">Cloud STT default</div>
+            <div class="title-md">NVIDIA Parakeet via OpenRouter</div>
+            <div class="desc">Dictation can now use local Whisper or <code>nvidia/parakeet-tdt-0.6b-v3</code> through Cloud STT. Qwen3 ASR Flash is the noisy/mixed-language fallback.</div>
+          </div>
+          <div class="card is-live">
+            <div class="label">Cloud OCR default</div>
+            <div class="title-md">Gemini 3.1 Flash Lite via OpenRouter</div>
+            <div class="desc">Screenshot text capture can stay local through Ollama or use a BYOK vision model. Default cloud OCR is <code>google/gemini-3.1-flash-lite</code>; Qwen, Gemma, and Perceptron are low-cost comparison options.</div>
+          </div>
+          <div class="card is-live">
+            <div class="label">Cloud text-fix default</div>
+            <div class="title-md">Gemini 3.1 Flash Lite via OpenRouter</div>
+            <div class="desc">Single Shift and Fix Selected Text can use a curated cloud proofreading model. Default is <code>google/gemini-3.1-flash-lite</code>; GPT-5 Nano, DeepSeek V4 Flash, Qwen 3.6 Flash, GPT-5 Mini, and Mistral Medium are comparison options.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="retro" role="tabpanel" aria-hidden="true">
+        <div class="eyebrow"><span class="dot">●</span> 10 · Chronicle</div>
+        <h2 class="section">Летопись проекта <em>в одном месте</em></h2>
+
+        <article class="retro-day">
+          <div class="retro-day-head">
+            <span class="date">2026-05-31</span>
+            <span class="title">Cloud TTS and Cloud STT wired into Voice settings</span>
+          </div>
+          <div class="grid-3">
+            <div class="retro-block">
+              <div class="label">Added</div>
+              <ul>
+                <li>Cloud TTS backend beside System and OmniVoice.</li>
+                <li>OpenRouter-compatible `/audio/speech` request path.</li>
+                <li>Cloud STT path for dictation via `/audio/transcriptions`.</li>
+                <li>Curated model dropdowns with price-aware labels.</li>
+                <li>Hands-free dictation can be tapped on Fn+Option, with Left Option and Left Command still available as alternates.</li>
+                <li>Cloud OCR path for screenshot text capture through vision chat-completions.</li>
+                <li>Curated OpenRouter text-correction models for Single Shift and Fix Selected Text.</li>
+                <li>OpenRouter text fixes prefer low-latency providers and capped outputs for steadier response time.</li>
+              </ul>
+            </div>
+            <div class="retro-block">
+              <div class="label">Default</div>
+              <ul>
+                <li>Safe default: GPT-4o Mini TTS via OpenRouter.</li>
+                <li>Quality experiment: Gemini 3.1 Flash TTS Preview.</li>
+                <li>STT default: NVIDIA Parakeet TDT 0.6B v3.</li>
+                <li>OCR default: Gemini 3.1 Flash Lite via OpenRouter.</li>
+                <li>Text-fix default: Gemini 3.1 Flash Lite via OpenRouter.</li>
+              </ul>
+            </div>
+            <div class="retro-block">
+              <div class="label">Guardrail</div>
+              <ul>
+                <li>Cloud is opt-in and only reads explicitly selected text.</li>
+                <li>Cloud text fixes only send selected text or the explicit last-sentence context.</li>
+                <li>Cloud STT only sends explicitly recorded dictation audio.</li>
+                <li>Cloud OCR only sends explicitly selected screenshot regions.</li>
+                <li>Local TTS backends continue to work without API keys.</li>
+                <li>API key stays in macOS Keychain.</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <article class="retro-day">
+          <div class="retro-day-head">
+            <span class="date">2026-05-31</span>
+            <span class="title">Введен интерактивный plan.html как практика</span>
+          </div>
+          <div class="grid-3">
+            <div class="retro-block">
+              <div class="label">Added</div>
+              <ul>
+                <li>Единая визуальная карта проекта.</li>
+                <li>Architecture diagram with draggable nodes.</li>
+                <li>Makefile command and maintenance playbook.</li>
+              </ul>
+            </div>
+            <div class="retro-block">
+              <div class="label">Why</div>
+              <ul>
+                <li>Быстрее вспоминать контекст после паузы.</li>
+                <li>Видеть решения, roadmap and release narrative together.</li>
+                <li>Делать документацию живой, а не архивной.</li>
+              </ul>
+            </div>
+            <div class="retro-block">
+              <div class="label">Next update trigger</div>
+              <ul>
+                <li>После архитектурного изменения.</li>
+                <li>После релиза или changelog entry.</li>
+                <li>После изменения roadmap priorities.</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <article class="retro-day">
+          <div class="retro-day-head">
+            <span class="date">0.2.5-0.2.8</span>
+            <span class="title">Переход от proof-of-use к daily-use RC</span>
+          </div>
+          <div class="grid-3">
+            <div class="retro-block">
+              <div class="label">Achievements</div>
+              <ul>
+                <li>Onboarding стал главным first-run surface.</li>
+                <li>Local AI setup стал проверяемым пользователем.</li>
+                <li>Manual hotkeys стали устойчивее в нестандартных редакторах.</li>
+              </ul>
+            </div>
+            <div class="retro-block">
+              <div class="label">Learned</div>
+              <ul>
+                <li>Selection APIs у редакторов сильно отличаются.</li>
+                <li>Raw build app misleading for permissions testing.</li>
+                <li>Explicit user gestures deserve deterministic behavior.</li>
+              </ul>
+            </div>
+            <div class="retro-block">
+              <div class="label">Watch</div>
+              <ul>
+                <li>Cold-start dictionary readiness.</li>
+                <li>Pasteboard timing in slow editors.</li>
+                <li>AI readiness and model selection clarity.</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <footer class="footer">
+        docs/plan.html · updated 2026-05-31 · maintain with docs/plan-workflow.md
+      </footer>
+    </div>
+
+    <script>
+      (function initTabs() {
+        const tabs = Array.from(document.querySelectorAll(".tab"));
+        const panels = Array.from(document.querySelectorAll(".panel"));
+
+        function activate(id, updateHash = true) {
+          tabs.forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.tab === id)));
+          panels.forEach((panel) => panel.setAttribute("aria-hidden", String(panel.id !== id)));
+          if (updateHash) history.replaceState(null, "", `#${id}`);
+        }
+
+        tabs.forEach((tab) => tab.addEventListener("click", () => activate(tab.dataset.tab)));
+        const initial = location.hash.replace("#", "");
+        if (initial && panels.some((panel) => panel.id === initial)) activate(initial, false);
+      })();
+
+      (function initArchitecture() {
+        const svg = document.getElementById("arch-svg");
+        const canvas = document.getElementById("arch-canvas");
+        const readout = document.getElementById("zoom-readout");
+        if (!svg || !canvas) return;
+
+        const nodes = Array.from(document.querySelectorAll("#arch-nodes .node"));
+        const edgeLayer = document.getElementById("arch-edges");
+        const labelLayer = document.getElementById("arch-edge-labels");
+        const edges = [
+          ["macos", "app", "launch + permissions"],
+          ["app", "tap", "startServices"],
+          ["tap", "policy", "should act?"],
+          ["policy", "flip", "safe word"],
+          ["tap", "ai", "explicit AI request"],
+          ["flip", "storage", "rules + exceptions"],
+          ["ui", "storage", "settings"],
+          ["ui", "app", "onboarding complete"],
+          ["ai", "storage", "keys + model"],
+        ];
+
+        let viewX = 0;
+        let viewY = 0;
+        let viewScale = 1;
+        const initial = nodes.map((node) => ({
+          el: node,
+          x: Number(node.dataset.x),
+          y: Number(node.dataset.y),
+        }));
+
+        function applyNodePositions() {
+          nodes.forEach((node) => node.setAttribute("transform", `translate(${node.dataset.x}, ${node.dataset.y})`));
+        }
+
+        function center(node) {
+          return {
+            x: Number(node.dataset.x) + Number(node.dataset.w) / 2,
+            y: Number(node.dataset.y) + Number(node.dataset.h) / 2,
+          };
+        }
+
+        function redrawEdges() {
+          edgeLayer.innerHTML = "";
+          labelLayer.innerHTML = "";
+          edges.forEach(([from, to, label]) => {
+            const a = document.querySelector(`.node[data-id="${from}"]`);
+            const b = document.querySelector(`.node[data-id="${to}"]`);
+            if (!a || !b) return;
+            const ca = center(a);
+            const cb = center(b);
+            const dx = Math.max(-90, Math.min(90, (cb.x - ca.x) * 0.24));
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("class", "edge");
+            path.setAttribute("d", `M${ca.x} ${ca.y} C${ca.x + dx} ${ca.y}, ${cb.x - dx} ${cb.y}, ${cb.x} ${cb.y}`);
+            edgeLayer.appendChild(path);
+
+            const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            text.setAttribute("class", "edge-label");
+            text.setAttribute("x", String((ca.x + cb.x) / 2));
+            text.setAttribute("y", String((ca.y + cb.y) / 2 - 8));
+            text.setAttribute("text-anchor", "middle");
+            text.textContent = label;
+            labelLayer.appendChild(text);
+          });
+        }
+
+        function applyViewport() {
+          canvas.setAttribute("transform", `translate(${viewX}, ${viewY}) scale(${viewScale})`);
+          readout.textContent = `${Math.round(viewScale * 100)}%`;
+        }
+
+        function fitView() {
+          viewX = 0;
+          viewY = 0;
+          viewScale = 1;
+          applyViewport();
+        }
+
+        function zoomBy(factor) {
+          viewScale = Math.max(0.55, Math.min(1.85, viewScale * factor));
+          applyViewport();
+        }
+
+        let panState = null;
+        let dragState = null;
+
+        svg.addEventListener("mousedown", (event) => {
+          if (event.button !== 0) return;
+          if (event.target.closest(".node")) return;
+          panState = {
+            x: event.clientX,
+            y: event.clientY,
+            viewX,
+            viewY,
+          };
+          svg.classList.add("is-panning");
+        });
+
+        nodes.forEach((node) => {
+          node.addEventListener("mousedown", (event) => {
+            if (event.button !== 0) return;
+            event.stopPropagation();
+            dragState = {
+              node,
+              x: event.clientX,
+              y: event.clientY,
+              startX: Number(node.dataset.x),
+              startY: Number(node.dataset.y),
+            };
+            node.classList.add("is-dragging");
+            node.parentNode.appendChild(node);
+          });
+        });
+
+        window.addEventListener("mousemove", (event) => {
+          const rect = svg.getBoundingClientRect();
+          const vb = svg.viewBox.baseVal;
+          if (panState) {
+            viewX = panState.viewX + (event.clientX - panState.x) * (vb.width / rect.width);
+            viewY = panState.viewY + (event.clientY - panState.y) * (vb.height / rect.height);
+            applyViewport();
+          }
+          if (dragState) {
+            const dx = ((event.clientX - dragState.x) * (vb.width / rect.width)) / viewScale;
+            const dy = ((event.clientY - dragState.y) * (vb.height / rect.height)) / viewScale;
+            dragState.node.dataset.x = String(dragState.startX + dx);
+            dragState.node.dataset.y = String(dragState.startY + dy);
+            dragState.node.setAttribute("transform", `translate(${dragState.node.dataset.x}, ${dragState.node.dataset.y})`);
+            redrawEdges();
+          }
+        });
+
+        window.addEventListener("mouseup", () => {
+          if (panState) {
+            svg.classList.remove("is-panning");
+            panState = null;
+          }
+          if (dragState) {
+            dragState.node.classList.remove("is-dragging");
+            dragState = null;
+          }
+        });
+
+        document.querySelectorAll("#arch-frame .arch-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const action = btn.dataset.action;
+            if (action === "zoom-in") zoomBy(1.2);
+            if (action === "zoom-out") zoomBy(1 / 1.2);
+            if (action === "fit") fitView();
+            if (action === "reset") {
+              initial.forEach(({ el, x, y }) => {
+                el.dataset.x = String(x);
+                el.dataset.y = String(y);
+                el.setAttribute("transform", `translate(${x}, ${y})`);
+              });
+              redrawEdges();
+              fitView();
+            }
+          });
+        });
+
+        applyNodePositions();
+        redrawEdges();
+        fitView();
+      })();
+
+      (function initSequence() {
+        const seqTabs = document.querySelectorAll(".seq-tab");
+        const sequence = document.querySelector(".sequence");
+        const archNodes = document.querySelectorAll("#arch-nodes .node");
+        const seqSteps = document.querySelectorAll(".seq-step");
+        if (!sequence) return;
+
+        seqTabs.forEach((tab) => {
+          tab.addEventListener("click", () => {
+            seqTabs.forEach((t) => t.classList.toggle("is-active", t === tab));
+            sequence.dataset.active = tab.dataset.seq;
+          });
+        });
+
+        function clearHighlight() {
+          archNodes.forEach((node) => node.classList.remove("is-highlighted"));
+        }
+
+        seqSteps.forEach((step) => {
+          const ids = (step.dataset.nodes || "").split(",").filter(Boolean);
+          step.addEventListener("mouseenter", () => {
+            archNodes.forEach((node) => node.classList.toggle("is-highlighted", ids.includes(node.dataset.id)));
+          });
+          step.addEventListener("mouseleave", clearHighlight);
+        });
+      })();
+
+      (function initPhaseDetails() {
+        document.querySelectorAll(".phase-detail").forEach((detail) => {
+          const toggle = detail.querySelector(".phase-detail-toggle");
+          toggle.addEventListener("click", () => {
+            const expanded = detail.dataset.expanded === "true";
+            detail.dataset.expanded = String(!expanded);
+            toggle.setAttribute("aria-expanded", String(!expanded));
+          });
+        });
+      })();
+
+      (function initFlow() {
+        const svg = document.getElementById("flow-svg");
+        const stepList = document.getElementById("flow-steplist");
+        if (!svg || !stepList) return;
+
+        const steps = [
+          {
+            num: "01",
+            title: "Gesture starts explicit intent",
+            text: "AI work starts from a user gesture: selected text, last sentence, screenshot region, or future push-to-talk.",
+            nodes: ["gesture"],
+            edges: ["gesture-policy"],
+          },
+          {
+            num: "02",
+            title: "Policy checks readiness and safety",
+            text: "LangFlip verifies the provider is ready, the hotkey is enabled, and intercepting this system shortcut is intentional.",
+            nodes: ["gesture", "policy"],
+            edges: ["gesture-policy"],
+          },
+          {
+            num: "03",
+            title: "Assistant manager resolves provider",
+            text: "Current settings choose Ollama, OpenAI-compatible endpoint, Apple Foundation Models, or NoopAssistant.",
+            nodes: ["policy", "ai"],
+            edges: ["policy-ai"],
+          },
+          {
+            num: "04",
+            title: "Local model is preferred",
+            text: "Qwen 3.5 through Ollama is the recommended path for grammar, translation and screenshot text extraction.",
+            nodes: ["storage", "ai"],
+            edges: ["storage-ai"],
+          },
+          {
+            num: "05",
+            title: "Result is written back",
+            text: "EventTap uses pasteboard or synthetic key workflows to place the corrected text in the focused app.",
+            nodes: ["ai", "gesture"],
+            edges: ["ai-output"],
+          },
+          {
+            num: "06",
+            title: "Voice follows the same rule",
+            text: "Push-to-talk records only while explicitly held, transcribes on release, then can reuse the cleanup path before insertion.",
+            nodes: ["voice", "ai"],
+            edges: ["voice-ai"],
+          },
+          {
+            num: "07",
+            title: "Playback stays separate",
+            text: "Read-selected-text uses a clear hotkey and playback controls, starting with native macOS voices before optional local TTS.",
+            nodes: ["voice"],
+            edges: [],
+          },
+        ];
+
+        let index = 0;
+        let playing = true;
+        let timer = null;
+
+        const num = document.getElementById("flow-caption-num");
+        const title = document.getElementById("flow-caption-title");
+        const text = document.getElementById("flow-caption-text");
+        const counter = document.getElementById("flow-counter");
+        const playBtn = document.querySelector("[data-flow-action='play']");
+
+        steps.forEach((step, i) => {
+          const li = document.createElement("li");
+          li.className = "flow-step-pill";
+          li.textContent = step.num;
+          li.title = step.title;
+          li.addEventListener("click", () => {
+            index = i;
+            render();
+            restart();
+          });
+          stepList.appendChild(li);
+        });
+
+        function render() {
+          const step = steps[index];
+          svg.querySelectorAll(".flow-node, .flow-edge").forEach((el) => el.classList.remove("is-flow-active"));
+          step.nodes.forEach((id) => svg.querySelector(`[data-node="${id}"]`)?.classList.add("is-flow-active"));
+          step.edges.forEach((id) => svg.querySelector(`[data-edge="${id}"]`)?.classList.add("is-flow-active"));
+          stepList.querySelectorAll(".flow-step-pill").forEach((el, i) => el.classList.toggle("is-current", i === index));
+          num.textContent = step.num;
+          title.textContent = step.title;
+          text.textContent = step.text;
+          counter.textContent = `${step.num} / ${String(steps.length).padStart(2, "0")}`;
+        }
+
+        function next() {
+          index = (index + 1) % steps.length;
+          render();
+        }
+
+        function prev() {
+          index = (index - 1 + steps.length) % steps.length;
+          render();
+        }
+
+        function stop() {
+          if (timer) clearInterval(timer);
+          timer = null;
+        }
+
+        function start() {
+          stop();
+          timer = setInterval(next, 3000);
+        }
+
+        function restart() {
+          if (playing) start();
+        }
+
+        document.querySelectorAll("[data-flow-action]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const action = btn.dataset.flowAction;
+            if (action === "play") {
+              playing = !playing;
+              playBtn.textContent = playing ? "pause" : "play";
+              playBtn.classList.toggle("is-active", playing);
+              playing ? start() : stop();
+            }
+            if (action === "next") {
+              next();
+              restart();
+            }
+            if (action === "prev") {
+              prev();
+              restart();
+            }
+            if (action === "reset") {
+              index = 0;
+              render();
+              restart();
+            }
+          });
+        });
+
+        const flowPanel = document.getElementById("voice");
+        const observer = new MutationObserver(() => {
+          const visible = flowPanel.getAttribute("aria-hidden") === "false";
+          if (visible && playing) start();
+          else stop();
+        });
+        observer.observe(flowPanel, { attributes: true, attributeFilter: ["aria-hidden"] });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

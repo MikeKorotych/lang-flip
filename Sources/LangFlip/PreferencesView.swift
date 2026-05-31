@@ -328,6 +328,11 @@ private struct VoiceTab: View {
     @AppStorage("lf.ttsBackend") private var ttsBackend = TextToSpeechBackend.system.rawValue
     @AppStorage("lf.speechVoiceIdentifier") private var speechVoiceIdentifier = ""
     @AppStorage("lf.speechRate") private var speechRate = 190.0
+    @AppStorage("lf.cloudTTSBaseURL") private var cloudTTSBaseURL = "https://openrouter.ai/api/v1"
+    @AppStorage("lf.cloudTTSModel") private var cloudTTSModel = "openai/gpt-4o-mini-tts-2025-12-15"
+    @AppStorage("lf.cloudTTSVoice") private var cloudTTSVoice = "nova"
+    @AppStorage("lf.cloudTTSSpeed") private var cloudTTSSpeed = 1.0
+    @AppStorage("lf.cloudTTSInstructions") private var cloudTTSInstructions = ""
     @AppStorage("lf.omniVoiceLanguage") private var omniVoiceLanguage = OmniVoiceLanguage.auto.rawValue
     @AppStorage("lf.omniVoiceGender") private var omniVoiceGender = OmniVoiceGenderStyle.none.rawValue
     @AppStorage("lf.omniVoiceAge") private var omniVoiceAge = OmniVoiceAgeStyle.none.rawValue
@@ -356,7 +361,10 @@ private struct VoiceTab: View {
     @AppStorage("lf.dictationPushToTalkEnabled") private var dictationPushToTalkEnabled = false
     @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
     @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = false
-    @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.commandShift.rawValue
+    @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.fnOption.rawValue
+    @AppStorage("lf.dictationTranscriptionBackend") private var dictationTranscriptionBackend = DictationTranscriptionBackend.localWhisper.rawValue
+    @AppStorage("lf.cloudSTTBaseURL") private var cloudSTTBaseURL = "https://openrouter.ai/api/v1"
+    @AppStorage("lf.cloudSTTModel") private var cloudSTTModel = "nvidia/parakeet-tdt-0.6b-v3"
 
     @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
     @State private var voices = SpeechReader.availableVoices
@@ -379,6 +387,10 @@ private struct VoiceTab: View {
     @State private var isGeneratingOmniVoice = false
     @State private var omniVoiceOutputURL = OmniVoiceSynthesizer.shared.lastOutputURL
     @State private var omniVoiceMessage: String?
+    @State private var cloudTTSKeyDraft: String = KeychainStore.getString(account: KeychainStore.openAIAPIKey) ?? ""
+    @State private var isGeneratingCloudTTS = false
+    @State private var cloudTTSOutputURL = CloudSpeechSynthesizer.shared.lastOutputURL
+    @State private var cloudTTSMessage: String?
 
     private let timer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
 
@@ -416,6 +428,79 @@ private struct VoiceTab: View {
                             .foregroundColor(.secondary)
                             .frame(width: 34, alignment: .trailing)
                     }
+                } else if activeTTSBackend == .cloud {
+                    SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: cloudTTSKeyDraft) { newValue in
+                            KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
+                        }
+                    helpText("The key is stored in macOS Keychain. OpenRouter is recommended because it lets you switch TTS models without changing the app.")
+
+                    HStack {
+                        settingLabel("Base URL", help: "OpenRouter uses https://openrouter.ai/api/v1. OpenAI direct uses https://api.openai.com/v1.")
+                        TextField("https://openrouter.ai/api/v1", text: $cloudTTSBaseURL)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    if cloudTTSUsesOpenRouter {
+                        OpenRouterSpeechModelPicker(selectedModel: $cloudTTSModel)
+                            .onChange(of: cloudTTSModel) { _ in
+                                syncCloudTTSVoiceForModel()
+                            }
+                    } else {
+                        TextField("Model", text: $cloudTTSModel)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: cloudTTSModel) { _ in
+                                syncCloudTTSVoiceForModel()
+                            }
+                    }
+
+                    Picker(selection: $cloudTTSVoice) {
+                        ForEach(cloudTTSVoiceOptions) { voice in
+                            Text(voice.label).tag(voice.id)
+                        }
+                    } label: {
+                        settingLabel("Voice", help: "Voice identifiers are model-specific. LangFlip shows known voices for the selected curated model.")
+                    }
+
+                    HStack {
+                        settingLabel("Speed", help: "OpenAI TTS supports speed. Some OpenRouter providers silently ignore it.")
+                        Slider(value: $cloudTTSSpeed, in: 0.5...1.5, step: 0.05)
+                        Text(String(format: "%.2fx", cloudTTSSpeed))
+                            .foregroundColor(.secondary)
+                            .frame(width: 48, alignment: .trailing)
+                    }
+
+                    TextField("Optional voice instructions", text: $cloudTTSInstructions)
+                        .textFieldStyle(.roundedBorder)
+                        .help("Example: Warm, clear, natural pacing. For Gemini-style models, inline tags in the text may work better than instructions.")
+
+                    if let cloudTTSMessage {
+                        Text(cloudTTSMessage)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if let cloudTTSOutputURL {
+                        HStack {
+                            Text("Last cloud TTS output")
+                            Spacer()
+                            Text(cloudTTSOutputURL.lastPathComponent)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                            Button("Play") {
+                                CloudSpeechSynthesizer.shared.play(cloudTTSOutputURL)
+                            }
+                            .controlSize(.small)
+                            Button("Reveal") {
+                                NSWorkspace.shared.activateFileViewerSelecting([cloudTTSOutputURL])
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+
+                    helpText("Current practical default: OpenAI GPT-4o Mini TTS via OpenRouter for cost and compatibility. For richer multilingual or expressive output, try google/gemini-3.1-flash-tts-preview.")
                 } else {
                     Picker(selection: $omniVoiceLanguage) {
                         ForEach(OmniVoiceLanguage.allCases) { language in
@@ -604,21 +689,23 @@ private struct VoiceTab: View {
                 }
 
                 HStack {
-                    Button(activeTTSBackend == .omniVoice && isGeneratingOmniVoice ? "Generating…" : "Read sample") {
+                    Button(ttsSampleButtonTitle) {
                         readTTSSample()
                     }
-                    .disabled(activeTTSBackend == .omniVoice && (!omniVoiceAvailability.isReady || isGeneratingOmniVoice))
+                    .disabled(ttsSampleDisabled)
 
                     Button("Stop") {
                         SpeechReader.shared.stop()
                         OmniVoiceSynthesizer.shared.stop()
+                        CloudSpeechSynthesizer.shared.stop()
                         isGeneratingOmniVoice = false
+                        isGeneratingCloudTTS = false
                     }
                     Spacer()
                 }
                 .controlSize(.small)
 
-                helpText("Use the menu bar action to read the current text selection aloud. System voices are instant; OmniVoice is local, higher quality, and heavier.")
+                helpText("Use the menu bar action to read the current text selection aloud. System voices are instant; OmniVoice is local and heavier; Cloud TTS sends selected text to your chosen API provider.")
             }
 
             Section("Read aloud shortcut") {
@@ -662,6 +749,15 @@ private struct VoiceTab: View {
                 helpText(dictationHandsFreeEnabled
                          ? "Press \(dictationHandsFreeName) once to start recording, then press it again to stop and transcribe."
                          : "Hands-free dictation is off. Push-to-talk can stay enabled above.")
+
+                if dictationHandsFreeEnabled {
+                    Picker("Hands-free toggle", selection: $dictationHandsFreeShortcut) {
+                        ForEach(DictationHandsFreeShortcut.allCases) { shortcut in
+                            Text(shortcut.displayName).tag(shortcut.rawValue)
+                        }
+                    }
+                    helpText("Fn+Option works as a tap toggle: press and release once to start, then press and release again to stop.")
+                }
 
                 Divider()
 
@@ -745,59 +841,85 @@ private struct VoiceTab: View {
 
                 Divider()
 
-                Picker("Language", selection: $whisperLanguage) {
-                    Text("Auto").tag("auto")
-                    Text("Українська").tag("uk")
-                    Text("Русский").tag("ru")
-                    Text("English").tag("en")
+                Picker(selection: $dictationTranscriptionBackend) {
+                    ForEach(DictationTranscriptionBackend.allCases) { backend in
+                        Text(backend.displayName).tag(backend.rawValue)
+                    }
+                } label: {
+                    settingLabel("Transcription", help: "Local Whisper keeps audio on this Mac. Cloud STT sends only recorded dictation audio to your selected provider.")
                 }
 
-                HStack {
-                    Text("Speech model")
-                    Spacer()
-                    Text(activeSpeechModelLabel)
-                        .foregroundColor(.green)
-                        .lineLimit(1)
-                }
-
-                ForEach(WhisperTranscriber.Model.allCases) { model in
-                    HStack {
-                        Image(systemName: isSelectedWhisperModel(model) ? "checkmark.circle.fill" : "circle")
-                            .foregroundColor(isSelectedWhisperModel(model) ? .green : .secondary)
-                            .frame(width: 18)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                Text(model.displayName)
-                                if isSelectedWhisperModel(model) {
-                                    Text("Selected")
-                                        .font(.caption)
-                                        .foregroundColor(.green)
-                                }
-                            }
-                            Text("\(model.approximateSize) · \(model.note)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                if activeDictationBackend == .cloud {
+                    SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: cloudTTSKeyDraft) { newValue in
+                            KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
                         }
+
+                    HStack {
+                        settingLabel("Base URL", help: "OpenRouter uses https://openrouter.ai/api/v1. Use a compatible endpoint only if it supports /audio/transcriptions.")
+                        TextField("https://openrouter.ai/api/v1", text: $cloudSTTBaseURL)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    OpenRouterTranscriptionModelPicker(selectedModel: $cloudSTTModel)
+                    helpText("Best default: NVIDIA Parakeet TDT 0.6B v3 for very low cost and strong multilingual STT. Qwen3 ASR Flash is a good noisy/mixed-language fallback.")
+                    helpText("Cloud STT always lets the provider auto-detect the spoken language from audio. LangFlip does not send the current keyboard layout or a language override.")
+                } else {
+                    Picker("Language", selection: $whisperLanguage) {
+                        Text("Auto").tag("auto")
+                        Text("Українська").tag("uk")
+                        Text("Русский").tag("ru")
+                        Text("English").tag("en")
+                    }
+
+                    HStack {
+                        Text("Speech model")
                         Spacer()
-                        if WhisperTranscriber.isInstalled(model) {
-                            Button(isSelectedWhisperModel(model) ? "Test" : "Use") {
-                                if isSelectedWhisperModel(model) {
-                                    transcribeLastRecording()
-                                } else {
-                                    whisperModelPath = model.localURL.path
-                                    whisperAvailability = WhisperTranscriber.availability()
-                                    whisperDownloadMessage = "\(model.displayName) selected."
+                        Text(activeSpeechModelLabel)
+                            .foregroundColor(.green)
+                            .lineLimit(1)
+                    }
+
+                    ForEach(WhisperTranscriber.Model.allCases) { model in
+                        HStack {
+                            Image(systemName: isSelectedWhisperModel(model) ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(isSelectedWhisperModel(model) ? .green : .secondary)
+                                .frame(width: 18)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 6) {
+                                    Text(model.displayName)
+                                    if isSelectedWhisperModel(model) {
+                                        Text("Selected")
+                                            .font(.caption)
+                                            .foregroundColor(.green)
+                                    }
                                 }
+                                Text("\(model.approximateSize) · \(model.note)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
-                            .disabled(isSelectedWhisperModel(model) && (lastRecordingURL == nil || isTranscribing))
-                            .controlSize(.small)
-                        } else {
-                            Button(downloadingWhisperModel == model ? "Downloading…" : "Download") {
-                                downloadWhisperModel(model)
+                            Spacer()
+                            if WhisperTranscriber.isInstalled(model) {
+                                Button(isSelectedWhisperModel(model) ? "Test" : "Use") {
+                                    if isSelectedWhisperModel(model) {
+                                        transcribeLastRecording()
+                                    } else {
+                                        whisperModelPath = model.localURL.path
+                                        whisperAvailability = WhisperTranscriber.availability()
+                                        whisperDownloadMessage = "\(model.displayName) selected."
+                                    }
+                                }
+                                .disabled(isSelectedWhisperModel(model) && (lastRecordingURL == nil || isTranscribing))
+                                .controlSize(.small)
+                            } else {
+                                Button(downloadingWhisperModel == model ? "Downloading…" : "Download") {
+                                    downloadWhisperModel(model)
+                                }
+                                .disabled(downloadingWhisperModel != nil)
+                                .controlSize(.small)
                             }
-                            .disabled(downloadingWhisperModel != nil)
-                            .controlSize(.small)
                         }
                     }
                 }
@@ -825,7 +947,7 @@ private struct VoiceTab: View {
                     Button(isTranscribing ? "Testing…" : "Test selected model") {
                         transcribeLastRecording()
                     }
-                    .disabled(isTranscribing || lastRecordingURL == nil || !whisperAvailability.isReady)
+                    .disabled(testTranscriptionDisabled)
 
                     if let lastRecordingURL {
                         Button("Copy result") {
@@ -863,20 +985,26 @@ private struct VoiceTab: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                helpText("Whisper transcribes the last recording here for testing. Dictation shortcuts can be changed in Hotkeys.")
+                helpText(activeDictationBackend == .cloud
+                         ? "Cloud STT transcribes the last recording here for testing. Dictation shortcuts can be changed in Hotkeys."
+                         : "Whisper transcribes the last recording here for testing. Dictation shortcuts can be changed in Hotkeys.")
             }
         }
         .formStyle(.grouped)
         .onAppear {
             voices = SpeechReader.availableVoices
+            cloudTTSKeyDraft = KeychainStore.getString(account: KeychainStore.openAIAPIKey) ?? ""
+            syncCloudTTSVoiceForModel()
             microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
             refreshRecorderState()
             refreshOmniVoiceState()
+            refreshCloudTTSState()
         }
         .onReceive(timer) { _ in
             microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
             refreshRecorderState()
             refreshOmniVoiceState()
+            refreshCloudTTSState()
         }
         .onReceive(NotificationCenter.default.publisher(for: .langFlipVoiceRecorderChanged)) { _ in
             refreshRecorderState()
@@ -923,6 +1051,10 @@ private struct VoiceTab: View {
         TextToSpeechBackend(rawValue: ttsBackend) ?? .system
     }
 
+    private var activeDictationBackend: DictationTranscriptionBackend {
+        DictationTranscriptionBackend(rawValue: dictationTranscriptionBackend) ?? .localWhisper
+    }
+
     private var readSelectionShortcutName: String {
         GlobalShortcut.decode(readSelectionHotkeyCustom)?.displayName
             ?? (GlobalShortcutPreset(rawValue: readSelectionHotkeyPreset) ?? .controlOptionX).displayName
@@ -933,7 +1065,7 @@ private struct VoiceTab: View {
     }
 
     private var dictationHandsFreeName: String {
-        (DictationHandsFreeShortcut(rawValue: dictationHandsFreeShortcut) ?? .commandShift).displayName
+        (DictationHandsFreeShortcut(rawValue: dictationHandsFreeShortcut) ?? .fnOption).displayName
     }
 
     private var omniVoiceStatusLabel: String {
@@ -948,9 +1080,63 @@ private struct VoiceTab: View {
         return URL(fileURLWithPath: omniVoiceReferenceAudioPath).lastPathComponent
     }
 
+    private var cloudTTSUsesOpenRouter: Bool {
+        cloudTTSBaseURL.localizedCaseInsensitiveContains("openrouter.ai")
+    }
+
+    private var cloudTTSVoiceOptions: [CloudVoiceOption] {
+        CuratedSpeechModel.voiceOptions(for: cloudTTSModel)
+    }
+
+    private var hasCloudTTSKey: Bool {
+        !cloudTTSKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var ttsSampleButtonTitle: String {
+        if activeTTSBackend == .omniVoice && isGeneratingOmniVoice { return "Generating…" }
+        if activeTTSBackend == .cloud && isGeneratingCloudTTS { return "Generating…" }
+        return "Read sample"
+    }
+
+    private var ttsSampleDisabled: Bool {
+        switch activeTTSBackend {
+        case .system:
+            return false
+        case .omniVoice:
+            return !omniVoiceAvailability.isReady || isGeneratingOmniVoice
+        case .cloud:
+            return !hasCloudTTSKey ||
+                cloudTTSModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                cloudTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                isGeneratingCloudTTS
+        }
+    }
+
+    private var testTranscriptionDisabled: Bool {
+        if isTranscribing || lastRecordingURL == nil { return true }
+        switch activeDictationBackend {
+        case .localWhisper:
+            return !whisperAvailability.isReady
+        case .cloud:
+            return !hasCloudTTSKey || cloudSTTModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
     private func refreshOmniVoiceState() {
         omniVoiceAvailability = OmniVoiceSynthesizer.availability()
         omniVoiceOutputURL = OmniVoiceSynthesizer.shared.lastOutputURL
+    }
+
+    private func refreshCloudTTSState() {
+        cloudTTSOutputURL = CloudSpeechSynthesizer.shared.lastOutputURL
+    }
+
+    private func syncCloudTTSVoiceForModel() {
+        let options = cloudTTSVoiceOptions
+        guard !options.isEmpty else { return }
+        if !options.contains(where: { $0.id == cloudTTSVoice }) {
+            cloudTTSVoice = options[0].id
+        }
     }
 
     private func chooseOmniVoiceReferenceAudio() {
@@ -971,6 +1157,28 @@ private struct VoiceTab: View {
         """
         if activeTTSBackend == .system {
             SpeechReader.shared.speak(sample)
+            return
+        }
+
+        if activeTTSBackend == .cloud {
+            isGeneratingCloudTTS = true
+            cloudTTSMessage = "Generating cloud TTS sample..."
+            Task {
+                do {
+                    let url = try await CloudSpeechSynthesizer.shared.generate(text: sample)
+                    await MainActor.run {
+                        isGeneratingCloudTTS = false
+                        cloudTTSOutputURL = url
+                        cloudTTSMessage = "Generated \(url.lastPathComponent)."
+                        CloudSpeechSynthesizer.shared.play(url)
+                    }
+                } catch {
+                    await MainActor.run {
+                        isGeneratingCloudTTS = false
+                        cloudTTSMessage = "Cloud TTS failed: \(error.localizedDescription)"
+                    }
+                }
+            }
             return
         }
 
@@ -1055,10 +1263,7 @@ private struct VoiceTab: View {
 
         Task {
             do {
-                let text = try await WhisperTranscriber.transcribe(
-                    audioURL: lastRecordingURL,
-                    language: whisperLanguage
-                )
+                let text = try await transcribeWithSelectedBackend(audioURL: lastRecordingURL)
                 await MainActor.run {
                     transcriptionText = text
                     isTranscribing = false
@@ -1070,6 +1275,16 @@ private struct VoiceTab: View {
                 }
             }
         }
+    }
+
+    private func transcribeWithSelectedBackend(audioURL: URL) async throws -> String {
+        if activeDictationBackend == .cloud {
+            return try await CloudTranscriber.transcribe(audioURL: audioURL)
+        }
+        return try await WhisperTranscriber.transcribe(
+            audioURL: audioURL,
+            language: whisperLanguage
+        )
     }
 
     private func downloadWhisperModel(_ model: WhisperTranscriber.Model) {
@@ -1352,7 +1567,7 @@ private struct HotkeysTab: View {
     @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.controlOptionX.rawValue
     @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
     @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
-    @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.commandShift.rawValue
+    @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.fnOption.rawValue
 
     var body: some View {
         Form {
@@ -1603,6 +1818,7 @@ private struct ModelsTab: View {
     @AppStorage("lf.cloudProvider") private var cloudProvider = AICloudProvider.openRouter.rawValue
     @AppStorage("lf.openaiModel") private var openaiModel = "gpt-5-nano"
     @AppStorage("lf.openaiBaseURL") private var openaiBaseURL = "https://api.openai.com/v1"
+    @AppStorage("lf.cloudOCRModel") private var cloudOCRModel = "google/gemini-3.1-flash-lite"
 
     @State private var aiReadyForHotkeys = false
 
@@ -1663,7 +1879,7 @@ private struct ModelsTab: View {
                         }
 
                     if AICloudProvider(rawValue: cloudProvider) == .openRouter {
-                        OpenRouterModelPicker(selectedModel: $openaiModel)
+                        OpenRouterTextCorrectionModelPicker(selectedModel: $openaiModel)
                     } else {
                         TextField("Model", text: $openaiModel)
                             .textFieldStyle(.roundedBorder)
@@ -1686,7 +1902,7 @@ private struct ModelsTab: View {
             if AIMode(rawValue: aiMode) != .off {
                 Section("Test") {
                     AIModelTestView()
-                    if AIMode(rawValue: aiMode) == .ollama {
+                    if AIMode(rawValue: aiMode) == .ollama || AIMode(rawValue: aiMode) == .openai {
                         Divider()
                         AIOCRTestView()
                     }
@@ -1726,6 +1942,19 @@ private struct ModelsTab: View {
                 Section("Screen text capture") {
                     Toggle("Capture text with \(screenCaptureShortcutName)", isOn: $screenTextCaptureHotkeyEnabled)
                     helpText("Select a screen region and copy recognized text to the clipboard. Requires a vision-capable Ollama model.")
+                }
+            } else if AIMode(rawValue: aiMode) == .openai {
+                Section("Screen text capture") {
+                    Toggle("Capture text with \(screenCaptureShortcutName)", isOn: $screenTextCaptureHotkeyEnabled)
+
+                    if AICloudProvider(rawValue: cloudProvider) == .openRouter {
+                        OpenRouterOCRModelPicker(selectedModel: $cloudOCRModel)
+                    } else {
+                        TextField("Vision model", text: $cloudOCRModel)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    helpText("Cloud OCR sends only the screenshot region you select. Best default: Gemini 3.1 Flash Lite for fast low-cost OCR; Qwen 3.6 Flash is the cheaper experiment.")
                 }
             }
 
@@ -1807,7 +2036,7 @@ private struct ModelsTab: View {
     private var cloudHelpText: String {
         switch selectedCloudProvider {
         case .openRouter:
-            return "OpenRouter gives access to many models with one API key. Free models are shown first, followed by low-cost text models."
+            return "This model is used by Single Shift fixes, Fix Selected Text, translation, and short AI tests. The default is chosen for fast, low-cost proofreading."
         case .openAI:
             return "Use your OpenAI API key directly. The key is stored in macOS Keychain."
         case .custom:
@@ -1886,7 +2115,7 @@ private enum AICloudProvider: String, CaseIterable, Identifiable {
 
     var defaultModel: String {
         switch self {
-        case .openRouter: return "openrouter/auto"
+        case .openRouter: return "google/gemini-3.1-flash-lite"
         case .openAI:     return "gpt-5-nano"
         case .custom:     return ""
         }
@@ -2562,6 +2791,70 @@ private final class PreferencesLockedOutputBuffer: @unchecked Sendable {
     }
 }
 
+private struct CuratedTextCorrectionModel: Identifiable {
+    let id: String
+    let label: String
+    let note: String
+
+    static let curated: [CuratedTextCorrectionModel] = [
+        .init(
+            id: "google/gemini-3.1-flash-lite",
+            label: "Google: Gemini 3.1 Flash Lite - $0.25 / $1.50 per 1M",
+            note: "Best default: fast, low-cost, strong multilingual proofreading, and useful for both selected text and last-sentence fixes."
+        ),
+        .init(
+            id: "openai/gpt-5-nano",
+            label: "OpenAI: GPT-5 Nano - $0.05 / $0.40 per 1M",
+            note: "Cheapest OpenAI option; good for short typo and punctuation cleanup when you want predictable OpenAI behavior."
+        ),
+        .init(
+            id: "deepseek/deepseek-v4-flash",
+            label: "DeepSeek: V4 Flash - $0.10 / $0.20 per 1M",
+            note: "Lowest output cost in the curated set; strong budget option for frequent text cleanup."
+        ),
+        .init(
+            id: "qwen/qwen3.6-flash",
+            label: "Qwen: Qwen3.6 Flash - $0.19 / $1.13 per 1M",
+            note: "Very good price/quality candidate for multilingual text, especially mixed Ukrainian/Russian/English snippets."
+        ),
+        .init(
+            id: "openai/gpt-5-mini",
+            label: "OpenAI: GPT-5 Mini - $0.25 / $2.00 per 1M",
+            note: "Higher-quality OpenAI fallback when Nano misses nuance; still cheap enough for daily proofreading."
+        ),
+        .init(
+            id: "mistralai/mistral-medium-3-5",
+            label: "Mistral: Medium 3.5 - $1.50 / $7.50 per 1M",
+            note: "Quality comparison model for harder rewrites; not the cheapest, but useful when style matters."
+        ),
+    ]
+}
+
+private struct OpenRouterTextCorrectionModelPicker: View {
+    @Binding var selectedModel: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Text correction model", selection: $selectedModel) {
+                ForEach(CuratedTextCorrectionModel.curated) { model in
+                    Text(model.label).tag(model.id)
+                }
+            }
+
+            if let selected = CuratedTextCorrectionModel.curated.first(where: { $0.id == selectedModel }) {
+                Text(selected.note)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            TextField("Custom model id", text: $selectedModel)
+                .textFieldStyle(.roundedBorder)
+                .help("Use another OpenRouter model id if you want to experiment outside the curated list.")
+        }
+    }
+}
+
 private struct OpenRouterModelPicker: View {
     @Binding var selectedModel: String
 
@@ -2676,6 +2969,221 @@ private struct OpenRouterModelPicker: View {
     }
 }
 
+private struct CloudVoiceOption: Identifiable {
+    let id: String
+    let label: String
+}
+
+private struct CuratedSpeechModel: Identifiable {
+    let id: String
+    let label: String
+    let note: String
+    let voices: [CloudVoiceOption]
+
+    static let openAIVoices: [CloudVoiceOption] = [
+        .init(id: "nova", label: "nova - balanced"),
+        .init(id: "alloy", label: "alloy - neutral"),
+        .init(id: "ash", label: "ash - calm"),
+        .init(id: "ballad", label: "ballad - expressive"),
+        .init(id: "coral", label: "coral - bright"),
+        .init(id: "echo", label: "echo - clear"),
+        .init(id: "fable", label: "fable - storytelling"),
+        .init(id: "onyx", label: "onyx - deep"),
+        .init(id: "sage", label: "sage - composed"),
+        .init(id: "shimmer", label: "shimmer - light"),
+    ]
+
+    static let geminiVoices: [CloudVoiceOption] = [
+        .init(id: "Kore", label: "Kore - firm"),
+        .init(id: "Puck", label: "Puck - upbeat"),
+        .init(id: "Zephyr", label: "Zephyr - bright"),
+        .init(id: "Charon", label: "Charon - steady"),
+        .init(id: "Fenrir", label: "Fenrir - deeper"),
+        .init(id: "Leda", label: "Leda - youthful"),
+        .init(id: "Aoede", label: "Aoede - smooth"),
+        .init(id: "Orus", label: "Orus - grounded"),
+    ]
+
+    static let kokoroVoices: [CloudVoiceOption] = [
+        .init(id: "af_heart", label: "af_heart - warm"),
+        .init(id: "af_bella", label: "af_bella - expressive"),
+        .init(id: "af_nova", label: "af_nova - balanced"),
+        .init(id: "af_sky", label: "af_sky - bright"),
+        .init(id: "am_adam", label: "am_adam - male"),
+        .init(id: "am_echo", label: "am_echo - clear"),
+        .init(id: "bf_emma", label: "bf_emma - British"),
+        .init(id: "bm_daniel", label: "bm_daniel - British male"),
+    ]
+
+    static let curated: [CuratedSpeechModel] = [
+        .init(
+            id: "openai/gpt-4o-mini-tts-2025-12-15",
+            label: "OpenAI: GPT-4o Mini TTS - $0.60/M chars",
+            note: "Best default: cheap, stable, OpenAI-compatible, supports instructions.",
+            voices: openAIVoices
+        ),
+        .init(
+            id: "google/gemini-3.1-flash-tts-preview",
+            label: "Google: Gemini 3.1 Flash TTS Preview - $1/M input + $20/M output",
+            note: "Best quality/multilingual experiment: 70+ languages and inline audio tags.",
+            voices: geminiVoices
+        ),
+        .init(
+            id: "hexgrad/kokoro-82m",
+            label: "hexgrad: Kokoro 82M - $0.62/M chars",
+            note: "Tiny low-cost TTS; 8 languages, best for cheap lightweight playback.",
+            voices: kokoroVoices
+        ),
+    ]
+
+    static func voiceOptions(for modelID: String) -> [CloudVoiceOption] {
+        curated.first(where: { $0.id == modelID })?.voices ?? openAIVoices
+    }
+}
+
+private struct OpenRouterSpeechModelPicker: View {
+    @Binding var selectedModel: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Model", selection: $selectedModel) {
+                ForEach(CuratedSpeechModel.curated) { model in
+                    Text(model.label).tag(model.id)
+                }
+            }
+
+            if let selected = CuratedSpeechModel.curated.first(where: { $0.id == selectedModel }) {
+                Text(selected.note)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+private struct CuratedTranscriptionModel: Identifiable {
+    let id: String
+    let label: String
+    let note: String
+
+    static let defaultID = "nvidia/parakeet-tdt-0.6b-v3"
+
+    static let curated: [CuratedTranscriptionModel] = [
+        .init(
+            id: "nvidia/parakeet-tdt-0.6b-v3",
+            label: "NVIDIA: Parakeet TDT 0.6B v3 - $0.0015/min",
+            note: "Best default: very cheap, multilingual EU coverage, punctuation and timestamps."
+        ),
+        .init(
+            id: "qwen/qwen3-asr-flash-2026-02-10",
+            label: "Qwen: Qwen3 ASR Flash - $0.000035/sec (~$0.0021/min)",
+            note: "Strong noisy/mixed-language option; supports Russian and several major languages."
+        ),
+        .init(
+            id: "mistralai/voxtral-mini-transcribe",
+            label: "Mistral: Voxtral Mini Transcribe - $0.003/min",
+            note: "Good comparison point for multilingual dictation."
+        ),
+        .init(
+            id: "openai/gpt-4o-transcribe",
+            label: "OpenAI: GPT-4o Transcribe - $2.50/M input + $10/M output",
+            note: "Higher-cost OpenAI transcription model; compare quality before daily use."
+        ),
+        .init(
+            id: "google/chirp-3",
+            label: "Google: Chirp 3 - $0.016/min",
+            note: "Google STT option; currently much pricier than Parakeet/Qwen/Whisper V3."
+        ),
+    ]
+
+    static func normalizedID(_ id: String) -> String {
+        curated.contains(where: { $0.id == id }) ? id : defaultID
+    }
+}
+
+private struct OpenRouterTranscriptionModelPicker: View {
+    @Binding var selectedModel: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Model", selection: $selectedModel) {
+                ForEach(CuratedTranscriptionModel.curated) { model in
+                    Text(model.label).tag(model.id)
+                }
+            }
+
+            if let selected = CuratedTranscriptionModel.curated.first(where: { $0.id == selectedModel }) {
+                Text(selected.note)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onAppear {
+            selectedModel = CuratedTranscriptionModel.normalizedID(selectedModel)
+        }
+        .onChange(of: selectedModel) { newValue in
+            selectedModel = CuratedTranscriptionModel.normalizedID(newValue)
+        }
+    }
+}
+
+private struct CuratedOCRModel: Identifiable {
+    let id: String
+    let label: String
+    let note: String
+
+    static let curated: [CuratedOCRModel] = [
+        .init(
+            id: "google/gemini-3.1-flash-lite",
+            label: "Google: Gemini 3.1 Flash Lite - $0.25 / $1.50 per 1M",
+            note: "Best default: fast, strong OCR, image input, low cost; OpenRouter also lists image input at $0.25/M."
+        ),
+        .init(
+            id: "qwen/qwen3.6-flash",
+            label: "Qwen: Qwen3.6 Flash - $0.19 / $1.13 per 1M",
+            note: "Cheapest serious cloud OCR candidate right now; good to compare for short screenshot snippets."
+        ),
+        .init(
+            id: "qwen/qwen3.5-plus-20260420",
+            label: "Qwen: Qwen3.5 Plus - $0.30 / $1.80 per 1M",
+            note: "Slightly pricier Qwen vision option with a large context window; useful for denser screenshots."
+        ),
+        .init(
+            id: "google/gemma-4-26b-a4b-it",
+            label: "Google: Gemma 4 26B - $0.06 / $0.33 per 1M",
+            note: "Very cheap open model with image input; quality may vary more, but worth testing for simple UI text."
+        ),
+        .init(
+            id: "perceptron/perceptron-mk1",
+            label: "Perceptron: Mk1 - $0.15 / $1.50 per 1M",
+            note: "Low-cost multimodal model; good fallback if Gemini or Qwen routing is unavailable."
+        ),
+    ]
+}
+
+private struct OpenRouterOCRModelPicker: View {
+    @Binding var selectedModel: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Vision model", selection: $selectedModel) {
+                ForEach(CuratedOCRModel.curated) { model in
+                    Text(model.label).tag(model.id)
+                }
+            }
+
+            if let selected = CuratedOCRModel.curated.first(where: { $0.id == selectedModel }) {
+                Text(selected.note)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
 private struct OpenRouterModelsResponse: Decodable {
     let data: [OpenRouterModel]
 }
@@ -2701,6 +3209,10 @@ private struct OpenRouterModel: Decodable, Identifiable {
 
     var supportsTextOutput: Bool {
         architecture?.outputModalities?.contains("text") ?? true
+    }
+
+    var supportsSpeechOutput: Bool {
+        architecture?.outputModalities?.contains("speech") ?? false
     }
 
     var promptPrice: Double {
@@ -2729,6 +3241,19 @@ private struct OpenRouterModel: Decodable, Identifiable {
         let lhsCost = lhs.promptPrice + lhs.completionPrice
         let rhsCost = rhs.promptPrice + rhs.completionPrice
         if lhsCost != rhsCost { return lhsCost < rhsCost }
+        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+    }
+
+    static func isBetterForSpeech(_ lhs: OpenRouterModel, _ rhs: OpenRouterModel) -> Bool {
+        let pinned = [
+            "openai/gpt-4o-mini-tts-2025-12-15",
+            "google/gemini-3.1-flash-tts-preview",
+        ]
+        let lhsPinned = pinned.firstIndex(of: lhs.id)
+        let rhsPinned = pinned.firstIndex(of: rhs.id)
+        if lhsPinned != rhsPinned {
+            return (lhsPinned ?? Int.max) < (rhsPinned ?? Int.max)
+        }
         return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
     }
 }

@@ -14,6 +14,7 @@ final class MenubarController: NSObject {
 
     private let enabledItem = NSMenuItem(title: "LangFlip enabled", action: #selector(toggleEnabled), keyEquivalent: "")
     private let autoFlipItem = NSMenuItem(title: "Auto-flip at word end", action: #selector(toggleAutoFlip), keyEquivalent: "")
+    private let fixOnSingleShiftItem = NSMenuItem(title: "Fix on single Shift", action: #selector(toggleFixOnSingleShift), keyEquivalent: "")
     private let flipSelectionItem = NSMenuItem(title: "Flip Selected Text — Double Shift", action: #selector(flipSelectedText), keyEquivalent: "")
     private let fixSelectionItem = NSMenuItem(title: "Fix Selected Text — Single Shift", action: #selector(fixSelectedText), keyEquivalent: "")
     private let translateMenuItem = NSMenuItem(title: "Translate selection", action: nil, keyEquivalent: "")
@@ -57,6 +58,7 @@ final class MenubarController: NSObject {
 
         enabledItem.target = self
         autoFlipItem.target = self
+        fixOnSingleShiftItem.target = self
         flipSelectionItem.target = self
         fixSelectionItem.target = self
         readSelectionItem.target = self
@@ -67,6 +69,7 @@ final class MenubarController: NSObject {
 
         menu.addItem(enabledItem)
         menu.addItem(autoFlipItem)
+        menu.addItem(fixOnSingleShiftItem)
         menu.addItem(.separator())
         menu.addItem(flipSelectionItem)
         menu.addItem(fixSelectionItem)
@@ -121,7 +124,12 @@ final class MenubarController: NSObject {
     private func refresh() {
         enabledItem.state = Settings.shared.enabled ? .on : .off
         autoFlipItem.state = Settings.shared.autoFlip ? .on : .off
-        fixSelectionItem.isEnabled = Settings.shared.aiMode != .off && AIAssistantManager.shared.isReady
+        let aiReady = Settings.shared.aiMode != .off && AIAssistantManager.shared.isReady
+        // The single-Shift fix only does anything once a local model is
+        // ready — gate the toggle the same way the manual action is gated.
+        fixOnSingleShiftItem.state = (aiReady && Settings.shared.grammarCheckOnSingleShift) ? .on : .off
+        fixOnSingleShiftItem.isEnabled = aiReady
+        fixSelectionItem.isEnabled = aiReady
         // Hide the Translate submenu entirely when AI is off — it
         // wouldn't do anything useful and risks confusing users who
         // haven't opted into AI yet.
@@ -130,10 +138,10 @@ final class MenubarController: NSObject {
         applyShortcut(Settings.shared.translationShortcut, to: translateMenuItem)
         applyShortcut(Settings.shared.readSelectionShortcut, to: readSelectionItem)
         applyShortcut(Settings.shared.screenTextCaptureShortcut, to: ocrMenuItem)
-        // OCR only belongs in the quick menu when the selected local
-        // model can actually see images. Keep it hidden for text-only
-        // models so release users don't hit a dead-end button.
-        ocrMenuItem.isHidden = !Self.isVisionOllamaModel(Settings.shared.ollamaModel)
+        // OCR only belongs in the quick menu when the selected AI backend
+        // can actually see images. Keep it hidden for text-only setups so
+        // release users don't hit a dead-end button.
+        ocrMenuItem.isHidden = !Self.canCaptureScreenTextWithCurrentAI()
         // Bullet the configured default target so users know which
         // entry the ⌃⌥T hotkey maps to.
         if let sub = translateMenuItem.submenu {
@@ -163,6 +171,11 @@ final class MenubarController: NSObject {
 
     @objc private func toggleAutoFlip() {
         Settings.shared.autoFlip.toggle()
+        refresh()
+    }
+
+    @objc private func toggleFixOnSingleShift() {
+        Settings.shared.grammarCheckOnSingleShift.toggle()
         refresh()
     }
 
@@ -236,5 +249,16 @@ private extension MenubarController {
             || tag.contains(":vl")
             || tag.contains("llava")
             || tag.contains("gemma4")
+    }
+
+    static func canCaptureScreenTextWithCurrentAI() -> Bool {
+        switch Settings.shared.aiMode {
+        case .ollama:
+            return isVisionOllamaModel(Settings.shared.ollamaModel)
+        case .openai:
+            return !(Settings.shared.openaiAPIKey?.isEmpty ?? true)
+        case .off, .appleFoundation, .bundledModel:
+            return false
+        }
     }
 }

@@ -85,4 +85,5 @@ enum KeychainStore {
     /// covers OpenAI direct, OpenRouter, Together, Groq, etc. — the
     /// user is expected to switch the base URL when they rotate keys.
     static let openAIAPIKey = "cloud-ai-api-key"
+
 }

@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.2.9 - Cloud Speech and AI Providers
+
+This release makes LangFlip's AI features more flexible while keeping every
+cloud path opt-in. Voice, dictation, screenshot text capture, and AI text fixes
+can now use configured API providers instead of depending only on local models.
+
+### Added
+
+- Added Cloud TTS with OpenRouter/OpenAI-compatible models, curated speech
+  model choices, voice selection, speed, instructions, and a built-in sample
+  generator.
+- Added Cloud STT for dictation through `/audio/transcriptions`, with curated
+  model choices and provider-side language auto-detection.
+- Added Cloud OCR for screenshot text capture with a dedicated vision-model
+  picker.
+- Added curated OpenRouter model selection for AI text correction and selected
+  text fixes.
+- Added `Fn+Option` as the default hands-free dictation toggle, with a picker
+  for alternative hands-free shortcuts.
+- Added `docs/plan.html` as a visual living project manual and `make plan` to
+  open it.
+
+### Improved
+
+- Optimized OpenRouter text correction for lower latency by capping response
+  size, disabling reasoning output where supported, and preferring low-latency
+  provider routing.
+- Kept Cloud STT language-free so transcription models infer the spoken
+  language from audio instead of receiving the current keyboard layout.
+- Routed screenshot text capture through cloud vision models when OpenRouter /
+  OpenAI-compatible mode is enabled.
+- Clarified Voice settings around local vs cloud dictation, API-key storage,
+  and per-feature cloud usage.
+
+### Removed
+
+- Removed weak or unreliable Cloud STT choices from the curated list, including
+  OpenAI Whisper 1, OpenAI GPT-4o Mini Transcribe, and OpenAI Whisper Large V3.
+
 ## 0.2.8 - Double Shift Hotfix
 
 This hotfix tightens manual double/triple Shift behavior in editors that do not

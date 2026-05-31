@@ -78,7 +78,10 @@ final class VoiceDictationController {
     }
 
     private static func transcribe(audioURL: URL) async throws -> String {
-        try await WhisperTranscriber.transcribe(
+        if Settings.shared.dictationTranscriptionBackend == .cloud {
+            return try await CloudTranscriber.transcribe(audioURL: audioURL)
+        }
+        return try await WhisperTranscriber.transcribe(
             audioURL: audioURL,
             language: Settings.shared.whisperLanguage
         )
