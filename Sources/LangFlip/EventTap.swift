@@ -458,6 +458,14 @@ final class EventTap {
               shiftHeld,
               !hasOtherModifiers
         else {
+            // A shortcut such as Control+Shift+Tab can arrive as "Shift down"
+            // first, then Control/Tab a moment later. If we already scheduled
+            // push-to-talk for that initial clean Shift, cancel it as soon as
+            // Shift becomes part of a real shortcut chord.
+            if hasOtherModifiers {
+                speechHoldWork?.cancel()
+                speechHoldWork = nil
+            }
             if !shiftHeld {
                 speechHoldWork?.cancel()
                 speechHoldWork = nil
