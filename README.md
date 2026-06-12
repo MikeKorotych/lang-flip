@@ -166,6 +166,10 @@ Planned improvements include:
 See [CHANGELOG.md](CHANGELOG.md) for recent release notes and
 [ROADMAP.md](ROADMAP.md) for the longer plan.
 
+## License
+
+LangFlip is available under the [MIT License](LICENSE).
+
 ## 🧑‍💻 Build From Source
 
 For local development:
