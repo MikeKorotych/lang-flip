@@ -1128,7 +1128,8 @@ struct VoiceTab: View {
 struct ModelsTab: View {
     private let releaseAIModes: [AIMode] = [.off, .appleFoundation, .ollama, .openai, .backend]
 
-    @AppStorage("lf.aiMode") private var aiMode = AIMode.off.rawValue
+    @AppStorage("lf.aiMode") private var aiMode = AIMode.backend.rawValue
+    @AppStorage("lf.showAdvancedAI") private var showAdvancedAI = false
     @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = true
     @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
     @AppStorage("lf.translationHotkeyPreset") private var translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
@@ -1152,20 +1153,25 @@ struct ModelsTab: View {
 
     var body: some View {
         Form {
+            // Sayful Cloud account is the default AI for everyone — sign in, see
+            // your plan + weekly quota. No API-key setup.
+            if AIMode(rawValue: aiMode) == .backend {
+                Section("Sayful Cloud") {
+                    BackendAccountView()
+                    helpText("Sign in with Google to use Sayful's cloud AI — no API key needed. The server holds the provider key and tracks a weekly word quota.")
+                }
+            }
+
+            // Advanced: local models (Ollama / Apple) or bring-your-own cloud key.
+            // Hidden by default — most users only need Sayful Cloud.
+            if showAdvancedAI {
             Section("Mode") {
                 Picker("AI assistant", selection: $aiMode) {
                     ForEach(releaseAIModes) { mode in
                         Text(mode.displayName).tag(mode.rawValue)
                     }
                 }
-                    helpText("AI is optional. Ollama with Qwen 3.5 2B is the default local setup for fast grammar fixes and screen text capture.")
-            }
-
-            if AIMode(rawValue: aiMode) == .backend {
-                Section("Sayful Cloud") {
-                    BackendAccountView()
-                    helpText("Sign in with Google to use Sayful's cloud AI — no API key needed. The server holds the provider key and tracks a weekly word quota.")
-                }
+                    helpText("Choose Sayful Cloud (recommended), a local model (Ollama / Apple Intelligence), or bring your own OpenAI-compatible key.")
             }
 
             // Backend-specific config sits directly under Mode — that's
@@ -1238,6 +1244,7 @@ struct ModelsTab: View {
                     }
                 }
             }
+            } // end if showAdvancedAI
 
             Section("Features") {
                 Toggle("Fix selected text with single Shift", isOn: Binding(
@@ -1286,6 +1293,11 @@ struct ModelsTab: View {
 
                     helpText("Cloud OCR sends only the screenshot region you select. Best default: Gemini 3.1 Flash Lite for fast low-cost OCR; Qwen 3.6 Flash is the cheaper experiment.")
                 }
+            }
+
+            Section {
+                Toggle("Advanced (local / self-host AI)", isOn: $showAdvancedAI)
+                helpText("Most people only need Sayful Cloud. Turn this on to pick a local model (Ollama / Apple Intelligence) or bring your own OpenAI-compatible API key.")
             }
 
             Section("Privacy") {

@@ -1081,7 +1081,7 @@ final class Settings {
         get {
             guard let raw = defaults.string(forKey: Keys.aiMode),
                   let value = AIMode(rawValue: raw)
-            else { return .off }
+            else { return .backend }   // cloud-first: Sayful Cloud is the default AI
             return value
         }
         set { defaults.set(newValue.rawValue, forKey: Keys.aiMode) }
