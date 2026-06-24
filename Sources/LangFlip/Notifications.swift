@@ -20,4 +20,13 @@ extension Notification.Name {
     /// Posted when the voice recorder starts, stops, or fails so
     /// Preferences can refresh without polling tight loops.
     static let langFlipVoiceRecorderChanged = Notification.Name("LangFlipVoiceRecorderChanged")
+
+    /// Posted whenever the dictation controller changes state
+    /// (idle ↔ recording ↔ transcribing). Drives the floating dictation
+    /// island so it reacts instantly instead of polling tightly.
+    static let langFlipDictationStateChanged = Notification.Name("LangFlipDictationStateChanged")
+
+    /// Posted when an in-progress dictation is cancelled (discarded without
+    /// transcribing). The island shows a "Transcript cancelled" toast.
+    static let langFlipDictationCancelled = Notification.Name("LangFlipDictationCancelled")
 }

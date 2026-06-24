@@ -37,6 +37,7 @@ final class VoiceDictationController {
         // Frontmost app now is the dictation target (global hotkeys don't focus
         // LangFlip). Captured here for the usage-by-app breakdown in Insights.
         recordingApp = NSWorkspace.shared.frontmostApplication?.localizedName
+        notifyStateChanged()
         Sound.playFlip()
         FlipOverlay.shared.show()
         let body = mode == .pushToTalk
@@ -56,11 +57,13 @@ final class VoiceDictationController {
         recordingApp = nil
 
         guard let audioURL = VoiceRecorder.shared.lastRecordingURL else {
+            notifyStateChanged()
             Notifications.show(title: "Dictation failed", body: "No recording was saved.")
             return
         }
 
         isTranscribing = true
+        notifyStateChanged()
         Notifications.show(title: "Dictation", body: "Transcribing...")
 
         Task {
@@ -69,14 +72,29 @@ final class VoiceDictationController {
                 await MainActor.run {
                     self.isTranscribing = false
                     self.insert(text, duration: duration, app: app)
+                    self.notifyStateChanged()
                 }
             } catch {
                 await MainActor.run {
                     self.isTranscribing = false
+                    self.notifyStateChanged()
                     Notifications.show(title: "Transcription failed", body: error.localizedDescription)
                 }
             }
         }
+    }
+
+    /// Discard an in-progress recording without transcribing or inserting.
+    /// Backs the island's ✕ (cancel) control.
+    func cancel() {
+        guard isRecording else { return }
+        VoiceRecorder.shared.stop()
+        isRecording = false
+        mode = nil
+        recordingStartedAt = nil
+        recordingApp = nil
+        notifyStateChanged()
+        NotificationCenter.default.post(name: .langFlipDictationCancelled, object: nil)
     }
 
     func toggleRecording() {
@@ -85,6 +103,10 @@ final class VoiceDictationController {
         } else {
             start(mode: .toggle)
         }
+    }
+
+    private func notifyStateChanged() {
+        NotificationCenter.default.post(name: .langFlipDictationStateChanged, object: nil)
     }
 
     private static func transcribe(audioURL: URL) async throws -> String {
