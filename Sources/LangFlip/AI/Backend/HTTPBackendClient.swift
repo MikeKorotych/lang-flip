@@ -80,7 +80,16 @@ final class HTTPBackendClient: BackendClient {
             return try await send(path, rawBody: rawBody, contentType: contentType, isRetry: true)
         }
         guard (200..<300).contains(http.statusCode) else {
-            throw decodeError(data, status: http.statusCode)
+            let err = decodeError(data, status: http.statusCode)
+            // Weekly quota hit — surface a clear system notification once, from
+            // this single choke point so every feature (dictate / read-aloud /
+            // fix / translate / screen-text) reports it consistently.
+            if err.code == .quotaExceeded || err.code == .rateLimited {
+                Notifications.show(
+                    title: "Weekly limit reached",
+                    body: "You've used up your weekly Sayful Cloud limit. It resets automatically — try again after the reset.")
+            }
+            throw err
         }
         // Live quota: the server returns the updated counters on every call.
         if let used = Int(http.value(forHTTPHeaderField: "X-Quota-Used") ?? ""),
