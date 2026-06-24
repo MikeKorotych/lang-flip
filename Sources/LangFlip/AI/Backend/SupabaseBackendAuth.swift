@@ -21,7 +21,7 @@ final class SupabaseBackendAuth: NSObject, ObservableObject, BackendAuth {
 
     // MARK: BackendAuth
 
-    var isSignedIn: Bool {
+    nonisolated var isSignedIn: Bool {
         KeychainStore.getString(account: KeychainStore.backendAccessToken)?.isEmpty == false
     }
 
@@ -77,6 +77,21 @@ final class SupabaseBackendAuth: NSObject, ObservableObject, BackendAuth {
         _ = KeychainStore.delete(account: KeychainStore.backendRefreshToken)
         currentUser = nil
     }
+
+    /// Update the cached quota from a proxy response's `X-Quota-*` headers, so
+    /// the account UI reflects usage live without a `/me` round-trip.
+    func applyQuotaHeaders(used: Int, limit: Int, resetISO: String?) {
+        guard let u = currentUser else { return }
+        let reset = resetISO.flatMap(Self.parseISO) ?? u.quota.resetAt
+        currentUser = BackendUser(id: u.id, email: u.email, role: u.role,
+                                  quota: BackendQuota(used: used, limit: limit, resetAt: reset))
+    }
+
+    private static let isoFrac: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]; return f
+    }()
+    private static let isoPlain = ISO8601DateFormatter()
+    static func parseISO(_ s: String) -> Date? { isoFrac.date(from: s) ?? isoPlain.date(from: s) }
 
     // MARK: Refresh
 

@@ -311,9 +311,80 @@ private struct TitlebarTrailingControls: View {
             TopIconButton(icon: theme.isDark ? "sun.max" : "moon") {
                 theme.isDark.toggle()
             }
-            TopIconButton(icon: "person.crop.circle") {}
+            ProfileButton()
         }
         .padding(.trailing, 8)
+    }
+}
+
+/// Title-bar profile control — shows the signed-in account (email, plan, weekly
+/// quota) in a popover, or a Google sign-in prompt.
+private struct ProfileButton: View {
+    @ObservedObject private var auth = SupabaseBackendAuth.shared
+    @State private var show = false
+    @State private var working = false
+
+    var body: some View {
+        TopIconButton(icon: auth.currentUser != nil ? "person.crop.circle.fill" : "person.crop.circle") {
+            show.toggle()
+        }
+        .popover(isPresented: $show, arrowEdge: .bottom) {
+            content.frame(width: 270).padding(16)
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if let user = auth.currentUser {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: "person.crop.circle.fill")
+                        .font(.system(size: 32)).foregroundColor(FlowTheme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(user.email).font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(FlowTheme.ink).lineLimit(1)
+                        Text(user.role == .corporate ? "Corporate" : "Free")
+                            .font(.system(size: 12, weight: .medium)).foregroundColor(FlowTheme.accent)
+                    }
+                }
+                Divider().overlay(FlowTheme.cardStroke)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("This week").font(.system(size: 12)).foregroundColor(FlowTheme.inkSecondary)
+                        Spacer()
+                        Text("\(user.quota.used) / \(user.quota.limit) words")
+                            .font(.system(size: 12)).foregroundColor(FlowTheme.ink)
+                    }
+                    ProgressView(value: Double(user.quota.used), total: Double(max(user.quota.limit, 1)))
+                        .tint(FlowTheme.accent)
+                }
+                Divider().overlay(FlowTheme.cardStroke)
+                HStack {
+                    FlowSmallButton(title: "Manage account") {
+                        show = false
+                        MainNavigation.shared.section = .settings
+                    }
+                    Spacer()
+                    FlowSmallButton(title: "Sign out") { auth.signOut() }
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Sayful Cloud").font(.system(size: 14, weight: .semibold, design: .serif))
+                    .foregroundColor(FlowTheme.ink)
+                Text("Sign in to use AI without an API key.")
+                    .font(.system(size: 12)).foregroundColor(FlowTheme.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                FlowSmallButton(title: working ? "Signing in…" : "Sign in with Google", prominent: true) {
+                    working = true
+                    Task { @MainActor in
+                        defer { working = false }
+                        _ = try? await auth.signIn()
+                        show = false
+                    }
+                }
+                .disabled(working)
+            }
+        }
     }
 }
 

@@ -82,6 +82,12 @@ final class HTTPBackendClient: BackendClient {
         guard (200..<300).contains(http.statusCode) else {
             throw decodeError(data, status: http.statusCode)
         }
+        // Live quota: the server returns the updated counters on every call.
+        if let used = Int(http.value(forHTTPHeaderField: "X-Quota-Used") ?? ""),
+           let limit = Int(http.value(forHTTPHeaderField: "X-Quota-Limit") ?? "") {
+            let reset = http.value(forHTTPHeaderField: "X-Quota-Reset")
+            await auth.applyQuotaHeaders(used: used, limit: limit, resetISO: reset)
+        }
         return data
     }
 
