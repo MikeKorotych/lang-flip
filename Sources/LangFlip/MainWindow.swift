@@ -325,66 +325,88 @@ private struct ProfileButton: View {
     @State private var working = false
 
     var body: some View {
-        TopIconButton(icon: auth.currentUser != nil ? "person.crop.circle.fill" : "person.crop.circle") {
+        // Icon reflects the token (isSignedIn), not just the loaded profile, so
+        // it's correct from launch even before /me resolves.
+        TopIconButton(icon: auth.isSignedIn ? "person.crop.circle.fill" : "person.crop.circle") {
             show.toggle()
         }
         .popover(isPresented: $show, arrowEdge: .bottom) {
-            content.frame(width: 270).padding(16)
+            content
+                .frame(width: 270)
+                .padding(16)
+                .task { if auth.isSignedIn && auth.currentUser == nil { _ = try? await auth.refreshUser() } }
         }
     }
 
     @ViewBuilder private var content: some View {
         if let user = auth.currentUser {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    Image(systemName: "person.crop.circle.fill")
-                        .font(.system(size: 32)).foregroundColor(FlowTheme.accent)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(user.email).font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(FlowTheme.ink).lineLimit(1)
-                        Text(user.role == .corporate ? "Corporate" : "Free")
-                            .font(.system(size: 12, weight: .medium)).foregroundColor(FlowTheme.accent)
-                    }
-                }
-                Divider().overlay(FlowTheme.cardStroke)
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("This week").font(.system(size: 12)).foregroundColor(FlowTheme.inkSecondary)
-                        Spacer()
-                        Text("\(user.quota.used) / \(user.quota.limit) words")
-                            .font(.system(size: 12)).foregroundColor(FlowTheme.ink)
-                    }
-                    ProgressView(value: Double(user.quota.used), total: Double(max(user.quota.limit, 1)))
-                        .tint(FlowTheme.accent)
-                }
-                Divider().overlay(FlowTheme.cardStroke)
-                HStack {
-                    FlowSmallButton(title: "Manage account") {
-                        show = false
-                        MainNavigation.shared.section = .settings
-                    }
-                    Spacer()
-                    FlowSmallButton(title: "Sign out") { auth.signOut() }
+            signedIn(user)
+        } else if auth.isSignedIn {
+            VStack(spacing: 10) {
+                Text("Signed in").font(.system(size: 13, weight: .semibold)).foregroundColor(FlowTheme.ink)
+                ProgressView().controlSize(.small)
+            }
+            .frame(maxWidth: .infinity)
+        } else {
+            signedOut
+        }
+    }
+
+    private func signedIn(_ user: BackendUser) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: 32)).foregroundColor(FlowTheme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(user.email).font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(FlowTheme.ink).lineLimit(1)
+                    Text(user.role == .corporate ? "Corporate" : "Free")
+                        .font(.system(size: 12, weight: .medium)).foregroundColor(FlowTheme.accent)
                 }
             }
-        } else {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Sayful Cloud").font(.system(size: 14, weight: .semibold, design: .serif))
-                    .foregroundColor(FlowTheme.ink)
-                Text("Sign in to use AI without an API key.")
-                    .font(.system(size: 12)).foregroundColor(FlowTheme.inkSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                FlowSmallButton(title: working ? "Signing in…" : "Sign in with Google", prominent: true) {
-                    working = true
-                    Task { @MainActor in
-                        defer { working = false }
-                        _ = try? await auth.signIn()
-                        show = false
-                    }
+            Divider().overlay(FlowTheme.cardStroke)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("This week").font(.system(size: 12)).foregroundColor(FlowTheme.inkSecondary)
+                    Spacer()
+                    Text("\(user.quota.used) / \(user.quota.limit) words")
+                        .font(.system(size: 12)).foregroundColor(FlowTheme.ink)
                 }
-                .disabled(working)
+                ProgressView(value: Double(user.quota.used), total: Double(max(user.quota.limit, 1)))
+                    .tint(FlowTheme.accent)
+            }
+            Divider().overlay(FlowTheme.cardStroke)
+            HStack {
+                FlowSmallButton(title: "Manage account") {
+                    show = false
+                    MainNavigation.shared.section = .settings
+                }
+                Spacer()
+                FlowSmallButton(title: "Sign out") { auth.signOut() }
             }
         }
+    }
+
+    private var signedOut: some View {
+        VStack(spacing: 10) {
+            Text("Sayful Cloud").font(.system(size: 14, weight: .semibold, design: .serif))
+                .foregroundColor(FlowTheme.ink)
+            Text("Sign in to use AI without an API key.")
+                .font(.system(size: 12)).foregroundColor(FlowTheme.inkSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            FlowSmallButton(title: working ? "Signing in…" : "Sign in with Google", prominent: true) {
+                working = true
+                Task { @MainActor in
+                    defer { working = false }
+                    _ = try? await auth.signIn()
+                    show = false
+                }
+            }
+            .disabled(working)
+        }
+        .frame(maxWidth: .infinity)
+        .multilineTextAlignment(.center)
     }
 }
 

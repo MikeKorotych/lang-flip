@@ -24,6 +24,11 @@ struct LangFlipApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menubar: MenubarController?
     private var tap: EventTap?
+    /// Polls for Accessibility + Input Monitoring while the event tap isn't
+    /// running yet, so granting them at runtime (from the LangFlip tab) starts
+    /// the flip/dictation hotkeys immediately — no relaunch needed. Invalidated
+    /// the moment the tap comes up.
+    private var permissionWatch: Timer?
     /// Eager-init the updater so Sparkle starts its scheduled-check timer
     /// immediately. Held by the delegate so it lives for the app's lifetime.
     private let updater = Updater.shared
@@ -43,6 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Identity rename (LangFlip → Sayful): carry over the previous install's
+        // settings + data before anything reads UserDefaults or writes a log.
+        IdentityMigration.runIfNeeded()
+
         // Status-bar accessory: no Dock icon, no main menu.
         // OnboardingWindowController and MainWindowController flip this to
         // .regular while their window is on screen, then back to .accessory
@@ -65,13 +74,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let shouldReturnToSetup = Settings.shared.returnToOnboardingAfterScreenRecording
 
-        // Show onboarding on first launch, whenever permissions are
-        // missing, and after Screen Recording asks for a restart during
-        // the onboarding screenshot test. The final all-granted screen now
-        // contains the quick setup checklist, so first-run users get a
-        // visible path from permissions to dictionaries / AI without
-        // hunting through menus.
-        if !perms.allGranted || !Settings.shared.onboardingDone || shouldReturnToSetup {
+        // Onboarding is now first-launch only and asks for the microphone
+        // alone (dictation is the hero). Accessibility + Input Monitoring,
+        // which power the flip/hotkey features, are granted from the LangFlip
+        // tab's Permissions section instead — so we no longer gate startup on
+        // them or re-show onboarding when they're missing. The event tap below
+        // simply stays inert until those are granted, then works on the next
+        // launch (or immediately, since the tap is created lazily here).
+        if !Settings.shared.onboardingDone || shouldReturnToSetup {
             log("showing onboarding window — deferring tap/menubar startup until Continue")
             OnboardingWindowController.shared.show(onComplete: { [weak self] in
                 self?.startServices()
@@ -93,14 +103,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// triggers that dialog, and we now postpone it until the user has
     /// already toggled the right switches in System Settings.
     private func startServices() {
-        let tap = EventTap()
-        do {
-            try tap.start()
-            self.tap = tap
-            log("event tap started successfully")
-        } catch {
-            log("event tap FAILED: \(error.localizedDescription)")
-        }
+        // The event tap needs Accessibility + Input Monitoring, which onboarding
+        // no longer asks for (it's mic-only now). Start it if those are already
+        // granted; otherwise the watcher below brings it up the moment the user
+        // grants them in the LangFlip tab — so the hotkeys work without a relaunch.
+        startEventTapIfNeeded()
+        startPermissionWatchIfNeeded()
 
         // The menubar no longer dispatches per-action commands (those run via
         // global hotkeys handled by the event tap), so it doesn't need a tap
@@ -114,6 +122,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Always-on dictation island (Wispr-style) at the bottom of the screen.
         DictationIslandController.shared.startIfEnabled()
+
+        // If already signed in to the backend, load the account (role/quota) now
+        // so the profile menu is correct from launch — not only after opening AI settings.
+        if SupabaseBackendAuth.shared.isSignedIn {
+            Task { @MainActor in _ = try? await SupabaseBackendAuth.shared.refreshUser() }
+        }
 
         // Diagnostic: surface the AI assistant's readiness at launch
         // so users can tell why grammar / fix / translate features stay
@@ -140,6 +154,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if assistantReady {
             DispatchQueue.global(qos: .utility).async {
                 assistant.warmUp()
+            }
+        }
+    }
+
+    /// Create + start the keyboard event tap if it isn't running and the two
+    /// permissions it needs are granted. Idempotent and safe to call repeatedly.
+    private func startEventTapIfNeeded() {
+        guard tap == nil, PermissionStatus.current(prompt: false).allGranted else { return }
+        let tap = EventTap()
+        do {
+            try tap.start()
+            self.tap = tap
+            log("event tap started successfully")
+        } catch {
+            self.tap = nil
+            log("event tap FAILED: \(error.localizedDescription)")
+        }
+    }
+
+    /// While the tap is down, poll for the flip/hotkey permissions so it comes up
+    /// as soon as the user grants them — then stop polling.
+    private func startPermissionWatchIfNeeded() {
+        guard tap == nil, permissionWatch == nil else { return }
+        permissionWatch = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            self.startEventTapIfNeeded()
+            if self.tap != nil {
+                timer.invalidate()
+                self.permissionWatch = nil
+                log("event tap started after permissions were granted at runtime")
             }
         }
     }
