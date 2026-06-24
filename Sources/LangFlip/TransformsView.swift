@@ -5,10 +5,21 @@ import SwiftUI
 /// (handled in EventTap). Modeled on the reference.
 struct TransformsView: View {
     @ObservedObject private var store = TransformStore.shared
+    @ObservedObject private var auth = SupabaseBackendAuth.shared
     @State private var editing: Transform?
     @State private var showingNew = false
     @State private var showingDemo = false
     @State private var appeared = false
+
+    // Selection actions — single-Shift grammar fix + translate. These live here
+    // (not in the AI settings tab, which is hidden for normal users) so everyone
+    // can toggle them.
+    @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = true
+    @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
+    @AppStorage("lf.translationHotkeyPreset") private var translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
+    @AppStorage("lf.translationHotkeyCustom") private var translationHotkeyCustom = ""
+    @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
+    @State private var aiReady = false
 
     private let columns = [GridItem(.adaptive(minimum: 210), spacing: 16)]
 
@@ -44,12 +55,55 @@ struct TransformsView: View {
                 CreateCard { showingNew = true }
             }
             .appearStagger(3, appeared)
+
+            FlowSettingsGroup("Selection actions") {
+                FlowToggleRow(
+                    title: "Fix selected text with single Shift",
+                    detail: aiReady
+                        ? "A single clean Shift tap proofreads the selection — typos, punctuation, grammar — in place."
+                        : "Sign in to Sayful Cloud (profile menu) to enable AI text fixes.",
+                    isOn: Binding(get: { aiReady && grammarOnSingleShift },
+                                  set: { grammarOnSingleShift = $0 }))
+                    .disabled(!aiReady)
+
+                FlowPickerRow(
+                    title: "Translate target",
+                    detail: "Used by the menu-bar Translate action. The hotkey below translates into your current keyboard layout's language.",
+                    selection: $translationTarget,
+                    options: Layout.allCases.map { (value: $0.rawValue, label: $0.displayName) })
+
+                FlowToggleRow(
+                    title: "Translate selection with \(translationShortcutName)",
+                    detail: aiReady
+                        ? "\(translationShortcutName) translates the selection into your active keyboard layout's language."
+                        : "Sign in to Sayful Cloud to enable translation.",
+                    isOn: Binding(get: { aiReady && translationHotkeyEnabled },
+                                  set: { translationHotkeyEnabled = $0 }))
+                    .disabled(!aiReady)
+            }
+            .appearStagger(4, appeared)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .appearTrigger($appeared)
+        .onAppear(perform: refreshAIReady)
+        .onChange(of: auth.isSignedIn) { _ in refreshAIReady() }
         .sheet(isPresented: $showingNew) { TransformEditor(existing: nil) }
         .sheet(item: $editing) { t in TransformEditor(existing: t) }
         .sheet(isPresented: $showingDemo) { TransformDemo() }
+    }
+
+    private var translationShortcutName: String {
+        GlobalShortcut.decode(translationHotkeyCustom)?.displayName
+            ?? (GlobalShortcutPreset(rawValue: translationHotkeyPreset) ?? .shiftSpace).displayName
+    }
+
+    private func refreshAIReady() {
+        Task {
+            let ready = await Task.detached(priority: .userInitiated) {
+                AIAssistantManager.shared.isReady
+            }.value
+            await MainActor.run { aiReady = ready }
+        }
     }
 }
 

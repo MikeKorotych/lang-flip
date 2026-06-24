@@ -1019,21 +1019,14 @@ struct ModelsTab: View {
 
     @AppStorage("lf.aiMode") private var aiMode = AIMode.backend.rawValue
     @AppStorage("lf.showAdvancedAI") private var showAdvancedAI = false
-    @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = true
-    @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
-    @AppStorage("lf.translationHotkeyPreset") private var translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
-    @AppStorage("lf.translationHotkeyCustom") private var translationHotkeyCustom = ""
     @AppStorage("lf.screenTextCaptureHotkeyEnabled") private var screenTextCaptureHotkeyEnabled = true
     @AppStorage("lf.screenTextCaptureHotkeyPreset") private var screenTextCaptureHotkeyPreset = GlobalShortcutPreset.commandShiftS.rawValue
     @AppStorage("lf.screenTextCaptureHotkeyCustom") private var screenTextCaptureHotkeyCustom = ""
-    @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
     @AppStorage("lf.ollamaModel") private var ollamaModel = "qwen3.5:2b"
     @AppStorage("lf.cloudProvider") private var cloudProvider = AICloudProvider.openRouter.rawValue
     @AppStorage("lf.openaiModel") private var openaiModel = "gpt-5-nano"
     @AppStorage("lf.openaiBaseURL") private var openaiBaseURL = "https://api.openai.com/v1"
     @AppStorage("lf.cloudOCRModel") private var cloudOCRModel = "google/gemini-3.1-flash-lite"
-
-    @State private var aiReadyForHotkeys = false
 
     /// API key kept in Keychain (NOT @AppStorage). Mirror it through
     /// @State so SwiftUI re-renders the SecureField properly. We
@@ -1070,11 +1063,11 @@ struct ModelsTab: View {
             // never realize a model selection was needed too.
             if AIMode(rawValue: aiMode) == .ollama {
                 Section("Ollama") {
+                    // Readiness for the grammar/translate toggles now lives on
+                    // the Transforms tab, so nothing to sync here.
                     OllamaModelPicker(
                         selectedModel: $ollamaModel,
-                        onSelectedModelAvailabilityChanged: { ready in
-                            syncAIHotkeyAvailability(assistantReady: ready)
-                        }
+                        onSelectedModelAvailabilityChanged: { _ in }
                     )
                     helpText("Use a model already installed in Ollama, or download one here. Local AI stays on this Mac.")
                 }
@@ -1135,34 +1128,9 @@ struct ModelsTab: View {
             }
             } // end if showAdvancedAI
 
-            Section("Features") {
-                Toggle("Fix selected text with single Shift", isOn: Binding(
-                    get: { aiReadyForHotkeys && grammarOnSingleShift },
-                    set: { grammarOnSingleShift = $0 }
-                ))
-                .disabled(!aiReadyForHotkeys)
-                helpText(aiReadyForHotkeys
-                         ? "A single clean Shift tap sends the selected text to the active AI model for typo, punctuation, and grammar cleanup. The experimental Sayful toggle can also try the last sentence before the cursor."
-                         : "Install and select a local model to enable this shortcut.")
-            }
-
-            Section("Translate selection") {
-                Picker("Default target", selection: $translationTarget) {
-                    ForEach(Layout.allCases, id: \.self) { layout in
-                        Text(layout.displayName).tag(layout.rawValue)
-                    }
-                }
-                helpText("Used by the menu bar Translate action. The Shift+Space hotkey translates into the language of your current keyboard layout.")
-
-                Toggle("Translate with \(translationShortcutName)", isOn: Binding(
-                    get: { aiReadyForHotkeys && translationHotkeyEnabled },
-                    set: { translationHotkeyEnabled = $0 }
-                ))
-                .disabled(!aiReadyForHotkeys)
-                helpText(aiReadyForHotkeys
-                         ? "When AI is on, \(translationShortcutName) translates the current selection into the language of your active keyboard layout."
-                         : "Install and select a local model to enable this shortcut.")
-            }
+            // "Fix selected text with single Shift" and "Translate selection"
+            // moved to the Transforms sidebar tab — they're user features, and
+            // this AI tab is hidden for normal users.
 
             if AIMode(rawValue: aiMode) == .ollama {
                 Section("Screen text capture") {
@@ -1196,13 +1164,6 @@ struct ModelsTab: View {
             if aiMode == AIMode.bundledModel.rawValue {
                 aiMode = AIMode.ollama.rawValue
             }
-            refreshAIHotkeyAvailability()
-        }
-        .onChange(of: aiMode) { _ in
-            refreshAIHotkeyAvailability()
-        }
-        .onChange(of: ollamaModel) { _ in
-            refreshAIHotkeyAvailability()
         }
     }
 
@@ -1285,31 +1246,6 @@ struct ModelsTab: View {
            (provider == .openAI && openaiModel == AICloudProvider.openRouter.defaultModel) {
             openaiModel = provider.defaultModel
         }
-    }
-
-    private func refreshAIHotkeyAvailability() {
-        Task {
-            let ready = await Task.detached(priority: .userInitiated) {
-                AIAssistantManager.shared.isReady
-            }.value
-            await MainActor.run {
-                syncAIHotkeyAvailability(assistantReady: ready)
-            }
-        }
-    }
-
-    private func syncAIHotkeyAvailability(assistantReady: Bool) {
-        aiReadyForHotkeys = assistantReady
-        Settings.shared.applyRecommendedAIHotkeyDefaults(assistantReady: assistantReady)
-        grammarOnSingleShift = Settings.shared.grammarCheckOnSingleShift
-        if Settings.shared.hasStoredTranslationHotkeyPreference {
-            translationHotkeyEnabled = Settings.shared.translationHotkeyEnabled
-        }
-    }
-
-    private var translationShortcutName: String {
-        GlobalShortcut.decode(translationHotkeyCustom)?.displayName
-            ?? (GlobalShortcutPreset(rawValue: translationHotkeyPreset) ?? .shiftSpace).displayName
     }
 
     private var screenCaptureShortcutName: String {
