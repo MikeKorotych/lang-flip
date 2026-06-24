@@ -193,622 +193,636 @@ struct VoiceTab: View {
             .padding(.top, 8)
             .padding(.bottom, 12)
 
-            Form {
-                if voiceTab == .tts {
-            Section("Text to speech") {
-                Picker(selection: $ttsBackend) {
-                    ForEach(TextToSpeechBackend.allCases) { backend in
-                        Text(backend.displayName).tag(backend.rawValue)
-                    }
-                } label: {
-                    settingLabel("Backend", help: "System voices start instantly. OmniVoice runs locally and gives more voice controls, but takes longer to generate audio.")
-                }
-
-                if activeTTSBackend == .system {
-                    Picker(selection: $speechVoiceIdentifier) {
-                        Text("System default").tag("")
-                        ForEach(voices, id: \.self) { voice in
-                            Text(SpeechReader.displayName(for: voice)).tag(voice)
-                        }
-                    } label: {
-                        settingLabel("Voice", help: "Pick which macOS voice reads selected text aloud.")
-                    }
-                    .onChange(of: speechVoiceIdentifier) { _ in
-                        SpeechReader.shared.applySettings()
-                    }
-
-                    HStack {
-                        settingLabel("Speed", help: "Move right to read faster, left to read slower.")
-                        Slider(value: $speechRate, in: 120...260, step: 5)
-                            .onChange(of: speechRate) { _ in
-                                SpeechReader.shared.applySettings()
-                            }
-                        Text("\(Int(speechRate))")
-                            .foregroundColor(.secondary)
-                            .frame(width: 34, alignment: .trailing)
-                    }
-                } else if activeTTSBackend == .cloud {
-                    SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
-                        .textFieldStyle(.roundedBorder)
-                        .onChange(of: cloudTTSKeyDraft) { newValue in
-                            KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
-                        }
-                    helpText("The key is stored in macOS Keychain. OpenRouter is recommended because it lets you switch TTS models without changing the app.")
-
-                    HStack {
-                        settingLabel("Base URL", help: "OpenRouter uses https://openrouter.ai/api/v1. OpenAI direct uses https://api.openai.com/v1.")
-                        TextField("https://openrouter.ai/api/v1", text: $cloudTTSBaseURL)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    if cloudTTSUsesOpenRouter {
-                        OpenRouterSpeechModelPicker(selectedModel: $cloudTTSModel)
-                            .onChange(of: cloudTTSModel) { _ in
-                                syncCloudTTSVoiceForModel()
-                            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    if voiceTab == .tts {
+                        ttsContent
                     } else {
-                        TextField("Model", text: $cloudTTSModel)
-                            .textFieldStyle(.roundedBorder)
-                            .onChange(of: cloudTTSModel) { _ in
-                                syncCloudTTSVoiceForModel()
-                            }
-                    }
-
-                    Picker(selection: $cloudTTSVoice) {
-                        ForEach(cloudTTSVoiceOptions) { voice in
-                            Text(voice.label).tag(voice.id)
-                        }
-                    } label: {
-                        settingLabel("Voice", help: "Voice identifiers are model-specific. LangFlip shows known voices for the selected curated model.")
-                    }
-
-                    HStack {
-                        settingLabel("Speed", help: "OpenAI TTS supports speed. Some OpenRouter providers silently ignore it.")
-                        Slider(value: $cloudTTSSpeed, in: 0.5...1.5, step: 0.05)
-                        Text(String(format: "%.2fx", cloudTTSSpeed))
-                            .foregroundColor(.secondary)
-                            .frame(width: 48, alignment: .trailing)
-                    }
-
-                    TextField("Optional voice instructions", text: $cloudTTSInstructions)
-                        .textFieldStyle(.roundedBorder)
-                        .help("Example: Warm, clear, natural pacing. For Gemini-style models, inline tags in the text may work better than instructions.")
-
-                    if let cloudTTSMessage {
-                        Text(cloudTTSMessage)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    if let cloudTTSOutputURL {
-                        HStack {
-                            Text("Last cloud TTS output")
-                            Spacer()
-                            Text(cloudTTSOutputURL.lastPathComponent)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                            Button("Play") {
-                                CloudSpeechSynthesizer.shared.play(cloudTTSOutputURL)
-                            }
-                            .controlSize(.small)
-                            Button("Reveal") {
-                                NSWorkspace.shared.activateFileViewerSelecting([cloudTTSOutputURL])
-                            }
-                            .controlSize(.small)
-                        }
-                    }
-
-                    helpText("Current practical default: OpenAI GPT-4o Mini TTS via OpenRouter for cost and compatibility. For richer multilingual or expressive output, try google/gemini-3.1-flash-tts-preview.")
-                } else {
-                    Picker(selection: $omniVoiceLanguage) {
-                        ForEach(OmniVoiceLanguage.allCases) { language in
-                            Text(language.displayName).tag(language.rawValue)
-                        }
-                    } label: {
-                        settingLabel("Language", help: "Leave Auto for normal use. Choose a language manually if pronunciation sounds wrong.")
-                    }
-
-                    HStack {
-                        settingLabel("OmniVoice", help: "Shows whether the local voice model is ready on this Mac.")
-                        Spacer()
-                        Text(omniVoiceStatusLabel)
-                            .foregroundColor(omniVoiceAvailability.isReady ? .green : .orange)
-                            .lineLimit(1)
-                    }
-
-                    Picker(selection: $omniVoiceGender) {
-                        ForEach(OmniVoiceGenderStyle.allCases) { style in
-                            Text(style.displayName).tag(style.rawValue)
-                        }
-                    } label: {
-                        settingLabel("Voice", help: "Choose a more feminine or masculine voice character. Default lets the model decide.")
-                    }
-
-                    Picker(selection: $omniVoiceAge) {
-                        ForEach(OmniVoiceAgeStyle.allCases) { style in
-                            Text(style.displayName).tag(style.rawValue)
-                        }
-                    } label: {
-                        settingLabel("Age", help: "Changes the age character of the voice: younger, older, or neutral.")
-                    }
-
-                    Picker(selection: $omniVoicePitch) {
-                        ForEach(OmniVoicePitchStyle.allCases) { style in
-                            Text(style.displayName).tag(style.rawValue)
-                        }
-                    } label: {
-                        settingLabel("Pitch", help: "Move toward Low for a deeper voice, High for a brighter voice.")
-                    }
-
-                    Picker(selection: $omniVoiceAccent) {
-                        ForEach(OmniVoiceAccentStyle.allCases) { style in
-                            Text(style.displayName).tag(style.rawValue)
-                        }
-                    } label: {
-                        settingLabel("Accent", help: "Adds an accent flavor. It usually works best with English text.")
-                    }
-
-                    Toggle(isOn: $omniVoiceWhisper) {
-                        settingLabel("Whispered voice", help: "Makes the voice sound quieter and breathier, like a whisper.")
-                    }
-
-                    Divider()
-
-                    HStack {
-                        settingLabel("Reference voice", help: "Optional voice sample. Add a short clean recording and OmniVoice will try to speak with a similar voice.")
-                        Spacer()
-                        Text(omniVoiceReferenceAudioLabel)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                        Button("Choose Audio") {
-                            chooseOmniVoiceReferenceAudio()
-                        }
-                        .controlSize(.small)
-                        Button("Clear") {
-                            omniVoiceReferenceAudioPath = ""
-                            omniVoiceReferenceText = ""
-                        }
-                        .disabled(omniVoiceReferenceAudioPath.isEmpty)
-                        .controlSize(.small)
-                    }
-
-                    TextField("Reference transcript (optional)", text: $omniVoiceReferenceText)
-                        .textFieldStyle(.roundedBorder)
-                        .controlSize(.small)
-                        .disabled(omniVoiceReferenceAudioPath.isEmpty)
-                        .help("Optional: type what is said in the reference audio. This can make voice cloning more accurate.")
-
-                    Divider()
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            settingLabel("Speed", help: "Move right to speak faster, left to speak slower. Fixed Duration turns this off.")
-                            Slider(value: $omniVoiceSpeed, in: 0.5...1.5, step: 0.05)
-                            Text(String(format: "%.2fx", omniVoiceSpeed))
-                                .foregroundColor(.secondary)
-                                .frame(width: 48, alignment: .trailing)
-                        }
-                        .disabled(omniVoiceDuration > 0)
-
-                        HStack {
-                            settingLabel("Duration", help: "Keep Auto for natural timing. Set a number only when the audio must fit a fixed length.")
-                            Slider(value: $omniVoiceDuration, in: 0...60, step: 0.5)
-                            Text(omniVoiceDuration > 0 ? String(format: "%.1fs", omniVoiceDuration) : "Auto")
-                                .foregroundColor(.secondary)
-                                .frame(width: 48, alignment: .trailing)
-                        }
-
-                        HStack {
-                            settingLabel("Sentence pause", help: "Adds a real pause after '.', '!', '?' and similar sentence endings. Increase it for jokes, stories, and dramatic reading.")
-                            Slider(value: $omniVoiceSentencePause, in: 0...2, step: 0.05)
-                            Text(String(format: "%.2fs", omniVoiceSentencePause))
-                                .foregroundColor(.secondary)
-                                .frame(width: 48, alignment: .trailing)
-                        }
-
-                        HStack {
-                            settingLabel("Line pause", help: "Adds a longer pause after line breaks. Increase it when reading lists, poems, chat messages, or multi-line jokes.")
-                            Slider(value: $omniVoiceLinePause, in: 0...3, step: 0.05)
-                            Text(String(format: "%.2fs", omniVoiceLinePause))
-                                .foregroundColor(.secondary)
-                                .frame(width: 48, alignment: .trailing)
-                        }
-
-                        HStack {
-                            settingLabel("Quality", help: "Move left for faster generation, right for better quality. 32 is a good everyday balance.")
-                            Slider(
-                                value: Binding(
-                                    get: { Double(omniVoiceNumSteps) },
-                                    set: { omniVoiceNumSteps = Int($0.rounded()) }
-                                ),
-                                in: 4...64,
-                                step: 1
-                            )
-                            Text("\(omniVoiceNumSteps)")
-                                .foregroundColor(.secondary)
-                                .frame(width: 48, alignment: .trailing)
-                        }
-
-                        HStack {
-                            settingLabel("Style strength", help: "Move right if the selected voice/style is too subtle. Move left if the result sounds forced or less natural.")
-                            Slider(value: $omniVoiceGuidanceScale, in: 0...4, step: 0.1)
-                            Text(String(format: "%.1f", omniVoiceGuidanceScale))
-                                .foregroundColor(.secondary)
-                                .frame(width: 48, alignment: .trailing)
-                        }
-                    }
-
-                    DisclosureGroup("Advanced generation") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Toggle(isOn: $omniVoiceDenoise) {
-                                settingLabel("Cleaner voice", help: "Usually keep this on. Turn it off only if the voice starts sounding too processed.")
-                            }
-                            Toggle(isOn: $omniVoicePostprocessOutput) {
-                                settingLabel("Trim awkward silence", help: "Usually keep this on. It removes overly long silent parts from the generated audio.")
-                            }
-                            advancedOmniVoiceSlider("Timing stability", value: $omniVoiceTShift, range: 0...2, step: 0.05, help: "Leave near the default unless speech timing sounds strange. Moving it can change rhythm and stability.")
-                            advancedOmniVoiceSlider("Voice smoothness", value: $omniVoiceLayerPenaltyFactor, range: 0...10, step: 0.5, help: "Higher can make the voice more controlled. Lower can make it looser, but sometimes less stable.")
-                            advancedOmniVoiceSlider("Rhythm variety", value: $omniVoicePositionTemperature, range: 0...10, step: 0.5, help: "Higher adds more variation to rhythm. Lower is more predictable.")
-                            advancedOmniVoiceSlider("Voice variety", value: $omniVoiceClassTemperature, range: 0...2, step: 0.05, help: "0 is safest and most stable. Increase only if you want more variation and can accept occasional odd results.")
-                            Button("Reset generation settings") {
-                                Settings.shared.resetOmniVoiceGenerationSettings()
-                                syncOmniVoiceGenerationSettingsFromDefaults()
-                            }
-                            .controlSize(.small)
-                            .help("Restore speed, pauses, quality, and advanced generation settings to LangFlip defaults.")
-                        }
-                        .padding(.top, 6)
-                    }
-
-                    if let omniVoiceMessage {
-                        Text(omniVoiceMessage)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    if let omniVoiceOutputURL {
-                        HStack {
-                            Text("Last OmniVoice output")
-                            Spacer()
-                            Text(omniVoiceOutputURL.lastPathComponent)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                            Button("Play") {
-                                OmniVoiceSynthesizer.shared.play(omniVoiceOutputURL)
-                            }
-                            .controlSize(.small)
-                            Button("Reveal") {
-                                NSWorkspace.shared.activateFileViewerSelecting([omniVoiceOutputURL])
-                            }
-                            .controlSize(.small)
-                        }
+                        dictationContent
                     }
                 }
-
-                HStack {
-                    Button(ttsSampleButtonTitle) {
-                        readTTSSample()
-                    }
-                    .disabled(ttsSampleDisabled)
-
-                    Button("Stop") {
-                        SpeechReader.shared.stop()
-                        OmniVoiceSynthesizer.shared.stop()
-                        CloudSpeechSynthesizer.shared.stop()
-                        isGeneratingOmniVoice = false
-                        isGeneratingCloudTTS = false
-                    }
-                    Spacer()
-                }
-                .controlSize(.small)
-
-                helpText("Use the menu bar action to read the current text selection aloud. System voices are instant; OmniVoice is local and heavier; Cloud TTS sends selected text to your chosen API provider.")
+                .padding(28)
+                .frame(maxWidth: 820, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-
-            Section("Read aloud shortcut") {
-                Toggle("Read selected text with \(readSelectionShortcutName)", isOn: $readSelectionHotkeyEnabled)
-                helpText("Select text in any app and press \(readSelectionShortcutName). Change this shortcut in Hotkeys.")
+            .onAppear {
+                voices = SpeechReader.availableVoices
+                cloudTTSKeyDraft = KeychainStore.getString(account: KeychainStore.openAIAPIKey) ?? ""
+                syncCloudTTSVoiceForModel()
+                microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
+                refreshRecorderState()
+                refreshOmniVoiceState()
+                refreshCloudTTSState()
             }
+            .onReceive(timer) { _ in
+                microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
+                refreshRecorderState()
+                refreshOmniVoiceState()
+                refreshCloudTTSState()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .langFlipVoiceRecorderChanged)) { _ in
+                refreshRecorderState()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var ttsContent: some View {
+        FlowSettingsGroup("Text to speech") {
+            FlowPickerRow(
+                title: "Backend",
+                detail: "System voices start instantly. OmniVoice runs locally and gives more voice controls, but takes longer to generate audio.",
+                selection: $ttsBackend,
+                options: TextToSpeechBackend.allCases.map { (value: $0.rawValue, label: $0.displayName) }
+            )
+
+            if activeTTSBackend == .system {
+                FlowPickerRow(
+                    title: "Voice",
+                    detail: "Pick which macOS voice reads selected text aloud.",
+                    selection: $speechVoiceIdentifier,
+                    options: [(value: "", label: "System default")] + voices.map { (value: $0, label: SpeechReader.displayName(for: $0)) }
+                )
+                .onChange(of: speechVoiceIdentifier) { _ in
+                    SpeechReader.shared.applySettings()
+                }
+
+                FlowSliderRow(
+                    title: "Speed",
+                    detail: "Move right to read faster, left to read slower.",
+                    value: $speechRate,
+                    range: 120...260,
+                    step: 5,
+                    valueLabel: "\(Int(speechRate))"
+                )
+                .onChange(of: speechRate) { _ in
+                    SpeechReader.shared.applySettings()
+                }
+            } else if activeTTSBackend == .cloud {
+                SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: cloudTTSKeyDraft) { newValue in
+                        KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
+                    }
+                helpText("The key is stored in macOS Keychain. OpenRouter is recommended because it lets you switch TTS models without changing the app.")
+
+                HStack {
+                    Text("Base URL").foregroundColor(FlowTheme.ink)
+                    TextField("https://openrouter.ai/api/v1", text: $cloudTTSBaseURL)
+                        .textFieldStyle(.roundedBorder)
+                }
+                helpText("OpenRouter uses https://openrouter.ai/api/v1. OpenAI direct uses https://api.openai.com/v1.")
+
+                if cloudTTSUsesOpenRouter {
+                    OpenRouterSpeechModelPicker(selectedModel: $cloudTTSModel)
+                        .onChange(of: cloudTTSModel) { _ in
+                            syncCloudTTSVoiceForModel()
+                        }
                 } else {
-            Section("Dictation") {
-                HStack {
-                    Image(systemName: microphoneStatus == .authorized ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                        .foregroundColor(microphoneStatus == .authorized ? .green : .orange)
-                    Text("Microphone")
-                    Text(microphoneStatusLabel)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    Button(microphoneButtonTitle) {
-                        switch microphoneStatus {
-                        case .authorized:
-                            PermissionStatus.openMicrophonePane()
-                        case .notDetermined:
-                            PermissionStatus.requestMicrophone { granted in
-                                microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
-                            }
-                        case .denied, .restricted:
-                            PermissionStatus.openMicrophonePane()
-                        @unknown default:
-                            PermissionStatus.openMicrophonePane()
+                    TextField("Model", text: $cloudTTSModel)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: cloudTTSModel) { _ in
+                            syncCloudTTSVoiceForModel()
                         }
-                    }
-                    .controlSize(.small)
                 }
 
-                Divider()
+                FlowPickerRow(
+                    title: "Voice",
+                    detail: "Voice identifiers are model-specific. LangFlip shows known voices for the selected curated model.",
+                    selection: $cloudTTSVoice,
+                    options: cloudTTSVoiceOptions.map { (value: $0.id, label: $0.label) }
+                )
 
-                Toggle("Push-to-talk dictation", isOn: $dictationPushToTalkEnabled)
-                helpText(dictationPushToTalkEnabled
-                         ? "Hold \(dictationPushToTalkName) to record, then release to transcribe and insert text."
-                         : "Push-to-talk dictation is off. Hands-free dictation can stay enabled below.")
+                FlowSliderRow(
+                    title: "Speed",
+                    detail: "OpenAI TTS supports speed. Some OpenRouter providers silently ignore it.",
+                    value: $cloudTTSSpeed,
+                    range: 0.5...1.5,
+                    step: 0.05,
+                    valueLabel: String(format: "%.2fx", cloudTTSSpeed)
+                )
 
-                Toggle("Hands-free dictation", isOn: $dictationHandsFreeEnabled)
-                helpText(dictationHandsFreeEnabled
-                         ? "Press \(dictationHandsFreeName) once to start recording, then press it again to stop and transcribe."
-                         : "Hands-free dictation is off. Push-to-talk can stay enabled above.")
+                TextField("Optional voice instructions", text: $cloudTTSInstructions)
+                    .textFieldStyle(.roundedBorder)
+                    .help("Example: Warm, clear, natural pacing. For Gemini-style models, inline tags in the text may work better than instructions.")
 
-                if dictationHandsFreeEnabled {
-                    Picker("Hands-free toggle", selection: $dictationHandsFreeShortcut) {
-                        ForEach(DictationHandsFreeShortcut.allCases) { shortcut in
-                            Text(shortcut.displayName).tag(shortcut.rawValue)
-                        }
-                    }
-                    helpText("Fn+Option works as a tap toggle: press and release once to start, then press and release again to stop.")
-                }
-
-                Divider()
-
-                HStack {
-                    Text("Input")
-                    Spacer()
-                    Text(activeInputName)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                    Button("Sound Settings") {
-                        PermissionStatus.openSoundInputPane()
-                    }
-                    .controlSize(.small)
-                }
-
-                if !inputDevices.isEmpty {
-                    Text("Detected: \(inputDevices.map(\.localizedName).joined(separator: ", "))")
+                if let cloudTTSMessage {
+                    Text(cloudTTSMessage)
                         .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
+                        .foregroundColor(FlowTheme.inkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+
+                if let cloudTTSOutputURL {
+                    HStack {
+                        Text("Last cloud TTS output").foregroundColor(FlowTheme.ink)
+                        Spacer()
+                        Text(cloudTTSOutputURL.lastPathComponent)
+                            .foregroundColor(FlowTheme.inkSecondary)
+                            .lineLimit(1)
+                        FlowSmallButton(title: "Play") {
+                            CloudSpeechSynthesizer.shared.play(cloudTTSOutputURL)
+                        }
+                        FlowSmallButton(title: "Reveal") {
+                            NSWorkspace.shared.activateFileViewerSelecting([cloudTTSOutputURL])
+                        }
+                    }
+                }
+
+                helpText("Current practical default: OpenAI GPT-4o Mini TTS via OpenRouter for cost and compatibility. For richer multilingual or expressive output, try google/gemini-3.1-flash-tts-preview.")
+            } else {
+                FlowPickerRow(
+                    title: "Language",
+                    detail: "Leave Auto for normal use. Choose a language manually if pronunciation sounds wrong.",
+                    selection: $omniVoiceLanguage,
+                    options: OmniVoiceLanguage.allCases.map { (value: $0.rawValue, label: $0.displayName) }
+                )
 
                 HStack {
-                    Button(recorderIsRecording ? "Stop test recording" : "Start test recording") {
-                        if recorderIsRecording {
-                            VoiceRecorder.shared.stop()
-                        } else if microphoneStatus == .authorized {
-                            _ = VoiceRecorder.shared.start()
-                        } else if microphoneStatus == .notDetermined {
-                            PermissionStatus.requestMicrophone { _ in
-                                microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
-                                if microphoneStatus == .authorized {
-                                    _ = VoiceRecorder.shared.start()
-                                }
-                            }
-                        } else {
-                            PermissionStatus.openMicrophonePane()
-                        }
-                        refreshRecorderState()
-                    }
-                    .disabled(microphoneStatus == .restricted)
-
-                    if recorderIsRecording {
-                        Text(formatDuration(recorderElapsed))
-                            .monospacedDigit()
-                            .foregroundColor(.secondary)
-                    }
-
+                    Text("OmniVoice").foregroundColor(FlowTheme.ink)
                     Spacer()
+                    Text(omniVoiceStatusLabel)
+                        .foregroundColor(omniVoiceAvailability.isReady ? FlowTheme.accent : .orange)
+                        .lineLimit(1)
                 }
-                .controlSize(.small)
+                helpText("Shows whether the local voice model is ready on this Mac.")
+
+                FlowPickerRow(
+                    title: "Voice",
+                    detail: "Choose a more feminine or masculine voice character. Default lets the model decide.",
+                    selection: $omniVoiceGender,
+                    options: OmniVoiceGenderStyle.allCases.map { (value: $0.rawValue, label: $0.displayName) }
+                )
+
+                FlowPickerRow(
+                    title: "Age",
+                    detail: "Changes the age character of the voice: younger, older, or neutral.",
+                    selection: $omniVoiceAge,
+                    options: OmniVoiceAgeStyle.allCases.map { (value: $0.rawValue, label: $0.displayName) }
+                )
+
+                FlowPickerRow(
+                    title: "Pitch",
+                    detail: "Move toward Low for a deeper voice, High for a brighter voice.",
+                    selection: $omniVoicePitch,
+                    options: OmniVoicePitchStyle.allCases.map { (value: $0.rawValue, label: $0.displayName) }
+                )
+
+                FlowPickerRow(
+                    title: "Accent",
+                    detail: "Adds an accent flavor. It usually works best with English text.",
+                    selection: $omniVoiceAccent,
+                    options: OmniVoiceAccentStyle.allCases.map { (value: $0.rawValue, label: $0.displayName) }
+                )
+
+                FlowToggleRow(
+                    title: "Whispered voice",
+                    detail: "Makes the voice sound quieter and breathier, like a whisper.",
+                    isOn: $omniVoiceWhisper
+                )
+
+                Divider().overlay(FlowTheme.cardStroke)
+
+                HStack {
+                    Text("Reference voice").foregroundColor(FlowTheme.ink)
+                    Spacer()
+                    Text(omniVoiceReferenceAudioLabel)
+                        .foregroundColor(FlowTheme.inkSecondary)
+                        .lineLimit(1)
+                    FlowSmallButton(title: "Choose Audio") {
+                        chooseOmniVoiceReferenceAudio()
+                    }
+                    FlowSmallButton(title: "Clear") {
+                        omniVoiceReferenceAudioPath = ""
+                        omniVoiceReferenceText = ""
+                    }
+                    .disabled(omniVoiceReferenceAudioPath.isEmpty)
+                }
+                helpText("Optional voice sample. Add a short clean recording and OmniVoice will try to speak with a similar voice.")
+
+                TextField("Reference transcript (optional)", text: $omniVoiceReferenceText)
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
+                    .disabled(omniVoiceReferenceAudioPath.isEmpty)
+                    .help("Optional: type what is said in the reference audio. This can make voice cloning more accurate.")
+
+                Divider().overlay(FlowTheme.cardStroke)
+
+                FlowSliderRow(
+                    title: "Speed",
+                    detail: "Move right to speak faster, left to speak slower. Fixed Duration turns this off.",
+                    value: $omniVoiceSpeed,
+                    range: 0.5...1.5,
+                    step: 0.05,
+                    valueLabel: String(format: "%.2fx", omniVoiceSpeed)
+                )
+                .disabled(omniVoiceDuration > 0)
+
+                FlowSliderRow(
+                    title: "Duration",
+                    detail: "Keep Auto for natural timing. Set a number only when the audio must fit a fixed length.",
+                    value: $omniVoiceDuration,
+                    range: 0...60,
+                    step: 0.5,
+                    valueLabel: omniVoiceDuration > 0 ? String(format: "%.1fs", omniVoiceDuration) : "Auto"
+                )
+
+                FlowSliderRow(
+                    title: "Sentence pause",
+                    detail: "Adds a real pause after '.', '!', '?' and similar sentence endings. Increase it for jokes, stories, and dramatic reading.",
+                    value: $omniVoiceSentencePause,
+                    range: 0...2,
+                    step: 0.05,
+                    valueLabel: String(format: "%.2fs", omniVoiceSentencePause)
+                )
+
+                FlowSliderRow(
+                    title: "Line pause",
+                    detail: "Adds a longer pause after line breaks. Increase it when reading lists, poems, chat messages, or multi-line jokes.",
+                    value: $omniVoiceLinePause,
+                    range: 0...3,
+                    step: 0.05,
+                    valueLabel: String(format: "%.2fs", omniVoiceLinePause)
+                )
+
+                FlowSliderRow(
+                    title: "Quality",
+                    detail: "Move left for faster generation, right for better quality. 32 is a good everyday balance.",
+                    value: Binding(
+                        get: { Double(omniVoiceNumSteps) },
+                        set: { omniVoiceNumSteps = Int($0.rounded()) }
+                    ),
+                    range: 4...64,
+                    step: 1,
+                    valueLabel: "\(omniVoiceNumSteps)"
+                )
+
+                FlowSliderRow(
+                    title: "Style strength",
+                    detail: "Move right if the selected voice/style is too subtle. Move left if the result sounds forced or less natural.",
+                    value: $omniVoiceGuidanceScale,
+                    range: 0...4,
+                    step: 0.1,
+                    valueLabel: String(format: "%.1f", omniVoiceGuidanceScale)
+                )
+
+                DisclosureGroup("Advanced generation") {
+                    VStack(alignment: .leading, spacing: 14) {
+                        FlowToggleRow(
+                            title: "Cleaner voice",
+                            detail: "Usually keep this on. Turn it off only if the voice starts sounding too processed.",
+                            isOn: $omniVoiceDenoise
+                        )
+                        FlowToggleRow(
+                            title: "Trim awkward silence",
+                            detail: "Usually keep this on. It removes overly long silent parts from the generated audio.",
+                            isOn: $omniVoicePostprocessOutput
+                        )
+                        advancedOmniVoiceSlider("Timing stability", value: $omniVoiceTShift, range: 0...2, step: 0.05, help: "Leave near the default unless speech timing sounds strange. Moving it can change rhythm and stability.")
+                        advancedOmniVoiceSlider("Voice smoothness", value: $omniVoiceLayerPenaltyFactor, range: 0...10, step: 0.5, help: "Higher can make the voice more controlled. Lower can make it looser, but sometimes less stable.")
+                        advancedOmniVoiceSlider("Rhythm variety", value: $omniVoicePositionTemperature, range: 0...10, step: 0.5, help: "Higher adds more variation to rhythm. Lower is more predictable.")
+                        advancedOmniVoiceSlider("Voice variety", value: $omniVoiceClassTemperature, range: 0...2, step: 0.05, help: "0 is safest and most stable. Increase only if you want more variation and can accept occasional odd results.")
+                        FlowSmallButton(title: "Reset generation settings") {
+                            Settings.shared.resetOmniVoiceGenerationSettings()
+                            syncOmniVoiceGenerationSettingsFromDefaults()
+                        }
+                        .help("Restore speed, pauses, quality, and advanced generation settings to LangFlip defaults.")
+                    }
+                    .padding(.top, 6)
+                }
+
+                if let omniVoiceMessage {
+                    Text(omniVoiceMessage)
+                        .font(.caption)
+                        .foregroundColor(FlowTheme.inkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let omniVoiceOutputURL {
+                    HStack {
+                        Text("Last OmniVoice output").foregroundColor(FlowTheme.ink)
+                        Spacer()
+                        Text(omniVoiceOutputURL.lastPathComponent)
+                            .foregroundColor(FlowTheme.inkSecondary)
+                            .lineLimit(1)
+                        FlowSmallButton(title: "Play") {
+                            OmniVoiceSynthesizer.shared.play(omniVoiceOutputURL)
+                        }
+                        FlowSmallButton(title: "Reveal") {
+                            NSWorkspace.shared.activateFileViewerSelecting([omniVoiceOutputURL])
+                        }
+                    }
+                }
+            }
+
+            HStack {
+                FlowSmallButton(title: ttsSampleButtonTitle, prominent: true) {
+                    readTTSSample()
+                }
+                .disabled(ttsSampleDisabled)
+
+                FlowSmallButton(title: "Stop") {
+                    SpeechReader.shared.stop()
+                    OmniVoiceSynthesizer.shared.stop()
+                    CloudSpeechSynthesizer.shared.stop()
+                    isGeneratingOmniVoice = false
+                    isGeneratingCloudTTS = false
+                }
+                Spacer()
+            }
+
+            helpText("Use the menu bar action to read the current text selection aloud. System voices are instant; OmniVoice is local and heavier; Cloud TTS sends selected text to your chosen API provider.")
+        }
+
+        FlowSettingsGroup("Read aloud shortcut") {
+            FlowToggleRow(
+                title: "Read selected text with \(readSelectionShortcutName)",
+                detail: "Select text in any app and press \(readSelectionShortcutName). Change this shortcut in Hotkeys.",
+                isOn: $readSelectionHotkeyEnabled
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var dictationContent: some View {
+        FlowSettingsGroup("Dictation") {
+            HStack {
+                Image(systemName: microphoneStatus == .authorized ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                    .foregroundColor(microphoneStatus == .authorized ? FlowTheme.accent : .orange)
+                Text("Microphone").foregroundColor(FlowTheme.ink)
+                Text(microphoneStatusLabel)
+                    .foregroundColor(FlowTheme.inkSecondary)
+                Spacer()
+                FlowSmallButton(title: microphoneButtonTitle) {
+                    switch microphoneStatus {
+                    case .authorized:
+                        PermissionStatus.openMicrophonePane()
+                    case .notDetermined:
+                        PermissionStatus.requestMicrophone { granted in
+                            microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
+                        }
+                    case .denied, .restricted:
+                        PermissionStatus.openMicrophonePane()
+                    @unknown default:
+                        PermissionStatus.openMicrophonePane()
+                    }
+                }
+            }
+
+            Divider().overlay(FlowTheme.cardStroke)
+
+            FlowToggleRow(
+                title: "Push-to-talk dictation",
+                detail: dictationPushToTalkEnabled
+                    ? "Hold \(dictationPushToTalkName) to record, then release to transcribe and insert text."
+                    : "Push-to-talk dictation is off. Hands-free dictation can stay enabled below.",
+                isOn: $dictationPushToTalkEnabled
+            )
+
+            FlowToggleRow(
+                title: "Hands-free dictation",
+                detail: dictationHandsFreeEnabled
+                    ? "Press \(dictationHandsFreeName) once to start recording, then press it again to stop and transcribe."
+                    : "Hands-free dictation is off. Push-to-talk can stay enabled above.",
+                isOn: $dictationHandsFreeEnabled
+            )
+
+            if dictationHandsFreeEnabled {
+                FlowPickerRow(
+                    title: "Hands-free toggle",
+                    detail: "Fn+Option works as a tap toggle: press and release once to start, then press and release again to stop.",
+                    selection: $dictationHandsFreeShortcut,
+                    options: DictationHandsFreeShortcut.allCases.map { (value: $0.rawValue, label: $0.displayName) }
+                )
+            }
+
+            Divider().overlay(FlowTheme.cardStroke)
+
+            HStack {
+                Text("Input").foregroundColor(FlowTheme.ink)
+                Spacer()
+                Text(activeInputName)
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .lineLimit(1)
+                FlowSmallButton(title: "Sound Settings") {
+                    PermissionStatus.openSoundInputPane()
+                }
+            }
+
+            if !inputDevices.isEmpty {
+                Text("Detected: \(inputDevices.map(\.localizedName).joined(separator: ", "))")
+                    .font(.caption)
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .lineLimit(2)
+            }
+
+            HStack {
+                FlowSmallButton(title: recorderIsRecording ? "Stop test recording" : "Start test recording") {
+                    if recorderIsRecording {
+                        VoiceRecorder.shared.stop()
+                    } else if microphoneStatus == .authorized {
+                        _ = VoiceRecorder.shared.start()
+                    } else if microphoneStatus == .notDetermined {
+                        PermissionStatus.requestMicrophone { _ in
+                            microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
+                            if microphoneStatus == .authorized {
+                                _ = VoiceRecorder.shared.start()
+                            }
+                        }
+                    } else {
+                        PermissionStatus.openMicrophonePane()
+                    }
+                    refreshRecorderState()
+                }
+                .disabled(microphoneStatus == .restricted)
 
                 if recorderIsRecording {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("Input level")
-                            Spacer()
-                            Text(recorderPeakLevel > 0.04 ? "hearing you" : "quiet")
-                                .foregroundColor(.secondary)
-                        }
-                        ProgressView(value: recorderAverageLevel)
-                        ProgressView(value: recorderPeakLevel)
-                            .tint(.green)
-                    }
-                    .font(.caption)
+                    Text(formatDuration(recorderElapsed))
+                        .monospacedDigit()
+                        .foregroundColor(FlowTheme.inkSecondary)
                 }
 
-                if let lastRecordingURL {
+                Spacer()
+            }
+
+            if recorderIsRecording {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Last recording")
+                        Text("Input level").foregroundColor(FlowTheme.ink)
                         Spacer()
-                        Text(lastRecordingURL.lastPathComponent)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                        Button("Reveal") {
-                            NSWorkspace.shared.activateFileViewerSelecting([lastRecordingURL])
-                        }
-                        .controlSize(.small)
+                        Text(recorderPeakLevel > 0.04 ? "hearing you" : "quiet")
+                            .foregroundColor(FlowTheme.inkSecondary)
+                    }
+                    ProgressView(value: recorderAverageLevel)
+                    ProgressView(value: recorderPeakLevel)
+                        .tint(FlowTheme.accent)
+                }
+                .font(.caption)
+            }
+
+            if let lastRecordingURL {
+                HStack {
+                    Text("Last recording").foregroundColor(FlowTheme.ink)
+                    Spacer()
+                    Text(lastRecordingURL.lastPathComponent)
+                        .foregroundColor(FlowTheme.inkSecondary)
+                        .lineLimit(1)
+                    FlowSmallButton(title: "Reveal") {
+                        NSWorkspace.shared.activateFileViewerSelecting([lastRecordingURL])
                     }
                 }
+            }
 
-                Divider()
+            Divider().overlay(FlowTheme.cardStroke)
 
-                Picker(selection: $dictationTranscriptionBackend) {
-                    ForEach(DictationTranscriptionBackend.allCases) { backend in
-                        Text(backend.displayName).tag(backend.rawValue)
+            FlowPickerRow(
+                title: "Transcription",
+                detail: "Local Whisper keeps audio on this Mac. Cloud STT sends only recorded dictation audio to your selected provider.",
+                selection: $dictationTranscriptionBackend,
+                options: DictationTranscriptionBackend.allCases.map { (value: $0.rawValue, label: $0.displayName) }
+            )
+
+            if activeDictationBackend == .cloud {
+                SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: cloudTTSKeyDraft) { newValue in
+                        KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
                     }
-                } label: {
-                    settingLabel("Transcription", help: "Local Whisper keeps audio on this Mac. Cloud STT sends only recorded dictation audio to your selected provider.")
-                }
-
-                if activeDictationBackend == .cloud {
-                    SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
-                        .textFieldStyle(.roundedBorder)
-                        .onChange(of: cloudTTSKeyDraft) { newValue in
-                            KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
-                        }
-
-                    HStack {
-                        settingLabel("Base URL", help: "OpenRouter uses https://openrouter.ai/api/v1. Use a compatible endpoint only if it supports /audio/transcriptions.")
-                        TextField("https://openrouter.ai/api/v1", text: $cloudSTTBaseURL)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    OpenRouterTranscriptionModelPicker(selectedModel: $cloudSTTModel)
-                    helpText("Best default: NVIDIA Parakeet TDT 0.6B v3 for very low cost and strong multilingual STT. Qwen3 ASR Flash is a good noisy/mixed-language fallback.")
-                    helpText("Cloud STT always lets the provider auto-detect the spoken language from audio. LangFlip does not send the current keyboard layout or a language override.")
-                } else {
-                    Picker("Language", selection: $whisperLanguage) {
-                        Text("Auto").tag("auto")
-                        Text("Українська").tag("uk")
-                        Text("Русский").tag("ru")
-                        Text("English").tag("en")
-                    }
-
-                    HStack {
-                        Text("Speech model")
-                        Spacer()
-                        Text(activeSpeechModelLabel)
-                            .foregroundColor(.green)
-                            .lineLimit(1)
-                    }
-
-                    ForEach(WhisperTranscriber.Model.allCases) { model in
-                        HStack {
-                            Image(systemName: isSelectedWhisperModel(model) ? "checkmark.circle.fill" : "circle")
-                                .foregroundColor(isSelectedWhisperModel(model) ? .green : .secondary)
-                                .frame(width: 18)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 6) {
-                                    Text(model.displayName)
-                                    if isSelectedWhisperModel(model) {
-                                        Text("Selected")
-                                            .font(.caption)
-                                            .foregroundColor(.green)
-                                    }
-                                }
-                                Text("\(model.approximateSize) · \(model.note)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            if WhisperTranscriber.isInstalled(model) {
-                                Button(isSelectedWhisperModel(model) ? "Test" : "Use") {
-                                    if isSelectedWhisperModel(model) {
-                                        transcribeLastRecording()
-                                    } else {
-                                        whisperModelPath = model.localURL.path
-                                        whisperAvailability = WhisperTranscriber.availability()
-                                        whisperDownloadMessage = "\(model.displayName) selected."
-                                    }
-                                }
-                                .disabled(isSelectedWhisperModel(model) && (lastRecordingURL == nil || isTranscribing))
-                                .controlSize(.small)
-                            } else {
-                                Button(downloadingWhisperModel == model ? "Downloading…" : "Download") {
-                                    downloadWhisperModel(model)
-                                }
-                                .disabled(downloadingWhisperModel != nil)
-                                .controlSize(.small)
-                            }
-                        }
-                    }
-                }
-
-                if let whisperDownloadMessage {
-                    Text(whisperDownloadMessage)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if let downloadProgress {
-                    ProgressView(value: downloadProgress)
-                    Text(downloadPercentLabel)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-
-                Text("Models folder: \(WhisperTranscriber.modelsDirectory.path)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
 
                 HStack {
-                    Button(isTranscribing ? "Testing…" : "Test selected model") {
-                        transcribeLastRecording()
-                    }
-                    .disabled(testTranscriptionDisabled)
+                    Text("Base URL").foregroundColor(FlowTheme.ink)
+                    TextField("https://openrouter.ai/api/v1", text: $cloudSTTBaseURL)
+                        .textFieldStyle(.roundedBorder)
+                }
+                helpText("OpenRouter uses https://openrouter.ai/api/v1. Use a compatible endpoint only if it supports /audio/transcriptions.")
 
-                    if let lastRecordingURL {
-                        Button("Copy result") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(transcriptionText, forType: .string)
-                        }
-                        .disabled(transcriptionText.isEmpty)
-                        .controlSize(.small)
+                OpenRouterTranscriptionModelPicker(selectedModel: $cloudSTTModel)
+                helpText("Best default: NVIDIA Parakeet TDT 0.6B v3 for very low cost and strong multilingual STT. Qwen3 ASR Flash is a good noisy/mixed-language fallback.")
+                helpText("Cloud STT always lets the provider auto-detect the spoken language from audio. LangFlip does not send the current keyboard layout or a language override.")
+            } else {
+                FlowPickerRow(
+                    title: "Language",
+                    selection: $whisperLanguage,
+                    options: [
+                        (value: "auto", label: "Auto"),
+                        (value: "uk", label: "Українська"),
+                        (value: "ru", label: "Русский"),
+                        (value: "en", label: "English"),
+                    ]
+                )
 
-                        Text(lastRecordingURL.pathExtension.uppercased())
-                            .foregroundColor(.secondary)
-                    }
+                HStack {
+                    Text("Speech model").foregroundColor(FlowTheme.ink)
                     Spacer()
-                }
-                .controlSize(.small)
-
-                if !transcriptionText.isEmpty {
-                    Text(transcriptionText)
-                        .font(.callout)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(activeSpeechModelLabel)
+                        .foregroundColor(FlowTheme.accent)
+                        .lineLimit(1)
                 }
 
-                if let transcriptionError {
-                    Text("Transcription failed: \(transcriptionError)")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                ForEach(WhisperTranscriber.Model.allCases) { model in
+                    HStack {
+                        Image(systemName: isSelectedWhisperModel(model) ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(isSelectedWhisperModel(model) ? FlowTheme.accent : FlowTheme.inkSecondary)
+                            .frame(width: 18)
 
-                if let recorderError {
-                    Text("Recording failed: \(recorderError)")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(model.displayName).foregroundColor(FlowTheme.ink)
+                                if isSelectedWhisperModel(model) {
+                                    Text("Selected")
+                                        .font(.caption)
+                                        .foregroundColor(FlowTheme.accent)
+                                }
+                            }
+                            Text("\(model.approximateSize) · \(model.note)")
+                                .font(.caption)
+                                .foregroundColor(FlowTheme.inkSecondary)
+                        }
+                        Spacer()
+                        if WhisperTranscriber.isInstalled(model) {
+                            FlowSmallButton(title: isSelectedWhisperModel(model) ? "Test" : "Use") {
+                                if isSelectedWhisperModel(model) {
+                                    transcribeLastRecording()
+                                } else {
+                                    whisperModelPath = model.localURL.path
+                                    whisperAvailability = WhisperTranscriber.availability()
+                                    whisperDownloadMessage = "\(model.displayName) selected."
+                                }
+                            }
+                            .disabled(isSelectedWhisperModel(model) && (lastRecordingURL == nil || isTranscribing))
+                        } else {
+                            FlowSmallButton(title: downloadingWhisperModel == model ? "Downloading…" : "Download") {
+                                downloadWhisperModel(model)
+                            }
+                            .disabled(downloadingWhisperModel != nil)
+                        }
+                    }
                 }
-
-                helpText(activeDictationBackend == .cloud
-                         ? "Cloud STT transcribes the last recording here for testing. Dictation shortcuts can be changed in Hotkeys."
-                         : "Whisper transcribes the last recording here for testing. Dictation shortcuts can be changed in Hotkeys.")
             }
-                }
+
+            if let whisperDownloadMessage {
+                Text(whisperDownloadMessage)
+                    .font(.caption)
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-        .formStyle(.grouped)
-        .onAppear {
-            voices = SpeechReader.availableVoices
-            cloudTTSKeyDraft = KeychainStore.getString(account: KeychainStore.openAIAPIKey) ?? ""
-            syncCloudTTSVoiceForModel()
-            microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
-            refreshRecorderState()
-            refreshOmniVoiceState()
-            refreshCloudTTSState()
-        }
-        .onReceive(timer) { _ in
-            microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
-            refreshRecorderState()
-            refreshOmniVoiceState()
-            refreshCloudTTSState()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .langFlipVoiceRecorderChanged)) { _ in
-            refreshRecorderState()
-        }
+
+            if let downloadProgress {
+                ProgressView(value: downloadProgress)
+                Text(downloadPercentLabel)
+                    .font(.caption)
+                    .foregroundColor(FlowTheme.inkSecondary)
+            }
+
+            Text("Models folder: \(WhisperTranscriber.modelsDirectory.path)")
+                .font(.caption)
+                .foregroundColor(FlowTheme.inkSecondary)
+                .lineLimit(2)
+
+            HStack {
+                FlowSmallButton(title: isTranscribing ? "Testing…" : "Test selected model") {
+                    transcribeLastRecording()
+                }
+                .disabled(testTranscriptionDisabled)
+
+                if let lastRecordingURL {
+                    FlowSmallButton(title: "Copy result") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(transcriptionText, forType: .string)
+                    }
+                    .disabled(transcriptionText.isEmpty)
+
+                    Text(lastRecordingURL.pathExtension.uppercased())
+                        .foregroundColor(FlowTheme.inkSecondary)
+                }
+                Spacer()
+            }
+
+            if !transcriptionText.isEmpty {
+                Text(transcriptionText)
+                    .font(.callout)
+                    .foregroundColor(FlowTheme.ink)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let transcriptionError {
+                Text("Transcription failed: \(transcriptionError)")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let recorderError {
+                Text("Recording failed: \(recorderError)")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            helpText(activeDictationBackend == .cloud
+                     ? "Cloud STT transcribes the last recording here for testing. Dictation shortcuts can be changed in Hotkeys."
+                     : "Whisper transcribes the last recording here for testing. Dictation shortcuts can be changed in Hotkeys.")
         }
     }
 
@@ -1019,14 +1033,6 @@ struct VoiceTab: View {
     }
 
     @ViewBuilder
-    private func settingLabel(_ title: String, help: String) -> some View {
-        HStack(spacing: 5) {
-            Text(title)
-            HelpPopoverButton(text: help)
-        }
-    }
-
-    @ViewBuilder
     private func advancedOmniVoiceSlider(
         _ title: String,
         value: Binding<Double>,
@@ -1034,13 +1040,14 @@ struct VoiceTab: View {
         step: Double,
         help: String
     ) -> some View {
-        HStack {
-            settingLabel(title, help: help)
-            Slider(value: value, in: range, step: step)
-            Text(String(format: "%.2f", value.wrappedValue))
-                .foregroundColor(.secondary)
-                .frame(width: 48, alignment: .trailing)
-        }
+        FlowSliderRow(
+            title: title,
+            detail: help,
+            value: value,
+            range: range,
+            step: step,
+            valueLabel: String(format: "%.2f", value.wrappedValue)
+        )
     }
 
     private var activeSpeechModelLabel: String {
@@ -1127,38 +1134,9 @@ struct VoiceTab: View {
     @ViewBuilder
     private func helpText(_ text: String) -> some View {
         Text(text)
-            .font(.callout)
-            .foregroundColor(.secondary)
+            .font(.system(size: 12))
+            .foregroundColor(FlowTheme.inkSecondary)
             .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-private struct HelpPopoverButton: View {
-    let text: String
-    @State private var isPresented = false
-
-    var body: some View {
-        Button {
-            isPresented.toggle()
-        } label: {
-            Image(systemName: "questionmark.circle")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .focusable(false)
-        .onHover { hovering in
-            isPresented = hovering
-        }
-        .popover(isPresented: $isPresented, arrowEdge: .trailing) {
-            Text(text)
-                .font(.callout)
-                .foregroundColor(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(width: 260, alignment: .leading)
-                .padding(12)
-        }
     }
 }
 
