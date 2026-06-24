@@ -10,8 +10,16 @@ import CoreGraphics
 struct PermissionStatus: Equatable {
     let accessibility: Bool
     let inputMonitoring: Bool
+    let microphone: Bool
 
+    /// The two approvals the keyboard event tap relies on. Drives the app's
+    /// startup gating in LangFlipApp — deliberately excludes the microphone so
+    /// the flip/hotkey features still run for users who never dictate.
     var allGranted: Bool { accessibility && inputMonitoring }
+
+    /// All three approvals needed for the full dictation-first experience.
+    /// Onboarding gates its Continue button on this.
+    var readyForDictation: Bool { allGranted && microphone }
 
     /// Read the current permission state. `prompt = true` shows the
     /// Accessibility consent dialog the first time it's queried.
@@ -33,7 +41,7 @@ struct PermissionStatus: Equatable {
         let im = CGPreflightListenEventAccess()
             && IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
             && canCreateKeyboardEventTap()
-        return PermissionStatus(accessibility: ax, inputMonitoring: im)
+        return PermissionStatus(accessibility: ax, inputMonitoring: im, microphone: hasMicrophone())
     }
 
     /// Open the right pane of System Settings → Privacy & Security → …

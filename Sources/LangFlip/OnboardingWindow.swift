@@ -3,11 +3,10 @@ import SwiftUI
 
 /// Welcome / permissions wizard shown on first launch (and on any launch
 /// where a previously-granted permission has been revoked). Walks the user
-/// through Accessibility and Input Monitoring one at a time so they don't
-/// have to figure out the right order or remember to come back to the
-/// window after a System Settings detour. Closed by Continue, which is
-/// gated on both permissions being granted — no Skip by design (without
-/// the permissions the app is inert).
+/// through Microphone, Accessibility, and Input Monitoring one at a time so
+/// they don't have to figure out the right order or remember to come back to
+/// the window after a System Settings detour. Dictation-first: the microphone
+/// comes first because speaking-to-text is the core feature.
 final class OnboardingWindowController: NSObject {
     static let shared = OnboardingWindowController()
 
@@ -72,6 +71,10 @@ final class OnboardingWindowController: NSObject {
     }
 }
 
+/// Shown once all permissions are granted — a light "you're ready" panel with
+/// the optional extended-dictionary install and the core hotkeys to try first.
+/// No local-AI setup here: AI features (grammar, translate, screenshot text,
+/// read aloud) use whatever provider is configured in Settings.
 private struct SetupChecklist: View {
     private enum RunState: Equatable {
         case idle
@@ -83,11 +86,6 @@ private struct SetupChecklist: View {
             if case .running = self { return true }
             return false
         }
-
-        var isIdle: Bool {
-            if case .idle = self { return true }
-            return false
-        }
     }
 
     let onOpenPreferences: () -> Void
@@ -95,29 +93,26 @@ private struct SetupChecklist: View {
     @State private var dictionaryStats = DictionaryManager.stats()
     @State private var dictionaryState: RunState = .idle
     @State private var dictionaryProgress: Double?
-    @State private var aiReady = AIAssistantManager.shared.isReady
-    @State private var qwenState: RunState = .idle
-    @State private var grammarState: RunState = .idle
-    @State private var ocrState: RunState = .idle
-    @State private var screenshotPasteTarget = ""
-    @State private var screenshotPulse = false
 
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
-    private let qwenModel = "qwen3.5:2b"
-    private let grammarSample = "I dont know why this app works so well but it realy helps me every day"
-    private let screenshotSample = "SCAN THIS TEXT"
-    private let grammarHint = "After this, just press Shift to fix the last sentence, or select any text and press Shift."
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Quick setup")
+            Text("You're ready")
                 .font(.headline)
+
+            Text("Press your dictation hotkey in any app and start talking — Sayful types it at your cursor.")
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().padding(.vertical, 2)
 
             checklistRow(
                 done: hasExtendedDictionaries,
                 icon: "text.book.closed",
                 title: "Install extended dictionaries",
-                detail: hasExtendedDictionaries ? "Extended EN/UK/RU dictionaries are active." : "Improves auto-flip coverage for real typing.",
+                detail: hasExtendedDictionaries ? "Extended EN/UK/RU dictionaries are active." : "Improves auto-flip coverage for real typing. Installs automatically in the background.",
                 state: dictionaryState,
                 progress: dictionaryProgress
             ) {
@@ -132,86 +127,21 @@ private struct SetupChecklist: View {
             }
 
             checklistRow(
-                done: aiReady,
-                icon: "sparkles",
-                title: "Use Qwen 3.5 for local AI",
-                detail: aiReady ? "Qwen 3.5 is selected and reachable through Ollama." : "Download and select Qwen 3.5 for grammar fixes, translation, and screenshot text.",
-                state: qwenState
-            ) {
-                Button {
-                    Task {
-                        await installAndSelectQwen()
-                    }
-                } label: {
-                    Text(qwenButtonTitle)
-                        .frame(width: 108)
-                }
-                .disabled(qwenState.isRunning || aiReady)
-                .focusable(false)
-            }
-
-            checklistRow(
-                done: grammarSucceeded,
-                icon: "wand.and.stars",
-                title: "Run grammar test",
-                detail: grammarHint,
-                state: grammarState
-            ) {
-                Button {
-                    runGrammarTest()
-                } label: {
-                    Text(grammarState.isRunning ? "Testing..." : "Test")
-                        .frame(width: 76)
-                }
-                .disabled(grammarState.isRunning || !aiReady)
-                .focusable(false)
-            }
-            testTextBlock(label: "Input", text: grammarSample)
-            if let grammarOutput {
-                testTextBlock(label: "Output", text: grammarOutput)
-            }
-
-            checklistRow(
-                done: ocrSucceeded,
-                icon: "viewfinder",
-                title: "Copy text from screenshot",
-                detail: "Checks that Qwen can read text from an image and copy it for pasting.",
-                state: ocrState
-            ) {
-                Button {
-                    runOCRTest()
-                } label: {
-                    Text(ocrState.isRunning ? "Testing..." : "Test")
-                        .frame(width: 76)
-                }
-                .disabled(ocrState.isRunning || !aiReady)
-                .focusable(false)
-            }
-            if !ocrState.isIdle {
-                screenshotTargetBlock()
-            }
-            if ocrSucceeded {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Select this text input and press ⌘V")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.secondary)
-                    TextField("", text: $screenshotPasteTarget)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(.body, design: .monospaced))
-                }
-                .padding(.leading, 34)
-            }
-
-            checklistRow(
                 done: true,
                 icon: "keyboard",
-                title: "Remember the core hotkeys",
-                detail: "These are the main gestures to try first.",
+                title: "Core hotkeys to try first",
+                detail: "These are the main gestures.",
                 state: .idle
             ) {
                 EmptyView()
             }
             hotkeySummary()
+
+            HStack {
+                Spacer()
+                Button("Open Settings", action: onOpenPreferences)
+                    .focusable(false)
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -221,36 +151,10 @@ private struct SetupChecklist: View {
         )
         .onAppear(perform: refresh)
         .onReceive(timer) { _ in refresh() }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
-                screenshotPulse.toggle()
-            }
-        }
     }
 
     private var hasExtendedDictionaries: Bool {
         dictionaryStats.values.contains { $0.installedCount > 0 }
-    }
-
-    private var grammarSucceeded: Bool {
-        if case .success = grammarState { return true }
-        return false
-    }
-
-    private var ocrSucceeded: Bool {
-        if case .success = ocrState { return true }
-        return false
-    }
-
-    private var grammarOutput: String? {
-        if case .success(let output) = grammarState { return output }
-        return nil
-    }
-
-    private var qwenButtonTitle: String {
-        if qwenState.isRunning { return "Installing..." }
-        if case .failed = qwenState { return "Try again" }
-        return "Install Qwen"
     }
 
     @ViewBuilder
@@ -314,42 +218,6 @@ private struct SetupChecklist: View {
         }
     }
 
-    private func testTextBlock(label: String, text: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.caption.weight(.semibold))
-                .foregroundColor(.secondary)
-            Text(text)
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.leading, 34)
-    }
-
-    private func screenshotTargetBlock() -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Select this area when the crosshair appears")
-                .font(.caption.weight(.semibold))
-                .foregroundColor(.secondary)
-            Text(screenshotSample)
-                .font(.system(size: 20, weight: .bold, design: .monospaced))
-                .foregroundColor(.primary)
-                .textSelection(.enabled)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.accentColor.opacity(screenshotPulse ? 0.28 : 0.08))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.accentColor.opacity(screenshotPulse ? 0.95 : 0.35), lineWidth: 1.5)
-                )
-        }
-        .padding(.leading, 34)
-    }
-
     private func hotkeySummary() -> some View {
         VStack(alignment: .leading, spacing: 5) {
             hotkeyLine("Single Shift", "Fix selected text, or the last sentence when nothing is selected.")
@@ -376,7 +244,6 @@ private struct SetupChecklist: View {
 
     private func refresh() {
         dictionaryStats = DictionaryManager.stats()
-        aiReady = AIAssistantManager.shared.isReady
     }
 
     private func clearButtonFocus() {
@@ -403,279 +270,6 @@ private struct SetupChecklist: View {
             }
         }
     }
-
-    @MainActor
-    private func installAndSelectQwen() async {
-        clearButtonFocus()
-        Settings.shared.aiMode = .ollama
-        Settings.shared.ollamaModel = qwenModel
-
-        guard Self.ollamaExecutableURL() != nil || isOllamaAppInstalled else {
-            qwenState = .failed("Ollama is not installed. Download Ollama, open it once, then click Try again.")
-            openOllamaDownloadPage()
-            return
-        }
-
-        qwenState = .running("Checking Qwen 3.5...")
-
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
-        if await isOllamaModelInstalled(qwenModel) {
-            refresh()
-            qwenState = AIAssistantManager.shared.isReady
-                ? .success("Qwen 3.5 is selected and ready.")
-                : .running("Qwen is installed. Waiting for Ollama to become ready...")
-            return
-        }
-
-        qwenState = .running("Downloading Qwen 3.5 2B. This can take a few minutes...")
-        if let failure = await Self.pullOllamaModel(qwenModel, progress: { message in
-            qwenState = .running(message)
-        }) {
-            qwenState = .failed(failure)
-            refresh()
-            return
-        }
-
-        refresh()
-        qwenState = AIAssistantManager.shared.isReady
-            ? .success("Qwen 3.5 is selected and ready.")
-            : .success("Qwen 3.5 is installed. If tests are disabled, reopen Ollama and wait a moment.")
-    }
-
-    private func runGrammarTest() {
-        clearButtonFocus()
-        grammarState = .running("Asking the local model to fix the sample...")
-        AIAssistantManager.shared.current.fixSelection(
-            AIFixRequest(text: grammarSample, activeLayout: .en)
-        ) { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .fixed(let output):
-                    grammarState = .success(output.trimmingCharacters(in: .whitespacesAndNewlines))
-                case .unchanged:
-                    grammarState = .success("Model replied; sample was unchanged.")
-                case .unsupported:
-                    grammarState = .failed("selected AI mode does not support text fixes")
-                case .failed(let reason):
-                    grammarState = .failed(reason)
-                }
-            }
-        }
-    }
-
-    private func runOCRTest() {
-        clearButtonFocus()
-        screenshotPasteTarget = ""
-        ocrState = .running("Select the highlighted SCAN THIS TEXT area.")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            startInteractiveScreenshotTextTest()
-        }
-    }
-
-    private func startInteractiveScreenshotTextTest() {
-        guard PermissionStatus.hasScreenRecording() else {
-            Settings.shared.returnToOnboardingAfterScreenRecording = true
-            PermissionStatus.requestScreenRecording()
-            PermissionStatus.openScreenRecordingPane()
-            ocrState = .failed("Screen Recording permission is required. Toggle Sayful on. If macOS asks to restart Sayful, reopen it and this setup screen will continue here.")
-            return
-        }
-        Settings.shared.returnToOnboardingAfterScreenRecording = false
-
-        let pngURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("langflip-onboarding-screen-text-\(getpid())-\(Int(Date().timeIntervalSince1970)).png")
-
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        task.arguments = ["-i", "-t", "png", "-o", pngURL.path]
-        task.terminationHandler = { proc in
-            DispatchQueue.main.async {
-                guard proc.terminationStatus == 0,
-                      FileManager.default.fileExists(atPath: pngURL.path),
-                      let imageData = try? Data(contentsOf: pngURL),
-                      !imageData.isEmpty
-                else {
-                    try? FileManager.default.removeItem(at: pngURL)
-                    ocrState = .idle
-                    return
-                }
-
-                ocrState = .running("Reading selected screenshot area...")
-                let request = AIOcrRequest(imageBase64: imageData.base64EncodedString())
-                AIAssistantManager.shared.current.extractTextFromImage(request) { result in
-                    DispatchQueue.main.async {
-                        defer { try? FileManager.default.removeItem(at: pngURL) }
-                        switch result {
-                        case .extracted(let output):
-                            let clean = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(clean, forType: .string)
-                            ocrState = .success("Copied: \(clean)")
-                        case .unsupported:
-                            ocrState = .failed("selected model does not support image input")
-                        case .failed(let reason):
-                            ocrState = .failed(reason)
-                        }
-                    }
-                }
-            }
-        }
-
-        do {
-            try task.run()
-        } catch {
-            try? FileManager.default.removeItem(at: pngURL)
-            ocrState = .failed("Could not launch screen capture: \(error.localizedDescription)")
-        }
-    }
-
-    private var isOllamaAppInstalled: Bool {
-        let appURL = URL(fileURLWithPath: "/Applications/Ollama.app")
-        return FileManager.default.fileExists(atPath: appURL.path)
-    }
-
-    private func openOllamaDownloadPage() {
-        if let downloadURL = URL(string: "https://ollama.com/download/mac") {
-            NSWorkspace.shared.open(downloadURL)
-        }
-    }
-
-    private func isOllamaModelInstalled(_ model: String) async -> Bool {
-        guard let url = URL(string: "http://127.0.0.1:11434/api/tags") else { return false }
-        do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            guard let http = response as? HTTPURLResponse,
-                  (200..<300).contains(http.statusCode) else {
-                return false
-            }
-            let decoded = try JSONDecoder().decode(OnboardingOllamaTagsResponse.self, from: data)
-            let canonical = canonicalModelTag(model)
-            return decoded.models.contains { canonicalModelTag($0.name) == canonical }
-        } catch {
-            return false
-        }
-    }
-
-    private func canonicalModelTag(_ model: String) -> String {
-        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasSuffix(":latest") {
-            return String(trimmed.dropLast(":latest".count))
-        }
-        return trimmed
-    }
-
-    nonisolated private static func pullOllamaModel(
-        _ model: String,
-        progress: @escaping @MainActor (String) -> Void
-    ) async -> String? {
-        await Task.detached(priority: .userInitiated) {
-            guard let executableURL = ollamaExecutableURL() else {
-                return "Ollama was not found. Install Ollama, open it once, then try again."
-            }
-
-            let process = Process()
-            let pipe = Pipe()
-            process.executableURL = executableURL
-            process.arguments = ["pull", model]
-            process.standardOutput = pipe
-            process.standardError = pipe
-
-            let outputBuffer = LockedOutputBuffer()
-            pipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty,
-                      let chunk = String(data: data, encoding: .utf8) else { return }
-                let message = Self.ollamaProgressMessage(from: outputBuffer.appendAndRead(chunk), model: model)
-                if let message {
-                    Task { @MainActor in
-                        progress(message)
-                    }
-                }
-            }
-
-            do {
-                try process.run()
-            } catch {
-                pipe.fileHandleForReading.readabilityHandler = nil
-                return "Could not open Ollama: \(error.localizedDescription)"
-            }
-
-            process.waitUntilExit()
-            pipe.fileHandleForReading.readabilityHandler = nil
-            let output: String? = outputBuffer.read()
-                .replacingOccurrences(of: "\r", with: "\n")
-                .split(separator: "\n")
-                .map(String.init)
-                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-                .suffix(2)
-                .joined(separator: " ")
-
-            guard process.terminationStatus == 0 else {
-                let detail = output?.isEmpty == false ? " \(output!)" : ""
-                return "Ollama could not download \(model).\(detail)"
-            }
-            return nil
-        }.value
-    }
-
-    nonisolated private static func ollamaProgressMessage(from output: String, model: String) -> String? {
-        let lines = output
-            .replacingOccurrences(of: "\r", with: "\n")
-            .split(separator: "\n")
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        guard let last = lines.last else { return nil }
-
-        if let percentRange = last.range(of: #"\d{1,3}%"#, options: .regularExpression) {
-            let percent = String(last[percentRange])
-            return "Downloading Qwen 3.5 2B... \(percent)"
-        }
-
-        let lower = last.lowercased()
-        if lower.contains("pulling manifest") { return "Preparing Qwen 3.5 download..." }
-        if lower.contains("verifying") { return "Verifying Qwen 3.5..." }
-        if lower.contains("writing manifest") { return "Finishing Qwen 3.5 install..." }
-        if lower.contains("success") { return "Qwen 3.5 downloaded." }
-
-        return "Downloading Qwen 3.5 2B..."
-    }
-
-    nonisolated private static func ollamaExecutableURL() -> URL? {
-        let candidates = [
-            "/usr/local/bin/ollama",
-            "/opt/homebrew/bin/ollama",
-            "/Applications/Ollama.app/Contents/Resources/ollama",
-        ]
-        return candidates
-            .map(URL.init(fileURLWithPath:))
-            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
-    }
-}
-
-private struct OnboardingOllamaTagsResponse: Decodable {
-    struct Model: Decodable {
-        let name: String
-    }
-
-    let models: [Model]
-}
-
-private final class LockedOutputBuffer: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value = ""
-
-    func appendAndRead(_ chunk: String) -> String {
-        lock.lock()
-        defer { lock.unlock() }
-        value += chunk
-        return value
-    }
-
-    func read() -> String {
-        lock.lock()
-        defer { lock.unlock() }
-        return value
-    }
 }
 
 // MARK: - SwiftUI
@@ -690,10 +284,20 @@ private struct OnboardingView: View {
     /// forward.
     private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
-    private var stepIndex: Int {
-        if !status.accessibility { return 0 }
-        if !status.inputMonitoring { return 1 }
-        return 2 // done
+    /// Ordered permission steps. Microphone first — dictation is the core.
+    private let steps: [Step] = [.microphone, .accessibility, .inputMonitoring]
+
+    private func isGranted(_ step: Step) -> Bool {
+        switch step {
+        case .microphone:      return status.microphone
+        case .accessibility:   return status.accessibility
+        case .inputMonitoring: return status.inputMonitoring
+        }
+    }
+
+    /// The first not-yet-granted step is the active one; nil when all granted.
+    private var currentStep: Step? {
+        steps.first { !isGranted($0) }
     }
 
     var body: some View {
@@ -702,20 +306,19 @@ private struct OnboardingView: View {
 
             Divider().padding(.vertical, 2)
 
-            // Completed steps shrink to a one-line row with a checkmark;
-            // the active step gets the prominent action card; the future
-            // step (if any) is just hinted as a small disabled row so the
-            // user can see what's coming.
+            // Each step renders as completed (granted), active (the first
+            // ungranted one), or upcoming (a later ungranted one).
             VStack(spacing: 10) {
-                if stepIndex == 0 {
-                    activeStep(.accessibility)
-                    upcomingStep(.inputMonitoring)
-                } else if stepIndex == 1 {
-                    completedStep(.accessibility)
-                    activeStep(.inputMonitoring)
-                } else {
-                    completedStep(.accessibility)
-                    completedStep(.inputMonitoring)
+                ForEach(steps, id: \.self) { step in
+                    if isGranted(step) {
+                        completedStep(step)
+                    } else if step == currentStep {
+                        activeStep(step)
+                    } else {
+                        upcomingStep(step)
+                    }
+                }
+                if status.readyForDictation {
                     SetupChecklist(onOpenPreferences: onOpenPreferences)
                 }
             }
@@ -729,7 +332,7 @@ private struct OnboardingView: View {
         .onReceive(timer) { _ in
             let next = PermissionStatus.current()
             guard next != status else { return }
-            let wasIncomplete = !status.allGranted
+            let wasIncomplete = !status.readyForDictation
             status = next
             // Pop the window forward when something just changed, so the
             // user immediately sees the next instruction after toggling
@@ -750,7 +353,7 @@ private struct OnboardingView: View {
                 .frame(width: 96, height: 96)
         }
         VStack(spacing: 4) {
-            Text(status.allGranted ? "All set!" : "Welcome to Sayful")
+            Text(status.readyForDictation ? "All set!" : "Welcome to Sayful")
                 .font(.system(size: 20, weight: .semibold))
             Text(headerSubtitle)
                 .font(.body)
@@ -761,19 +364,17 @@ private struct OnboardingView: View {
     }
 
     private var headerSubtitle: String {
-        switch stepIndex {
-        case 0:
-            return "Two quick permissions and you're done."
-        case 1:
-            return "One more permission to go."
-        default:
-            return "Sayful is ready. One quick setup pass can make the first session much better."
+        let remaining = steps.filter { !isGranted($0) }.count
+        switch remaining {
+        case 0:  return "Sayful is ready. Speak in any app and it types for you."
+        case 1:  return "One more permission to go."
+        default: return "\(remaining) quick permissions and you're ready."
         }
     }
 
     @ViewBuilder
     private var footer: some View {
-        if status.allGranted {
+        if status.readyForDictation {
             HStack(spacing: 10) {
                 Button(action: onContinue) {
                     Text("Continue")
@@ -783,7 +384,7 @@ private struct OnboardingView: View {
                 .controlSize(.large)
 
                 Button(action: onOpenPreferences) {
-                    Text("Open Preferences")
+                    Text("Open Settings")
                         .frame(minWidth: 140)
                 }
                 .controlSize(.large)
@@ -792,7 +393,7 @@ private struct OnboardingView: View {
             // Plain helper text while the user is mid-flow. Tells them
             // explicitly to come back, since otherwise it's easy to assume
             // System Settings is where the app lives now.
-            Text("After toggling Sayful on, this window will update automatically. You don't have to come back manually.")
+            Text("After granting each permission, this window updates automatically. You don't have to come back manually.")
                 .font(.callout)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -803,11 +404,12 @@ private struct OnboardingView: View {
 
     // MARK: Step rendering
 
-    private enum Step {
-        case accessibility, inputMonitoring
+    private enum Step: Hashable {
+        case microphone, accessibility, inputMonitoring
 
         var title: String {
             switch self {
+            case .microphone:      return "Microphone"
             case .accessibility:   return "Accessibility"
             case .inputMonitoring: return "Input Monitoring"
             }
@@ -815,8 +417,10 @@ private struct OnboardingView: View {
 
         var rationale: String {
             switch self {
+            case .microphone:
+                return "Lets Sayful hear you for dictation — the core feature."
             case .accessibility:
-                return "Lets Sayful see the keys you press, so it can detect a wrong-layout word."
+                return "Lets Sayful insert text and detect a wrong-layout word."
             case .inputMonitoring:
                 return "Lets Sayful receive keyboard events even while you type in another app."
             }
@@ -824,6 +428,8 @@ private struct OnboardingView: View {
 
         var instruction: LocalizedStringKey {
             switch self {
+            case .microphone:
+                return "Click below and allow microphone access so you can dictate."
             case .accessibility:
                 return "Click below, find **Sayful** in the list and toggle it on."
             case .inputMonitoring:
@@ -831,18 +437,31 @@ private struct OnboardingView: View {
             }
         }
 
+        var actionTitle: String {
+            self == .microphone ? "Allow Microphone" : "Open System Settings"
+        }
+
         var stepNumber: Int {
-            self == .accessibility ? 1 : 2
+            switch self {
+            case .microphone:      return 1
+            case .accessibility:   return 2
+            case .inputMonitoring: return 3
+            }
         }
 
         func openSettings() {
             switch self {
+            case .microphone:
+                // First call surfaces the system consent dialog; the pane is a
+                // fallback for when the user has already answered once.
+                PermissionStatus.requestMicrophone()
+                PermissionStatus.openMicrophonePane()
             case .accessibility:
                 PermissionStatus.openAccessibilityPane()
             case .inputMonitoring:
                 // Do not call CGRequestListenEventAccess here. On recent
                 // macOS builds it can make the privacy APIs report
-                // "granted" immediately even when LangFlip is not visible
+                // "granted" immediately even when Sayful is not visible
                 // in the Input Monitoring list yet. Opening the pane and
                 // waiting for the real toggle keeps onboarding honest.
                 PermissionStatus.openInputMonitoringPane()
@@ -859,7 +478,7 @@ private struct OnboardingView: View {
                     .foregroundColor(.accentColor)
                 Text(step.title)
                     .font(.headline)
-                Text("(step \(step.stepNumber) of 2)")
+                Text("(step \(step.stepNumber) of \(steps.count))")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -874,7 +493,7 @@ private struct OnboardingView: View {
             HStack {
                 Spacer()
                 Button(action: step.openSettings) {
-                    Text("Open System Settings")
+                    Text(step.actionTitle)
                         .frame(minWidth: 180)
                 }
                 .controlSize(.large)
