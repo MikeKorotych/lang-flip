@@ -216,7 +216,7 @@ enum IslandMetrics {
     static let micWidth: CGFloat = 34           // ~round mic button
     static let recordingWidth: CGFloat = 156    // compact: little slack around the waves
     static let transcribingWidth: CGFloat = 164
-    static let toastWidth: CGFloat = 222        // snug: "Transcript cancelled" + Undo, minimal gap
+    static let toastWidth: CGFloat = 200        // snug: "Transcript cancelled" + Undo, minimal gap
 
     static let tooltipWidth: CGFloat = 188
     static let tooltipHeight: CGFloat = 26
@@ -364,13 +364,13 @@ struct DictationIslandView: View {
     }
 
     private var toastContent: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Text("Transcript cancelled")
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundColor(IslandColor.text)
                 .lineLimit(1)
                 .fixedSize()
-            Spacer(minLength: 4)
+            Spacer(minLength: 2)
             Button {
                 VoiceDictationController.shared.undoCancel()
                 DictationIslandController.shared.dismissToast()
@@ -380,12 +380,12 @@ struct DictationIslandView: View {
                     .foregroundColor(.black)
                     .lineLimit(1)
                     .fixedSize()
-                    .padding(.horizontal, 11).padding(.vertical, 4)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(Capsule().fill(IslandColor.confirm))
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 11)
         .onAppear {
             // Lifetime bar fills left→right over the toast's life.
             toastProgress = 0
