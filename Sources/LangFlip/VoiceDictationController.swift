@@ -137,9 +137,13 @@ final class VoiceDictationController {
                 throw CloudTranscriptionError.notSignedIn
             }
             let data = try Data(contentsOf: audioURL)
+            // Developers (Advanced) can pin the STT model for their account;
+            // everyone else sends nil and gets the backend's server default.
+            let modelOverride = UserDefaults.standard.bool(forKey: "lf.showAdvancedAI")
+                ? Settings.shared.cloudSTTModel : nil
             let result = try await HTTPBackendClient.shared.transcribe(
                 BackendTranscribeRequest(audio: data, filename: audioURL.lastPathComponent,
-                                         language: nil, model: nil))
+                                         language: nil, model: modelOverride))
             return result.text
         }
         return try await CloudTranscriber.transcribe(audioURL: audioURL)

@@ -81,6 +81,7 @@ struct GeneralTab: View {
 
 struct VoiceTab: View {
     @AppStorage("lf.aiMode") private var aiMode = AIMode.backend.rawValue
+    @AppStorage("lf.showAdvancedAI") private var showAdvancedAI = false
     @AppStorage("lf.ttsBackend") private var ttsBackend = TextToSpeechBackend.system.rawValue
     @AppStorage("lf.speechVoiceIdentifier") private var speechVoiceIdentifier = ""
     @AppStorage("lf.speechRate") private var speechRate = 190.0
@@ -670,6 +671,14 @@ struct VoiceTab: View {
             // endpoint. Audio is sent to the provider; nothing is stored.
             if usesSayfulCloud {
                 helpText("Dictation uses Sayful Cloud — no API key needed. The server holds the provider key and picks the STT model. Only your recorded dictation audio is sent; sign in from the profile menu.")
+
+                // Developer override (Advanced): pin the STT model the backend
+                // uses for your account, for testing. Normal users never see
+                // this and get the server default.
+                if showAdvancedAI {
+                    OpenRouterTranscriptionModelPicker(selectedModel: $cloudSTTModel)
+                    helpText("Developer: overrides the STT model the backend runs for your account. The backend honors this per request; other users keep the server default.")
+                }
             } else {
                 SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
                     .textFieldStyle(.roundedBorder)
@@ -987,7 +996,8 @@ struct VoiceTab: View {
             let data = try Data(contentsOf: audioURL)
             let result = try await HTTPBackendClient.shared.transcribe(
                 BackendTranscribeRequest(audio: data, filename: audioURL.lastPathComponent,
-                                         language: nil, model: nil))
+                                         language: nil,
+                                         model: showAdvancedAI ? cloudSTTModel : nil))
             return result.text
         }
         return try await CloudTranscriber.transcribe(audioURL: audioURL)
