@@ -301,6 +301,18 @@ struct DictationIslandView: View {
         ZStack { innerContent }
             .frame(width: pillWidth, height: pillHeight)
             .background(capsuleBackground)
+            // Toast lifetime bar — sits right on the capsule's bottom border,
+            // filling left→right. Inset past the rounded corners so it stays
+            // flush with the bottom edge.
+            .overlay(alignment: .bottom) {
+                Capsule()
+                    .fill(IslandColor.text.opacity(0.45))
+                    .frame(height: 2.5)
+                    .scaleEffect(x: toastProgress, anchor: .leading)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 2)
+                    .opacity(state.showCancelledToast ? 1 : 0)
+            }
             .contentShape(Capsule())
             .onTapGesture {
                 if state.phase == .idle && !state.showCancelledToast {
@@ -372,18 +384,10 @@ struct DictationIslandView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 12)
-        // Lifetime progress bar pinned to the bottom edge, draining left→right.
-        .overlay(alignment: .bottom) {
-            Capsule()
-                .fill(IslandColor.text.opacity(0.4))
-                .frame(height: 2.5)
-                .scaleEffect(x: toastProgress, anchor: .leading)
-                .padding(.horizontal, 14)
-                .padding(.bottom, 3)
-        }
         .onAppear {
-            toastProgress = 1
-            withAnimation(.linear(duration: IslandMetrics.toastDuration)) { toastProgress = 0 }
+            // Lifetime bar fills left→right over the toast's life.
+            toastProgress = 0
+            withAnimation(.linear(duration: IslandMetrics.toastDuration)) { toastProgress = 1 }
         }
     }
 
