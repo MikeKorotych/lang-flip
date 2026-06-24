@@ -124,6 +124,12 @@ app: build
 	@if [ -f Resources/AppIcon.icns ]; then \
 		cp Resources/AppIcon.icns $(APP_DIR)/Contents/Resources/AppIcon.icns; \
 	fi
+	@if [ -f Resources/scan-text-icon.png ]; then \
+		cp Resources/scan-text-icon.png $(APP_DIR)/Contents/Resources/scan-text-icon.png; \
+	fi
+	@if [ -f Resources/search-icon.png ]; then \
+		cp Resources/search-icon.png $(APP_DIR)/Contents/Resources/search-icon.png; \
+	fi
 	@codesign --force --deep --sign - $(APP_DIR) 2>/dev/null || true
 	@echo "✓ Built $(APP_DIR)"
 
