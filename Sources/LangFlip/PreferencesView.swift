@@ -73,6 +73,7 @@ struct GeneralTab: View {
 // MARK: - Voice
 
 struct VoiceTab: View {
+    @AppStorage("lf.aiMode") private var aiMode = AIMode.backend.rawValue
     @AppStorage("lf.ttsBackend") private var ttsBackend = TextToSpeechBackend.system.rawValue
     @AppStorage("lf.speechVoiceIdentifier") private var speechVoiceIdentifier = ""
     @AppStorage("lf.speechRate") private var speechRate = 190.0
@@ -227,31 +228,35 @@ struct VoiceTab: View {
                     SpeechReader.shared.applySettings()
                 }
             } else if activeTTSBackend == .cloud {
-                SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: cloudTTSKeyDraft) { newValue in
-                        KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
-                    }
-                helpText("The key is stored in macOS Keychain. OpenRouter is recommended because it lets you switch TTS models without changing the app.")
-
-                HStack {
-                    Text("Base URL").foregroundColor(FlowTheme.ink)
-                    TextField("https://openrouter.ai/api/v1", text: $cloudTTSBaseURL)
-                        .textFieldStyle(.roundedBorder)
-                }
-                helpText("OpenRouter uses https://openrouter.ai/api/v1. OpenAI direct uses https://api.openai.com/v1.")
-
-                if cloudTTSUsesOpenRouter {
-                    OpenRouterSpeechModelPicker(selectedModel: $cloudTTSModel)
-                        .onChange(of: cloudTTSModel) { _ in
-                            syncCloudTTSVoiceForModel()
-                        }
+                if usesSayfulCloud {
+                    helpText("Using Sayful Cloud — no API key needed. The server holds the provider key and picks the TTS model. Voice, speed, and instructions below still apply.")
                 } else {
-                    TextField("Model", text: $cloudTTSModel)
+                    SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
                         .textFieldStyle(.roundedBorder)
-                        .onChange(of: cloudTTSModel) { _ in
-                            syncCloudTTSVoiceForModel()
+                        .onChange(of: cloudTTSKeyDraft) { newValue in
+                            KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
                         }
+                    helpText("The key is stored in macOS Keychain. OpenRouter is recommended because it lets you switch TTS models without changing the app.")
+
+                    HStack {
+                        Text("Base URL").foregroundColor(FlowTheme.ink)
+                        TextField("https://openrouter.ai/api/v1", text: $cloudTTSBaseURL)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    helpText("OpenRouter uses https://openrouter.ai/api/v1. OpenAI direct uses https://api.openai.com/v1.")
+
+                    if cloudTTSUsesOpenRouter {
+                        OpenRouterSpeechModelPicker(selectedModel: $cloudTTSModel)
+                            .onChange(of: cloudTTSModel) { _ in
+                                syncCloudTTSVoiceForModel()
+                            }
+                    } else {
+                        TextField("Model", text: $cloudTTSModel)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: cloudTTSModel) { _ in
+                                syncCloudTTSVoiceForModel()
+                            }
+                    }
                 }
 
                 FlowPickerRow(
@@ -297,7 +302,9 @@ struct VoiceTab: View {
                     }
                 }
 
-                helpText("Current practical default: OpenAI GPT-4o Mini TTS via OpenRouter for cost and compatibility. For richer multilingual or expressive output, try google/gemini-3.1-flash-tts-preview.")
+                if !usesSayfulCloud {
+                    helpText("Current practical default: OpenAI GPT-4o Mini TTS via OpenRouter for cost and compatibility. For richer multilingual or expressive output, try google/gemini-3.1-flash-tts-preview.")
+                }
             } else {
                 FlowPickerRow(
                     title: "Language",
@@ -666,22 +673,26 @@ struct VoiceTab: View {
             )
 
             if activeDictationBackend == .cloud {
-                SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: cloudTTSKeyDraft) { newValue in
-                        KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
-                    }
-
-                HStack {
-                    Text("Base URL").foregroundColor(FlowTheme.ink)
-                    TextField("https://openrouter.ai/api/v1", text: $cloudSTTBaseURL)
+                if usesSayfulCloud {
+                    helpText("Using Sayful Cloud — no API key needed. The server holds the provider key and picks the STT model. Only your recorded dictation audio is sent.")
+                } else {
+                    SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
                         .textFieldStyle(.roundedBorder)
-                }
-                helpText("OpenRouter uses https://openrouter.ai/api/v1. Use a compatible endpoint only if it supports /audio/transcriptions.")
+                        .onChange(of: cloudTTSKeyDraft) { newValue in
+                            KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
+                        }
 
-                OpenRouterTranscriptionModelPicker(selectedModel: $cloudSTTModel)
-                helpText("Best default: NVIDIA Parakeet TDT 0.6B v3 for very low cost and strong multilingual STT. Qwen3 ASR Flash is a good noisy/mixed-language fallback.")
-                helpText("Cloud STT always lets the provider auto-detect the spoken language from audio. Sayful does not send the current keyboard layout or a language override.")
+                    HStack {
+                        Text("Base URL").foregroundColor(FlowTheme.ink)
+                        TextField("https://openrouter.ai/api/v1", text: $cloudSTTBaseURL)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    helpText("OpenRouter uses https://openrouter.ai/api/v1. Use a compatible endpoint only if it supports /audio/transcriptions.")
+
+                    OpenRouterTranscriptionModelPicker(selectedModel: $cloudSTTModel)
+                    helpText("Best default: NVIDIA Parakeet TDT 0.6B v3 for very low cost and strong multilingual STT. Qwen3 ASR Flash is a good noisy/mixed-language fallback.")
+                    helpText("Cloud STT always lets the provider auto-detect the spoken language from audio. Sayful does not send the current keyboard layout or a language override.")
+                }
             } else {
                 FlowPickerRow(
                     title: "Language",
@@ -880,6 +891,13 @@ struct VoiceTab: View {
 
     private var cloudTTSUsesOpenRouter: Bool {
         cloudTTSBaseURL.localizedCaseInsensitiveContains("openrouter.ai")
+    }
+
+    /// Sayful Cloud mode routes STT/TTS through the backend proxy, which holds
+    /// the provider key and picks the model — so the BYOK key/URL/model fields
+    /// are hidden.
+    private var usesSayfulCloud: Bool {
+        AIMode(rawValue: aiMode) == .backend
     }
 
     private var cloudTTSVoiceOptions: [CloudVoiceOption] {
