@@ -112,15 +112,12 @@ struct VoiceTab: View {
     @AppStorage("lf.readSelectionHotkeyEnabled") private var readSelectionHotkeyEnabled = true
     @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.controlOptionX.rawValue
     @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
-    @AppStorage("lf.whisperModelPath") private var whisperModelPath = ""
-    @AppStorage("lf.whisperLanguage") private var whisperLanguage = "auto"
     @AppStorage("lf.dictationPushToTalkEnabled") private var dictationPushToTalkEnabled = false
     @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
     @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = false
     @AppStorage("lf.showDictationIsland") private var showDictationIsland = true
     @AppStorage("lf.dictationNotifications") private var dictationNotifications = false
     @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.fnOption.rawValue
-    @AppStorage("lf.dictationTranscriptionBackend") private var dictationTranscriptionBackend = DictationTranscriptionBackend.localWhisper.rawValue
     @AppStorage("lf.cloudSTTBaseURL") private var cloudSTTBaseURL = "https://openrouter.ai/api/v1"
     @AppStorage("lf.cloudSTTModel") private var cloudSTTModel = "qwen/qwen3-asr-flash-2026-02-10"
 
@@ -134,13 +131,9 @@ struct VoiceTab: View {
     @State private var inputDevices = VoiceRecorder.inputDevices
     @State private var lastRecordingURL = VoiceRecorder.shared.lastRecordingURL
     @State private var recorderError = VoiceRecorder.shared.lastError
-    @State private var whisperAvailability = WhisperTranscriber.availability()
     @State private var isTranscribing = false
     @State private var transcriptionText = ""
     @State private var transcriptionError: String?
-    @State private var downloadingWhisperModel: WhisperTranscriber.Model?
-    @State private var downloadProgress: Double?
-    @State private var whisperDownloadMessage: String?
     @State private var omniVoiceAvailability = OmniVoiceSynthesizer.availability()
     @State private var isGeneratingOmniVoice = false
     @State private var omniVoiceOutputURL = OmniVoiceSynthesizer.shared.lastOutputURL
@@ -672,116 +665,32 @@ struct VoiceTab: View {
 
             Divider().overlay(FlowTheme.cardStroke)
 
-            FlowPickerRow(
-                title: "Transcription",
-                detail: "Local Whisper keeps audio on this Mac. Cloud STT sends only recorded dictation audio to your selected provider.",
-                selection: $dictationTranscriptionBackend,
-                options: DictationTranscriptionBackend.allCases.map { (value: $0.rawValue, label: $0.displayName) }
-            )
-
-            if activeDictationBackend == .cloud {
-                if usesSayfulCloud {
-                    helpText("Using Sayful Cloud — no API key needed. The server holds the provider key and picks the STT model. Only your recorded dictation audio is sent.")
-                } else {
-                    SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
-                        .textFieldStyle(.roundedBorder)
-                        .onChange(of: cloudTTSKeyDraft) { newValue in
-                            KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
-                        }
-
-                    HStack {
-                        Text("Base URL").foregroundColor(FlowTheme.ink)
-                        TextField("https://openrouter.ai/api/v1", text: $cloudSTTBaseURL)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    helpText("OpenRouter uses https://openrouter.ai/api/v1. Use a compatible endpoint only if it supports /audio/transcriptions.")
-
-                    OpenRouterTranscriptionModelPicker(selectedModel: $cloudSTTModel)
-                    helpText("Best default: NVIDIA Parakeet TDT 0.6B v3 for very low cost and strong multilingual STT. Qwen3 ASR Flash is a good noisy/mixed-language fallback.")
-                    helpText("Cloud STT always lets the provider auto-detect the spoken language from audio. Sayful does not send the current keyboard layout or a language override.")
-                }
+            // Dictation is cloud-only. Sayful Cloud needs no key (server holds
+            // it); Advanced/BYOK users point it at their own OpenAI-compatible
+            // endpoint. Audio is sent to the provider; nothing is stored.
+            if usesSayfulCloud {
+                helpText("Dictation uses Sayful Cloud — no API key needed. The server holds the provider key and picks the STT model. Only your recorded dictation audio is sent; sign in from the profile menu.")
             } else {
-                FlowPickerRow(
-                    title: "Language",
-                    selection: $whisperLanguage,
-                    options: [
-                        (value: "auto", label: "Auto"),
-                        (value: "uk", label: "Українська"),
-                        (value: "ru", label: "Русский"),
-                        (value: "en", label: "English"),
-                    ]
-                )
+                SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: cloudTTSKeyDraft) { newValue in
+                        KeychainStore.setString(newValue, account: KeychainStore.openAIAPIKey)
+                    }
 
                 HStack {
-                    Text("Speech model").foregroundColor(FlowTheme.ink)
-                    Spacer()
-                    Text(activeSpeechModelLabel)
-                        .foregroundColor(FlowTheme.accent)
-                        .lineLimit(1)
+                    Text("Base URL").foregroundColor(FlowTheme.ink)
+                    TextField("https://openrouter.ai/api/v1", text: $cloudSTTBaseURL)
+                        .textFieldStyle(.roundedBorder)
                 }
+                helpText("OpenRouter uses https://openrouter.ai/api/v1. Use a compatible endpoint only if it supports /audio/transcriptions.")
 
-                ForEach(WhisperTranscriber.Model.allCases) { model in
-                    HStack {
-                        Image(systemName: isSelectedWhisperModel(model) ? "checkmark.circle.fill" : "circle")
-                            .foregroundColor(isSelectedWhisperModel(model) ? FlowTheme.accent : FlowTheme.inkSecondary)
-                            .frame(width: 18)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                Text(model.displayName).foregroundColor(FlowTheme.ink)
-                                if isSelectedWhisperModel(model) {
-                                    Text("Selected")
-                                        .font(.caption)
-                                        .foregroundColor(FlowTheme.accent)
-                                }
-                            }
-                            Text("\(model.approximateSize) · \(model.note)")
-                                .font(.caption)
-                                .foregroundColor(FlowTheme.inkSecondary)
-                        }
-                        Spacer()
-                        if WhisperTranscriber.isInstalled(model) {
-                            FlowSmallButton(title: isSelectedWhisperModel(model) ? "Test" : "Use") {
-                                if isSelectedWhisperModel(model) {
-                                    transcribeLastRecording()
-                                } else {
-                                    whisperModelPath = model.localURL.path
-                                    whisperAvailability = WhisperTranscriber.availability()
-                                    whisperDownloadMessage = "\(model.displayName) selected."
-                                }
-                            }
-                            .disabled(isSelectedWhisperModel(model) && (lastRecordingURL == nil || isTranscribing))
-                        } else {
-                            FlowSmallButton(title: downloadingWhisperModel == model ? "Downloading…" : "Download") {
-                                downloadWhisperModel(model)
-                            }
-                            .disabled(downloadingWhisperModel != nil)
-                        }
-                    }
-                }
+                OpenRouterTranscriptionModelPicker(selectedModel: $cloudSTTModel)
+                helpText("Best default: NVIDIA Parakeet TDT 0.6B v3 for very low cost and strong multilingual STT. Qwen3 ASR Flash is a good noisy/mixed-language fallback.")
+                helpText("Cloud STT always lets the provider auto-detect the spoken language from audio. Sayful does not send the current keyboard layout or a language override.")
             }
-
-            if let whisperDownloadMessage {
-                Text(whisperDownloadMessage)
-                    .font(.caption)
-                    .foregroundColor(FlowTheme.inkSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let downloadProgress {
-                ProgressView(value: downloadProgress)
-                Text(downloadPercentLabel)
-                    .font(.caption)
-                    .foregroundColor(FlowTheme.inkSecondary)
-            }
-
-            Text("Models folder: \(WhisperTranscriber.modelsDirectory.path)")
-                .font(.caption)
-                .foregroundColor(FlowTheme.inkSecondary)
-                .lineLimit(2)
 
             HStack {
-                FlowSmallButton(title: isTranscribing ? "Testing…" : "Test selected model") {
+                FlowSmallButton(title: isTranscribing ? "Testing…" : "Test dictation") {
                     transcribeLastRecording()
                 }
                 .disabled(testTranscriptionDisabled)
@@ -821,9 +730,7 @@ struct VoiceTab: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            helpText(activeDictationBackend == .cloud
-                     ? "Cloud STT transcribes the last recording here for testing. Dictation shortcuts can be changed in Hotkeys."
-                     : "Whisper transcribes the last recording here for testing. Dictation shortcuts can be changed in Hotkeys.")
+            helpText("Cloud STT transcribes the last recording here for testing. Dictation shortcuts can be changed in Hotkeys.")
         }
     }
 
@@ -855,7 +762,6 @@ struct VoiceTab: View {
         inputDevices = VoiceRecorder.inputDevices
         lastRecordingURL = VoiceRecorder.shared.lastRecordingURL
         recorderError = VoiceRecorder.shared.lastError
-        whisperAvailability = WhisperTranscriber.availability()
     }
 
     private func formatDuration(_ value: TimeInterval) -> String {
@@ -865,10 +771,6 @@ struct VoiceTab: View {
 
     private var activeTTSBackend: TextToSpeechBackend {
         TextToSpeechBackend(rawValue: ttsBackend) ?? .system
-    }
-
-    private var activeDictationBackend: DictationTranscriptionBackend {
-        DictationTranscriptionBackend(rawValue: dictationTranscriptionBackend) ?? .localWhisper
     }
 
     private var readSelectionShortcutName: String {
@@ -937,12 +839,8 @@ struct VoiceTab: View {
 
     private var testTranscriptionDisabled: Bool {
         if isTranscribing || lastRecordingURL == nil { return true }
-        switch activeDictationBackend {
-        case .localWhisper:
-            return !whisperAvailability.isReady
-        case .cloud:
-            return !hasCloudTTSKey || cloudSTTModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
+        if usesSayfulCloud { return !SupabaseBackendAuth.shared.isSignedIn }
+        return !hasCloudTTSKey || cloudSTTModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func refreshOmniVoiceState() {
@@ -1058,19 +956,6 @@ struct VoiceTab: View {
         )
     }
 
-    private var activeSpeechModelLabel: String {
-        if let model = WhisperTranscriber.Model.allCases.first(where: { isSelectedWhisperModel($0) }) {
-            return model.displayName
-        }
-        return whisperAvailability.modelURL?.lastPathComponent ?? "Whisper"
-    }
-
-    private func isSelectedWhisperModel(_ model: WhisperTranscriber.Model) -> Bool {
-        let selected = whisperAvailability.modelURL?.standardizedFileURL.path
-            ?? URL(fileURLWithPath: NSString(string: whisperModelPath).expandingTildeInPath).standardizedFileURL.path
-        return selected == model.localURL.standardizedFileURL.path
-    }
-
     private func transcribeLastRecording() {
         guard let lastRecordingURL else { return }
         isTranscribing = true
@@ -1094,49 +979,18 @@ struct VoiceTab: View {
     }
 
     private func transcribeWithSelectedBackend(audioURL: URL) async throws -> String {
-        if activeDictationBackend == .cloud {
-            return try await CloudTranscriber.transcribe(audioURL: audioURL)
-        }
-        return try await WhisperTranscriber.transcribe(
-            audioURL: audioURL,
-            language: whisperLanguage
-        )
-    }
-
-    private func downloadWhisperModel(_ model: WhisperTranscriber.Model) {
-        downloadingWhisperModel = model
-        whisperDownloadMessage = "Downloading \(model.displayName) (\(model.approximateSize))…"
-
-        Task {
-            do {
-                let url = try await WhisperTranscriber.download(model) { progress in
-                    downloadProgress = progress.fraction
-                    whisperDownloadMessage = "Downloading \(model.displayName): \(formatPercent(progress.fraction)) to \(WhisperTranscriber.modelsDirectory.path)"
-                }
-                await MainActor.run {
-                    whisperModelPath = url.path
-                    whisperAvailability = WhisperTranscriber.availability()
-                    downloadingWhisperModel = nil
-                    downloadProgress = nil
-                    whisperDownloadMessage = "\(model.displayName) is ready."
-                }
-            } catch {
-                await MainActor.run {
-                    downloadingWhisperModel = nil
-                    downloadProgress = nil
-                    whisperDownloadMessage = "Download failed: \(error.localizedDescription)"
-                }
+        // Sayful Cloud (signed in) → backend proxy (no key); else Advanced/BYOK.
+        if usesSayfulCloud {
+            guard SupabaseBackendAuth.shared.isSignedIn else {
+                throw CloudTranscriptionError.notSignedIn
             }
+            let data = try Data(contentsOf: audioURL)
+            let result = try await HTTPBackendClient.shared.transcribe(
+                BackendTranscribeRequest(audio: data, filename: audioURL.lastPathComponent,
+                                         language: nil, model: nil))
+            return result.text
         }
-    }
-
-    private var downloadPercentLabel: String {
-        guard let downloadProgress else { return "" }
-        return "\(formatPercent(downloadProgress)) downloaded"
-    }
-
-    private func formatPercent(_ value: Double) -> String {
-        "\(Int((value * 100).rounded()))%"
+        return try await CloudTranscriber.transcribe(audioURL: audioURL)
     }
 
     @ViewBuilder

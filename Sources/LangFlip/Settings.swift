@@ -59,20 +59,6 @@ enum TextToSpeechBackend: String, CaseIterable, Identifiable {
     }
 }
 
-enum DictationTranscriptionBackend: String, CaseIterable, Identifiable {
-    case localWhisper
-    case cloud
-
-    var id: Self { self }
-
-    var displayName: String {
-        switch self {
-        case .localWhisper: return "Local Whisper"
-        case .cloud: return "Cloud STT"
-        }
-    }
-}
-
 enum DictationPushToTalkShortcut: String, CaseIterable, Identifiable {
     case anyShift
     case leftShift
@@ -657,11 +643,8 @@ final class Settings {
         static let readSelectionHotkeyPreset = "lf.readSelectionHotkeyPreset"
         static let readSelectionHotkeyCustom = "lf.readSelectionHotkeyCustom"
         static let microphoneDeviceID = "lf.microphoneDeviceID"
-        static let dictationTranscriptionBackend = "lf.dictationTranscriptionBackend"
         static let cloudSTTBaseURL = "lf.cloudSTTBaseURL"
         static let cloudSTTModel = "lf.cloudSTTModel"
-        static let whisperModelPath = "lf.whisperModelPath"
-        static let whisperLanguage = "lf.whisperLanguage"
         static let dictationPushToTalkEnabled = "lf.dictationPushToTalkEnabled"
         static let dictationPushToTalkShortcut = "lf.dictationPushToTalkShortcut"
         static let dictationHandsFreeEnabled = "lf.dictationHandsFreeEnabled"
@@ -991,16 +974,6 @@ final class Settings {
         set { defaults.set(newValue, forKey: Keys.microphoneDeviceID) }
     }
 
-    var dictationTranscriptionBackend: DictationTranscriptionBackend {
-        get {
-            guard let raw = defaults.string(forKey: Keys.dictationTranscriptionBackend),
-                  let value = DictationTranscriptionBackend(rawValue: raw)
-            else { return .localWhisper }
-            return value
-        }
-        set { defaults.set(newValue.rawValue, forKey: Keys.dictationTranscriptionBackend) }
-    }
-
     var cloudSTTBaseURL: String {
         get {
             let raw = defaults.string(forKey: Keys.cloudSTTBaseURL)?.trimmingCharacters(in: .whitespaces)
@@ -1031,16 +1004,6 @@ final class Settings {
             let trimmed = newValue.trimmingCharacters(in: .whitespaces)
             defaults.set(trimmed, forKey: Keys.cloudSTTModel)
         }
-    }
-
-    var whisperModelPath: String {
-        get { defaults.string(forKey: Keys.whisperModelPath) ?? "" }
-        set { defaults.set(newValue, forKey: Keys.whisperModelPath) }
-    }
-
-    var whisperLanguage: String {
-        get { defaults.string(forKey: Keys.whisperLanguage) ?? "auto" }
-        set { defaults.set(newValue, forKey: Keys.whisperLanguage) }
     }
 
     var dictationPushToTalkEnabled: Bool {
