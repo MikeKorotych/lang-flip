@@ -228,6 +228,12 @@ private final class DictationState: ObservableObject {
 private struct DictationHistoryList: View {
     @ObservedObject private var history = DictationHistory.shared
 
+    /// Lazy pagination: render only the newest `visibleCount` entries and reveal
+    /// the next page when the footer scrolls into view. Keeps the first paint
+    /// cheap even when the full history is large.
+    private static let pageSize = 25
+    @State private var visibleCount = DictationHistoryList.pageSize
+
     var body: some View {
         if history.entries.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
@@ -255,7 +261,26 @@ private struct DictationHistoryList: View {
                         }
                     }
                 }
+                if visibleCount < history.entries.count {
+                    loadMoreFooter
+                }
             }
+        }
+    }
+
+    /// Sentinel at the bottom of the list. Re-created on each page increment
+    /// (via `.id`) so it fires `onAppear` again if it's still on screen —
+    /// chaining loads until the viewport is filled or everything is shown.
+    private var loadMoreFooter: some View {
+        HStack {
+            Spacer()
+            ProgressView().controlSize(.small)
+            Spacer()
+        }
+        .frame(height: 36)
+        .id(visibleCount)
+        .onAppear {
+            visibleCount = min(visibleCount + Self.pageSize, history.entries.count)
         }
     }
 
@@ -263,7 +288,7 @@ private struct DictationHistoryList: View {
         let cal = Calendar.current
         var result: [(label: String, entries: [DictationEntry])] = []
         var currentDay: Date?
-        for entry in history.entries { // newest first
+        for entry in history.entries.prefix(visibleCount) { // newest first, paginated
             let day = cal.startOfDay(for: entry.date)
             if day != currentDay {
                 result.append((Self.dayLabel(day), []))
