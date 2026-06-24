@@ -3,25 +3,27 @@ import Combine
 import SwiftUI
 
 /// Always-visible floating "island" at the bottom-center of the screen, in the
-/// spirit of Wispr Flow. It morphs smoothly between states, every transition
-/// growing out of (and collapsing back into) the resting pill's centre:
-///   • idle        — a small dark capsule, barely there.
-///   • idle+hover  — expands to a mic button with a "Dictate <shortcut>" tooltip.
+/// spirit of Wispr Flow. States, every transition growing out of / collapsing
+/// back into the resting pill's centre:
+///   • idle        — a small dark capsule.
+///   • idle+hover  — the capsule grows in place into a ~round mic button, with a
+///                   "Dictate <shortcut>" tooltip above it.
 ///   • recording   — ✕ (cancel) · live sound waves · ✓ (stop & insert).
 ///   • transcribing— a small progress label.
 ///   • cancelled   — a "Transcript cancelled / Undo" toast.
 ///
-/// The panel is anchored by the *pill centre* (a fixed screen point), so it
-/// expands symmetrically rather than sliding in from a screen edge. It resizes
-/// to fit the current state so it never blocks a large dead zone.
+/// The NSPanel is a FIXED size/position (never animated), so SwiftUI animates
+/// the pill purely in place from its centre — no sliding from a screen edge.
+/// A global mouse monitor makes the panel click-through everywhere except over
+/// the pill, so the always-on window never blocks a dead zone.
 final class DictationIslandController {
     static let shared = DictationIslandController()
 
     let state = DictationIslandState()
     private var panel: NSPanel?
-    private var cancellables = Set<AnyCancellable>()
     private var levelTimer: Timer?
     private var toastTimer: Timer?
+    private var mouseMonitors: [Any] = []
 
     private init() {}
 
@@ -31,7 +33,7 @@ final class DictationIslandController {
         guard Settings.shared.showDictationIsland else { return }
         DispatchQueue.main.async { [self] in
             ensurePanel()
-            applyTargetFrame(animated: false)
+            positionPanel()
             panel?.orderFront(nil)
         }
     }
@@ -52,9 +54,8 @@ final class DictationIslandController {
         guard panel == nil else { return }
 
         let host = NSHostingController(rootView: DictationIslandView(state: state))
-        let size = IslandMetrics.panelSize(for: state)
         let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: size),
+            contentRect: NSRect(origin: .zero, size: IslandMetrics.panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -66,8 +67,7 @@ final class DictationIslandController {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
-        panel.ignoresMouseEvents = false
-        panel.acceptsMouseMovedEvents = true
+        panel.ignoresMouseEvents = true   // pass-through by default; on over the pill
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.becomesKeyOnlyIfNeeded = true
@@ -86,11 +86,37 @@ final class DictationIslandController {
             self, selector: #selector(screenChanged),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
 
-        state.objectWillChange
-            .sink { [weak self] in
-                DispatchQueue.main.async { self?.applyTargetFrame(animated: true) }
-            }
-            .store(in: &cancellables)
+        // Drive hover + click-through from the global mouse position (the panel
+        // is interactive only while the cursor is over the pill).
+        let handler: (NSEvent) -> Void = { [weak self] _ in self?.updateHover() }
+        if let g = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved], handler: handler) {
+            mouseMonitors.append(g)
+        }
+        if let l = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved], handler: { [weak self] e in
+            self?.updateHover(); return e
+        }) {
+            mouseMonitors.append(l)
+        }
+    }
+
+    private func updateHover() {
+        guard let panel else { return }
+        let mouse = NSEvent.mouseLocation                 // screen coords, bottom-left
+        let pad = IslandMetrics.pad
+        // Detection footprint: current pill width (so ✕/✓ stay clickable while
+        // recording), but at least the mic size when idle to avoid flicker.
+        let base = IslandMetrics.contentSize(for: state).width
+        let detW = (state.phase == .idle && !state.showCancelledToast
+                    ? max(base, IslandMetrics.micWidth) : base) + 20
+        let detH = IslandMetrics.pillSlotHeight + 16
+        let rect = CGRect(x: panel.frame.midX - detW / 2,
+                          y: panel.frame.minY + pad - 8,
+                          width: detW, height: detH)
+        let inside = rect.contains(mouse)
+        if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
+        if state.phase == .idle && !state.showCancelledToast, state.hovering != inside {
+            state.hovering = inside
+        }
     }
 
     @objc private func dictationStateChanged() {
@@ -134,7 +160,7 @@ final class DictationIslandController {
     }
 
     @objc private func screenChanged() {
-        applyTargetFrame(animated: false)
+        positionPanel()
     }
 
     private func startLevelTimer() {
@@ -150,31 +176,17 @@ final class DictationIslandController {
         levelTimer = nil
     }
 
-    private func applyTargetFrame(animated: Bool) {
+    /// Fixed placement: bottom-centre of the screen. Never animated.
+    private func positionPanel() {
         guard let panel else { return }
         let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
-
-        let size = IslandMetrics.panelSize(for: state)
-        let pillH = IslandMetrics.contentSize(for: state).height
-        // Anchor by the pill centre: a fixed screen point near the bottom. The
-        // pill sits `pad + pillH/2` above the panel's bottom edge, so we place
-        // the panel so that point lands on `restingCenterY` regardless of state.
-        let restingCenterY = screen.visibleFrame.minY + IslandMetrics.bottomInset + IslandMetrics.restingPillHeight / 2
+        let size = IslandMetrics.panelSize
         let x = screen.frame.midX - size.width / 2
-        let y = restingCenterY - IslandMetrics.pad - pillH / 2
-        let frame = NSRect(x: x, y: y, width: size.width, height: size.height)
-
-        if animated {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.18
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                ctx.allowsImplicitAnimation = true
-                panel.animator().setFrame(frame, display: true)
-            }
-        } else {
-            panel.setFrame(frame, display: true)
-        }
+        // The pill slot sits `pad` above the panel bottom; place the panel so
+        // the pill rests `bottomInset` above the Dock.
+        let y = screen.visibleFrame.minY + IslandMetrics.bottomInset - IslandMetrics.pad
+        panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
     }
 }
 
@@ -191,65 +203,55 @@ final class DictationIslandState: ObservableObject {
     var isExpandedIdle: Bool { phase == .idle && hovering && !showCancelledToast }
 }
 
-// MARK: - Metrics (shared by panel sizing + SwiftUI layout)
+// MARK: - Metrics
 
 enum IslandMetrics {
     static let bottomInset: CGFloat = 14
     static let pad: CGFloat = 16
-    /// The notional pill height used to fix the resting centre point.
-    static let restingPillHeight: CGFloat = 30
+    static let pillHeight: CGFloat = 32
+    static let pillSlotHeight: CGFloat = 32     // reserved vertical slot (pill centred in it)
 
-    static let pillHeight: CGFloat = 30
-    static let idleWidth: CGFloat = 46
+    static let idleWidth: CGFloat = 40
     static let idleHeight: CGFloat = 12
-    static let micWidth: CGFloat = 104
-    static let recordingWidth: CGFloat = 216
-    static let transcribingWidth: CGFloat = 168
-    static let toastWidth: CGFloat = 232
+    static let micWidth: CGFloat = 34           // ~round mic button
+    static let recordingWidth: CGFloat = 156    // compact: little slack around the waves
+    static let transcribingWidth: CGFloat = 164
+    static let toastWidth: CGFloat = 210
 
     static let tooltipWidth: CGFloat = 188
     static let tooltipHeight: CGFloat = 26
     static let tooltipGap: CGFloat = 7
 
+    /// Current pill content size (width drives the in-place animation).
     static func contentSize(for state: DictationIslandState) -> CGSize {
-        if state.showCancelledToast {
-            return CGSize(width: toastWidth, height: pillHeight)
-        }
+        if state.showCancelledToast { return CGSize(width: toastWidth, height: pillHeight) }
         switch state.phase {
         case .idle:
             return state.hovering
                 ? CGSize(width: micWidth, height: pillHeight)
                 : CGSize(width: idleWidth, height: idleHeight)
-        case .recording:
-            return CGSize(width: recordingWidth, height: pillHeight)
-        case .transcribing:
-            return CGSize(width: transcribingWidth, height: pillHeight)
+        case .recording:    return CGSize(width: recordingWidth, height: pillHeight)
+        case .transcribing: return CGSize(width: transcribingWidth, height: pillHeight)
         }
     }
 
-    static func showsTooltip(for state: DictationIslandState) -> Bool {
-        state.isExpandedIdle
-    }
-
-    static func panelSize(for state: DictationIslandState) -> CGSize {
-        let content = contentSize(for: state)
-        let tooltipBand = showsTooltip(for: state) ? (tooltipHeight + tooltipGap) : 0
-        // Width must fit the (wider) tooltip so "Dictate <shortcut>" isn't clipped.
-        let width = max(content.width, showsTooltip(for: state) ? tooltipWidth : 0)
-        return CGSize(width: width + pad * 2,
-                      height: content.height + tooltipBand + pad * 2)
+    /// Fixed panel large enough for every state (incl. the wider tooltip), so we
+    /// never resize the window.
+    static var panelSize: CGSize {
+        let maxContent = max(micWidth, recordingWidth, transcribingWidth, toastWidth, tooltipWidth)
+        return CGSize(width: maxContent + pad * 2,
+                      height: tooltipHeight + tooltipGap + pillSlotHeight + pad * 2)
     }
 }
 
 // MARK: - View
 
 private enum IslandColor {
-    // Near-black surface, per design feedback.
     static let surface = Color(red: 0.04, green: 0.04, blue: 0.05)
     static let surfaceTop = Color(red: 0.09, green: 0.09, blue: 0.10)
     static let stroke = Color.white.opacity(0.08)
     static let text = Color.white
-    static let accent = Color(red: 0.80, green: 0.64, blue: 0.97) // soft violet
+    static let accent = Color(red: 0.80, green: 0.64, blue: 0.97)
     static let cancel = Color.white.opacity(0.16)
     static let confirm = Color.white
 }
@@ -257,44 +259,49 @@ private enum IslandColor {
 struct DictationIslandView: View {
     @ObservedObject var state: DictationIslandState
 
-    /// One key whose change drives the in-view crossfade; matches the panel's
-    /// own 0.18s easeOut so AppKit + SwiftUI move together.
-    private var stateKey: String {
-        "\(state.phase)-\(state.hovering)-\(state.showCancelledToast)"
-    }
-    private var anim: Animation { .easeOut(duration: 0.18) }
+    private var pillWidth: CGFloat { IslandMetrics.contentSize(for: state).width }
+    private var pillHeight: CGFloat { IslandMetrics.contentSize(for: state).height }
+    private var stateKey: String { "\(state.phase)-\(state.hovering)-\(state.showCancelledToast)" }
+    private var anim: Animation { .spring(response: 0.30, dampingFraction: 0.82) }
 
     var body: some View {
-        VStack(spacing: IslandMetrics.tooltipGap) {
-            if IslandMetrics.showsTooltip(for: state) {
-                tooltip.transition(.opacity)
+        // Fixed-size root so NSHostingController never resizes the window; the
+        // pill animates purely in place within this constant frame.
+        ZStack(alignment: .bottom) {
+            Color.clear
+            VStack(spacing: IslandMetrics.tooltipGap) {
+                tooltipSlot
+                pill
+                    .frame(height: IslandMetrics.pillSlotHeight)   // fixed slot; pill centred → grows symmetrically
             }
-            pill
+            .padding(.bottom, IslandMetrics.pad)
         }
-        .padding(IslandMetrics.pad)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .frame(width: IslandMetrics.panelSize.width, height: IslandMetrics.panelSize.height)
         .animation(anim, value: stateKey)
-        .onHover { state.hovering = $0 }
     }
 
-    // The capsule fills the panel width (which the controller animates), so the
-    // pill grows from its centre as a single source of truth — no SwiftUI
-    // width animation fighting the panel's.
-    private var pill: some View {
+    // Reserve the tooltip band always so the pill never shifts when it appears.
+    private var tooltipSlot: some View {
         ZStack {
-            innerContent
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: IslandMetrics.contentSize(for: state).height)
-        .background(capsuleBackground)
-        .contentShape(Capsule())
-        .onTapGesture {
-            // Whole-pill tap starts dictation only in the idle states; the
-            // recording/toast states have their own ✕/✓/Undo targets.
-            if state.phase == .idle && !state.showCancelledToast {
-                VoiceDictationController.shared.toggleRecording()
+            if IslandMetrics.showsTooltipExpanded(state) {
+                tooltip
+                    // Fade + straight-down movement only (no horizontal drift).
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
+        .frame(height: IslandMetrics.tooltipHeight)
+    }
+
+    private var pill: some View {
+        ZStack { innerContent }
+            .frame(width: pillWidth, height: pillHeight)
+            .background(capsuleBackground)
+            .contentShape(Capsule())
+            .onTapGesture {
+                if state.phase == .idle && !state.showCancelledToast {
+                    VoiceDictationController.shared.toggleRecording()
+                }
+            }
     }
 
     @ViewBuilder
@@ -304,21 +311,19 @@ struct DictationIslandView: View {
         } else {
             switch state.phase {
             case .idle:
+                // Mic fades by opacity only — no movement.
                 Image(systemName: "mic.fill")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(IslandColor.text)
                     .opacity(state.hovering ? 1 : 0)
-                    .scaleEffect(state.hovering ? 1 : 0.6)
-            case .recording:
-                recordingContent
-            case .transcribing:
-                transcribingContent
+            case .recording:    recordingContent
+            case .transcribing: transcribingContent
             }
         }
     }
 
     private var recordingContent: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             circleButton(system: "xmark", fg: IslandColor.text, bg: IslandColor.cancel) {
                 VoiceDictationController.shared.cancel()
             }
@@ -328,15 +333,12 @@ struct DictationIslandView: View {
                 VoiceDictationController.shared.stopAndTranscribe()
             }
         }
-        .padding(.horizontal, 6)
+        .padding(.horizontal, 5)
     }
 
     private var transcribingContent: some View {
         HStack(spacing: 8) {
-            ProgressView()
-                .progressViewStyle(.circular)
-                .controlSize(.small)
-                .tint(IslandColor.text)
+            ProgressView().progressViewStyle(.circular).controlSize(.small).tint(IslandColor.text)
             Text("Transcribing…")
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundColor(IslandColor.text)
@@ -367,10 +369,8 @@ struct DictationIslandView: View {
 
     private var tooltip: some View {
         HStack(spacing: 6) {
-            Text("Dictate")
-                .foregroundColor(IslandColor.text)
-            Text(Settings.shared.dictationHandsFreeShortcut.displayName)
-                .foregroundColor(IslandColor.accent)
+            Text("Dictate").foregroundColor(IslandColor.text)
+            Text(Settings.shared.dictationHandsFreeShortcut.displayName).foregroundColor(IslandColor.accent)
         }
         .font(.system(size: 12, weight: .semibold))
         .lineLimit(1)
@@ -382,10 +382,8 @@ struct DictationIslandView: View {
 
     private var capsuleBackground: some View {
         Capsule()
-            .fill(
-                LinearGradient(colors: [IslandColor.surfaceTop, IslandColor.surface],
-                               startPoint: .top, endPoint: .bottom)
-            )
+            .fill(LinearGradient(colors: [IslandColor.surfaceTop, IslandColor.surface],
+                                 startPoint: .top, endPoint: .bottom))
             .overlay(Capsule().stroke(IslandColor.stroke, lineWidth: 1))
             .shadow(color: .black.opacity(0.45), radius: 9, y: 3)
     }
@@ -400,6 +398,10 @@ struct DictationIslandView: View {
         }
         .buttonStyle(.plain)
     }
+}
+
+extension IslandMetrics {
+    static func showsTooltipExpanded(_ state: DictationIslandState) -> Bool { state.isExpandedIdle }
 }
 
 /// Live audio-level bars, animated continuously while recording. Tuned for a
@@ -418,8 +420,7 @@ private struct WaveBars: View {
             let t = timeline.date.timeIntervalSinceReferenceDate
             HStack(spacing: spacing) {
                 ForEach(0..<barCount, id: \.self) { i in
-                    Capsule()
-                        .fill(IslandColor.text)
+                    Capsule().fill(IslandColor.text)
                         .frame(width: barWidth, height: height(i, t))
                 }
             }
@@ -427,11 +428,9 @@ private struct WaveBars: View {
     }
 
     private func height(_ i: Int, _ t: TimeInterval) -> CGFloat {
-        // Boost the (often small) normalized level so quiet speech still moves
-        // the bars a lot; keep a lively idle shimmer when near-silent.
         let boosted = min(1.0, max(0.18, level * 2.6))
         let center = Double(barCount - 1) / 2
-        let distance = abs(Double(i) - center) / center        // 0 centre … 1 edge
+        let distance = abs(Double(i) - center) / center
         let envelope = 1.0 - distance * 0.45
         let wobble = 0.5 + 0.5 * sin(t * 9 + Double(i) * 0.8)
         let amp = boosted * envelope * (0.45 + 0.55 * wobble)

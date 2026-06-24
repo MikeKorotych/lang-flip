@@ -39,7 +39,8 @@ final class VoiceDictationController {
         recordingApp = NSWorkspace.shared.frontmostApplication?.localizedName
         notifyStateChanged()
         Sound.playFlip()
-        FlipOverlay.shared.show()
+        // No FlipOverlay here — the dictation island is the visual feedback for
+        // speech-to-text. FlipOverlay is reserved for layout-flip / AI text fixes.
         let body = mode == .pushToTalk
             ? "Recording while \(Settings.shared.dictationPushToTalkShortcut.displayName) is held."
             : "Recording. Press \(Settings.shared.dictationHandsFreeShortcut.displayName) to stop."
@@ -147,7 +148,6 @@ final class VoiceDictationController {
         pb.setString(cleaned, forType: .string)
         postCommandV()
         Sound.playFlip()
-        FlipOverlay.shared.show()
         DictationHistory.shared.add(cleaned, duration: duration, app: app)
         Notifications.show(title: "Dictation inserted", body: String(cleaned.prefix(80)))
     }
