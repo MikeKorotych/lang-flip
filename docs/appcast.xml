@@ -26,6 +26,28 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.4.0</title>
+      <pubDate>Wed, 24 Jun 2026 11:30:24 +0000</pubDate>
+      <sparkle:version>0.4.0</sparkle:version>
+      <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>A dictation island, and a tidier Settings</h2>
+        <ul>
+          <li>Added an always-on dictation island at the bottom of the screen (Wispr-style): hover it to reveal the mic and its shortcut, see live sound waves while recording, and cancel or confirm right there.</li>
+          <li>Added a "Transcript cancelled" toast with Undo and a lifetime progress bar.</li>
+          <li>Redesigned the Settings tabs (Behavior, Hotkeys, Apps, About, and Voice) in the new look, and centered everything on wider windows.</li>
+          <li>Dictation no longer shows the flip overlay — the island is its feedback now.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.4.0/LangFlip-0.4.0.dmg"
+        length="4826244"
+        type="application/octet-stream"
+        sparkle:edSignature="fOFe5rLgz5ze2qCANeLp4Jcb2gK3WsD8qCwBoH7ju1mRPaQ3Ql0K44xXFcAfPUR8XsEdhfOk2VLSozSQOuDOBA==" />
+    </item>
+
+    <item>
       <title>v0.3.0</title>
       <pubDate>Wed, 24 Jun 2026 07:47:03 +0000</pubDate>
       <sparkle:version>0.3.0</sparkle:version>
