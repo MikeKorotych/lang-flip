@@ -236,7 +236,7 @@ enum IslandMetrics {
     static let idleHeight: CGFloat = 12
     static let micWidth: CGFloat = 34           // ~round mic button
     static let recordingWidth: CGFloat = 156    // compact: little slack around the waves
-    static let transcribingWidth: CGFloat = 164
+    static let transcribingWidth: CGFloat = recordingWidth  // match recording so the pill doesn't jump width on state change
     static let toastWidth: CGFloat = 218        // snug: "Transcript cancelled" + Undo, minimal gap
 
     static let tooltipWidth: CGFloat = 188
@@ -385,7 +385,8 @@ struct DictationIslandView: View {
             ProgressView().progressViewStyle(.circular).controlSize(.small).tint(IslandColor.text)
             Text("Transcribing…")
                 .font(.system(size: 12.5, weight: .medium))
-                .foregroundColor(IslandColor.text)
+                .foregroundColor(IslandColor.text.opacity(0.4))
+                .modifier(ShimmerText())
         }
         .padding(.horizontal, 12)
     }
@@ -484,5 +485,39 @@ private struct WaveBars: View {
         let wobble = 0.5 + 0.5 * sin(t * 9 + Double(i) * 0.8)
         let amp = boosted * envelope * (0.45 + 0.55 * wobble)
         return minHeight + CGFloat(amp) * (maxHeight - minHeight)
+    }
+}
+
+// MARK: - Shimmer
+
+/// A loading shimmer: a bright band sweeps left→right across the content,
+/// masked to its shape. Pair with a dimmed base colour so the sweep reads as a
+/// highlight passing over the text (the "Transcribing…" label uses this).
+private struct ShimmerText: ViewModifier {
+    @State private var x: CGFloat = -1
+
+    func body(content: Content) -> some View {
+        content.overlay(
+            GeometryReader { geo in
+                let w = geo.size.width
+                let band = max(24, w * 0.5)
+                LinearGradient(
+                    colors: [.clear, IslandColor.text, .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: band, height: geo.size.height)
+                .position(x: x, y: geo.size.height / 2)
+                .blendMode(.plusLighter)
+                .onAppear {
+                    x = -band
+                    withAnimation(.linear(duration: 1.25).repeatForever(autoreverses: false)) {
+                        x = w + band
+                    }
+                }
+            }
+            .mask(content)
+            .allowsHitTesting(false)
+        )
     }
 }
