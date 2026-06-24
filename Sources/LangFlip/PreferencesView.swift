@@ -14,7 +14,6 @@ import UniformTypeIdentifiers
 struct GeneralTab: View {
     @AppStorage("lf.soundEnabled") private var soundEnabled = false
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
-    @State private var permissions = PermissionStatus.current()
     @State private var hasScreenRecording = PermissionStatus.hasScreenRecording()
     @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
 
@@ -35,15 +34,6 @@ struct GeneralTab: View {
                     FlowToggleRow(title: "Sound feedback", isOn: $soundEnabled)
                 }
 
-                FlowSettingsGroup("Permissions") {
-                    FlowPermissionRow(title: "Accessibility",
-                                      granted: permissions.accessibility,
-                                      action: PermissionStatus.openAccessibilityPane)
-                    FlowPermissionRow(title: "Input Monitoring",
-                                      granted: permissions.inputMonitoring,
-                                      action: PermissionStatus.openInputMonitoringPane)
-                }
-
                 FlowSettingsGroup("Optional permissions") {
                     FlowPermissionRow(title: "Screen Recording",
                                       granted: hasScreenRecording,
@@ -60,7 +50,6 @@ struct GeneralTab: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .onReceive(timer) { _ in
-            permissions = PermissionStatus.current()
             hasScreenRecording = PermissionStatus.hasScreenRecording()
             microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
             launchAtLogin = LaunchAtLogin.isEnabled
@@ -555,6 +544,12 @@ struct VoiceTab: View {
                 isOn: $showDictationIsland
             )
             .onChange(of: showDictationIsland) { DictationIslandController.shared.setEnabled($0) }
+
+            FlowToggleRow(
+                title: "Dictation notifications",
+                detail: "Show a banner when recording starts, while transcribing, and when text is inserted. Off by default — the island already shows live state. Errors always notify.",
+                isOn: $dictationNotifications
+            )
 
             Divider().overlay(FlowTheme.cardStroke)
 
@@ -1130,7 +1125,7 @@ struct VoiceTab: View {
 // MARK: - Models (AI)
 
 struct ModelsTab: View {
-    private let releaseAIModes: [AIMode] = [.off, .appleFoundation, .ollama, .openai]
+    private let releaseAIModes: [AIMode] = [.off, .appleFoundation, .ollama, .openai, .backend]
 
     @AppStorage("lf.aiMode") private var aiMode = AIMode.off.rawValue
     @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = true
@@ -1163,6 +1158,13 @@ struct ModelsTab: View {
                     }
                 }
                     helpText("AI is optional. Ollama with Qwen 3.5 2B is the default local setup for fast grammar fixes and screen text capture.")
+            }
+
+            if AIMode(rawValue: aiMode) == .backend {
+                Section("Sayful Cloud") {
+                    BackendAccountView()
+                    helpText("Sign in with Google to use Sayful's cloud AI — no API key needed. The server holds the provider key and tracks a weekly word quota.")
+                }
             }
 
             // Backend-specific config sits directly under Mode — that's
@@ -1329,6 +1331,8 @@ struct ModelsTab: View {
             return "Bundled MLX models are not part of this release. Use Ollama with Qwen 3.5 2B for fast local grammar fixes and screen text capture."
         case .openai:
             return "Cloud mode sends only the text or image you explicitly process to the selected provider. Your API key is stored in macOS Keychain. Layout correction still runs locally."
+        case .backend:
+            return "Sayful Cloud mode sends only the text or image you process to the corporate backend (which holds the provider key). Layout correction still runs locally."
         }
     }
 

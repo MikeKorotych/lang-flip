@@ -1026,12 +1026,15 @@ final class EventTap {
                 }
                 let b64 = imageData.base64EncodedString()
                 if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: sending \(imageData.count) bytes (b64=\(b64.count) chars) to AI\n".utf8)) }
-                Notifications.show(title: "Sayful", body: "Reading text from screenshot…")
+                // Floating scan icon levitates while the AI extracts the text.
+                ScanOverlay.shared.begin()
 
                 let request = AIOcrRequest(imageBase64: b64)
                 AIAssistantManager.shared.current.extractTextFromImage(request) { [weak self] result in
                     DispatchQueue.main.async {
                         defer { try? FileManager.default.removeItem(at: pngURL) }
+                        // Processing done (success or failure) — fade the scan icon out.
+                        ScanOverlay.shared.finish()
                         guard let self else { return }
                         switch result {
                         case .extracted(let text):
@@ -1040,7 +1043,6 @@ final class EventTap {
                             pb.clearContents()
                             pb.setString(text.trimmingCharacters(in: .whitespacesAndNewlines), forType: .string)
                             Sound.playFlip()
-                            FlipOverlay.shared.show()
                             let preview = String(text.prefix(60)).replacingOccurrences(of: "\n", with: " ")
                             Notifications.show(title: "Text copied", body: text.count > 60 ? "\(preview)…" : preview)
                         case .unsupported:
@@ -1917,6 +1919,8 @@ private extension EventTap {
             return isVisionOllamaModel(Settings.shared.ollamaModel)
         case .openai:
             return !(Settings.shared.openaiAPIKey?.isEmpty ?? true)
+        case .backend:
+            return SupabaseBackendAuth.shared.isSignedIn
         case .off, .appleFoundation, .bundledModel:
             return false
         }

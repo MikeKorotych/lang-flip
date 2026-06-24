@@ -33,6 +33,10 @@ enum AIMode: String, CaseIterable, Identifiable {
     /// user changes the base URL.
     case openai
 
+    /// The corporate backend proxy (WS1). Sign in with Google; the server
+    /// holds the provider key and enforces quotas. Zero-config for users.
+    case backend
+
     var id: Self { self }
 
     var displayName: String {
@@ -42,6 +46,7 @@ enum AIMode: String, CaseIterable, Identifiable {
         case .bundledModel:     return "Downloaded model (MLX)"
         case .ollama:           return "Ollama (local)"
         case .openai:           return "OpenAI / compatible cloud (BYOK)"
+        case .backend:          return "Sayful Cloud (sign in)"
         }
     }
 }

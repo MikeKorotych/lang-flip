@@ -24,6 +24,7 @@ final class AIAssistantManager {
         let openaiModel: String?
         let openaiBaseURL: String?
         let openaiHasKey: Bool
+        let backendSignedIn: Bool
     }
     private var cachedKey: CacheKey?
     private var cachedAssistant: AIAssistant = NoopAssistant()
@@ -54,7 +55,8 @@ final class AIAssistantManager {
             ollamaModel:    mode == .ollama  ? Settings.shared.ollamaModel : nil,
             openaiModel:    mode == .openai  ? Settings.shared.openaiModel : nil,
             openaiBaseURL:  mode == .openai  ? Settings.shared.openaiBaseURL : nil,
-            openaiHasKey:   mode == .openai  ? !(Settings.shared.openaiAPIKey?.isEmpty ?? true) : false
+            openaiHasKey:   mode == .openai  ? !(Settings.shared.openaiAPIKey?.isEmpty ?? true) : false,
+            backendSignedIn: mode == .backend ? SupabaseBackendAuth.shared.isSignedIn : false
         )
     }
 
@@ -85,6 +87,10 @@ final class AIAssistantManager {
                 model: key.openaiModel ?? "gpt-5-nano",
                 baseURLString: key.openaiBaseURL ?? "https://api.openai.com/v1"
             )
+        case .backend:
+            // Signed in → route through the corporate proxy; otherwise stay
+            // silent (Noop) until the user signs in.
+            return key.backendSignedIn ? BackendAssistant() : NoopAssistant()
         }
     }
 }
