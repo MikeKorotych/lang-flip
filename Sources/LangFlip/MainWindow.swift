@@ -357,6 +357,11 @@ private struct SettingsHostView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
             }
+            // Cap + center the header column so it tracks the tab content
+            // (which is capped at 820) instead of stretching the segmented
+            // tab bar across the full width on wide windows.
+            .frame(maxWidth: 820, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
             .padding(.horizontal, 28)
             .padding(.top, 28)
             .padding(.bottom, 14)

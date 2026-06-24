@@ -68,7 +68,7 @@ struct GeneralTab: View {
             }
             .padding(28)
             .frame(maxWidth: 820, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
         .onReceive(timer) { _ in
             permissions = PermissionStatus.current()
@@ -203,7 +203,7 @@ struct VoiceTab: View {
                 }
                 .padding(28)
                 .frame(maxWidth: 820, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .top)
             }
             .onAppear {
                 voices = SpeechReader.availableVoices
@@ -1211,7 +1211,7 @@ struct HotkeysTab: View {
             }
             .padding(28)
             .frame(maxWidth: 820, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
     }
 
@@ -1370,7 +1370,7 @@ struct BehaviorTab: View {
             }
             .padding(28)
             .frame(maxWidth: 820, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
     }
 
@@ -2902,7 +2902,7 @@ struct AppsTab: View {
             }
             .padding(28)
             .frame(maxWidth: 820, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
     }
 
