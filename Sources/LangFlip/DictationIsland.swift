@@ -133,6 +133,9 @@ final class DictationIslandController {
                 stopLevelTimer()
                 state.level = 0
             }
+            // The pill resized; recompute click-through against the cursor even
+            // if it didn't move, so the new ✕/✓ aren't dead under a still cursor.
+            updateHover()
         }
     }
 
@@ -146,10 +149,12 @@ final class DictationIslandController {
     @objc private func dictationCancelled() {
         DispatchQueue.main.async { [self] in
             state.showCancelledToast = true
+            state.toastToken &+= 1   // re-trigger the lifetime bar even if the toast is already up
             toastTimer?.invalidate()
             toastTimer = Timer.scheduledTimer(withTimeInterval: IslandMetrics.toastDuration, repeats: false) { [weak self] _ in
                 self?.dismissToast()
             }
+            updateHover()
         }
     }
 
@@ -157,6 +162,7 @@ final class DictationIslandController {
         toastTimer?.invalidate()
         toastTimer = nil
         state.showCancelledToast = false
+        updateHover()
     }
 
     @objc private func screenChanged() {
@@ -199,6 +205,7 @@ final class DictationIslandState: ObservableObject {
     @Published var hovering = false
     @Published var level: Double = 0
     @Published var showCancelledToast = false
+    @Published var toastToken = 0   // bumped on each cancel to (re)start the lifetime bar
 
     var isExpandedIdle: Bool { phase == .idle && hovering && !showCancelledToast }
 }
@@ -283,6 +290,12 @@ struct DictationIslandView: View {
         }
         .frame(width: IslandMetrics.panelSize.width, height: IslandMetrics.panelSize.height)
         .animation(anim, value: stateKey)
+        // Lifetime bar fills left→right; re-armed on every cancel (token bump),
+        // so a fresh cancel while a toast is still up restarts it cleanly.
+        .onChange(of: state.toastToken) { _ in
+            toastProgress = 0
+            withAnimation(.linear(duration: IslandMetrics.toastDuration)) { toastProgress = 1 }
+        }
     }
 
     // Reserve the tooltip band always so the pill never shifts when it appears.
@@ -387,11 +400,6 @@ struct DictationIslandView: View {
         }
         .padding(.leading, 28)
         .padding(.trailing, 11)
-        .onAppear {
-            // Lifetime bar fills left→right over the toast's life.
-            toastProgress = 0
-            withAnimation(.linear(duration: IslandMetrics.toastDuration)) { toastProgress = 1 }
-        }
     }
 
     private var tooltip: some View {
