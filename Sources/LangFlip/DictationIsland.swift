@@ -310,7 +310,7 @@ struct DictationIslandView: View {
                     .frame(height: 2.5)
                     .scaleEffect(x: toastProgress, anchor: .leading)
                     .padding(.horizontal, 18)
-                    .padding(.bottom, 2)
+                    .padding(.bottom, 0)
                     .opacity(state.showCancelledToast ? 1 : 0)
             }
             .contentShape(Capsule())
