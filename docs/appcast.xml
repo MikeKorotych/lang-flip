@@ -18,9 +18,9 @@
      xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
      xmlns:dc="http://purl.org/dc/elements/1.1/">
   <channel>
-    <title>LangFlip</title>
+    <title>Sayful</title>
     <link>https://github.com/MikeKorotych/lang-flip</link>
-    <description>LangFlip update feed</description>
+    <description>Sayful update feed</description>
     <language>en</language>
 
     <!-- Releases — newest first. Add a new <item> when shipping. -->

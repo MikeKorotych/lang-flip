@@ -1,10 +1,10 @@
-# LangFlip
+# Sayful
 
 <p align="center">
-  <img src="docs/media/overlay-animation.gif" alt="LangFlip rewrite animation" width="160" />
+  <img src="docs/media/overlay-animation.gif" alt="Sayful rewrite animation" width="160" />
 </p>
 
-LangFlip is a macOS menu-bar writing assistant for people who type in several
+Sayful is a macOS menu-bar writing assistant for people who type in several
 languages every day. It fixes wrong-keyboard-layout text, polishes grammar,
 translates selected text, and can copy text from a selected area of the screen.
 
@@ -19,23 +19,23 @@ Supports **English, Ukrainian, and Russian** out of the box.
 ## ✨ What It Does
 
 - 🔁 **Fixes wrong layout while you type.** Type `руддщ` when you meant `hello`,
-  press Space, and LangFlip rewrites it as `hello` while switching the system
+  press Space, and Sayful rewrites it as `hello` while switching the system
   input source back to ABC.
 - ✍️ **Flips selected text.** Select a word, sentence, or paragraph and
-  double-tap Shift. LangFlip converts the keyboard layout and restores your
+  double-tap Shift. Sayful converts the keyboard layout and restores your
   clipboard afterward.
 - 🧠 **Corrects selected text with local AI.** Select text and tap Shift once to
   fix typos, punctuation, capitalization, and small grammar mistakes.
 - ⚡ **Fixes the last sentence without selecting text.** Tap Shift at the end of
-  a sentence and LangFlip can clean up just that sentence.
+  a sentence and Sayful can clean up just that sentence.
 - 🌍 **Translates selected text.** Translate into English, Ukrainian, or Russian
   from the menu, or press Shift+Space to translate into your current keyboard
   layout language.
 - 📸 **Captures text from the screen.** Press Shift+Command+S, select a screen
-  region, and LangFlip copies recognized text to the clipboard.
+  region, and Sayful copies recognized text to the clipboard.
 - 🔊 **Reads selected text aloud.** Use macOS system voices, local OmniVoice,
   or a BYOK cloud TTS model through OpenRouter/OpenAI-compatible APIs.
-- ↩️ **Learns from Backspace.** If LangFlip flips something you did not want, press
+- ↩️ **Learns from Backspace.** If Sayful flips something you did not want, press
   Backspace and it remembers that word as an exception.
 - 📚 **Installs extended dictionaries.** Download larger EN/UK/RU word lists
   from Preferences to improve auto-flip coverage without updating the app.
@@ -44,7 +44,7 @@ Supports **English, Ukrainian, and Russian** out of the box.
 
 ## 💡 Why Use It
 
-LangFlip saves the small but constant effort of correcting text by hand:
+Sayful saves the small but constant effort of correcting text by hand:
 
 - fewer layout-switching mistakes;
 - less copy/paste into browser-only grammar tools;
@@ -57,7 +57,7 @@ teams, writers, and anyone who switches languages all day.
 
 ## ⌨️ Basic Use
 
-After installation, LangFlip lives in the macOS menu bar. The first launch
+After installation, Sayful lives in the macOS menu bar. The first launch
 onboarding walks you through permissions, extended dictionaries, Qwen 3.5 setup,
 and two quick tests.
 
@@ -73,7 +73,7 @@ Common shortcuts:
 - **Shift+Command+S** - copy text from a selected screen region.
 - **Control+Option+X** - read selected text aloud with the selected voice backend.
 - **Fn+Option** - tap once to toggle hands-free dictation by default.
-- **Both Shift keys** - pause or resume LangFlip.
+- **Both Shift keys** - pause or resume Sayful.
 
 The selection-based actions are the most predictable. The no-selection
 single/double Shift actions are designed for fast everyday typing and can be
@@ -84,16 +84,16 @@ and install the extended word-list pack.
 
 ## 🚀 Install
 
-1. Download the latest **LangFlip-X.Y.Z.dmg** from
+1. Download the latest **Sayful-X.Y.Z.dmg** from
    [Releases](https://github.com/MikeKorotych/lang-flip/releases).
-2. Open the DMG and drag **LangFlip** into Applications.
-3. Open LangFlip from Applications.
+2. Open the DMG and drag **Sayful** into Applications.
+3. Open Sayful from Applications.
 4. Follow the onboarding steps for macOS permissions:
-   - **Accessibility** lets LangFlip rewrite text and control input sources.
-   - **Input Monitoring** lets LangFlip detect hotkeys and typed words.
+   - **Accessibility** lets Sayful rewrite text and control input sources.
+   - **Input Monitoring** lets Sayful detect hotkeys and typed words.
    - **Screen Recording** is needed only for screen text capture.
 
-After onboarding, look for the LangFlip icon in the menu bar.
+After onboarding, look for the Sayful icon in the menu bar.
 
 ## 🤖 Local AI Setup
 
@@ -104,14 +104,14 @@ screenshot.
 Manual setup:
 
 1. Install and open [Ollama](https://ollama.com/).
-2. Open **LangFlip → Preferences → AI**.
+2. Open **Sayful → Preferences → AI**.
 3. Choose **Ollama (local)**.
 4. Install or select **Qwen 3.5 2B**. If you want to compare quality, try
    **Qwen 3.5 4B** from the same menu, preferably on a Mac with 16 GB+ RAM.
 5. Run the built-in grammar and copy-text-from-screenshot tests.
 
-In Ollama mode, LangFlip talks to `127.0.0.1:11434`. Your text and screenshots
-are sent to the local Ollama daemon on your Mac, not to LangFlip servers.
+In Ollama mode, Sayful talks to `127.0.0.1:11434`. Your text and screenshots
+are sent to the local Ollama daemon on your Mac, not to Sayful servers.
 In OpenRouter/OpenAI-compatible mode, Single Shift text fixes and Fix Selected
 Text use the selected cloud text-correction model. The OpenRouter default is
 `google/gemini-3.1-flash-lite`, with cheaper and higher-quality fallback models
@@ -119,7 +119,7 @@ available in Preferences.
 
 ## 🔊 Text-to-Speech Setup
 
-Open **LangFlip → Preferences → Voice** to choose how selected text is read aloud:
+Open **Sayful → Preferences → Voice** to choose how selected text is read aloud:
 
 - **System voices** - instant macOS voices, fully local.
 - **Cloud TTS** - BYOK OpenRouter/OpenAI-compatible speech models. The default is
@@ -147,11 +147,11 @@ low-cost Qwen, Gemma, and Perceptron vision options.
 - Cloud AI providers are optional and only used if you configure them.
 - Cloud TTS is optional and only used when selected in Voice settings.
 - API keys are stored in macOS Keychain.
-- LangFlip does not collect analytics by default.
+- Sayful does not collect analytics by default.
 
 ## 🛠️ Current Status
 
-LangFlip is usable as a daily writing helper. The current release candidate is
+Sayful is usable as a daily writing helper. The current release candidate is
 focused on opt-in cloud provider flexibility: Cloud TTS, Cloud STT, Cloud OCR,
 and faster OpenRouter-powered text fixes, while keeping local mode as the safe
 default.
@@ -168,7 +168,7 @@ See [CHANGELOG.md](CHANGELOG.md) for recent release notes and
 
 ## License
 
-LangFlip is available under the [MIT License](LICENSE).
+Sayful is available under the [MIT License](LICENSE).
 
 ## 🧑‍💻 Build From Source
 
@@ -178,16 +178,16 @@ For local development:
 make dev
 ```
 
-This builds, signs, installs, and launches `/Applications/LangFlip.app`. Use this
+This builds, signs, installs, and launches `/Applications/Sayful.app`. Use this
 instead of opening the raw `build/` copy, because macOS privacy permissions are
 tied to the installed signed app.
 
 Other useful commands:
 
 ```sh
-make app       # build build/LangFlip.app
+make app       # build build/Sayful.app
 make run       # same daily path as make dev
-make install   # copy build/LangFlip.app to /Applications
+make install   # copy build/Sayful.app to /Applications
 make release   # build, sign, package, notarize, and staple a release DMG
 ```
 

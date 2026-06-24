@@ -247,12 +247,12 @@ Decide whether the App Store is worth the extra sandboxing and review work:
 
 ## Phase 6 — Voice layer
 
-Goal: make LangFlip useful not only while typing, but also while speaking and
+Goal: make Sayful useful not only while typing, but also while speaking and
 listening. Keep the same product principle: explicit hotkeys, local-first where
 possible, clear permissions, and no surprise network calls.
 
 ### 6.1 Dictation MVP — push-to-talk → insert text
-First target because it fits LangFlip's core loop best.
+First target because it fits Sayful's core loop best.
 
 - Add Microphone permission onboarding and diagnostics.
 - Add a configurable push-to-talk hotkey.
