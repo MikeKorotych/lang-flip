@@ -46,11 +46,11 @@ struct GeneralTab: View {
                                       action: openMicrophonePermission)
                 }
 
-                FlowSettingsGroup("Advanced") {
-                    FlowToggleRow(title: "Self-host / local AI",
-                                  detail: "Show the AI tab to run a local model (Ollama / Apple Intelligence) or use your own OpenAI-compatible key. Most people only need Sayful Cloud — sign in from the profile menu.",
-                                  isOn: $showAdvancedAI)
-                }
+                // Developer / self-host gate (`lf.showAdvancedAI`) is intentionally
+                // NOT exposed in the UI — it would let any user reveal the
+                // developer-only tab. Enable it on a dev machine with:
+                //   defaults write com.antonpinkevych.sayful lf.showAdvancedAI -bool true
+                // The flag still drives the hidden Developer tab + self-host AI paths.
             }
             .padding(28)
             .frame(maxWidth: 820, alignment: .leading)
@@ -146,9 +146,10 @@ struct VoiceTab: View {
 
     private let timer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
 
-    @State private var voiceTab: VoiceSubTab = .tts
+    @State private var voiceTab: VoiceSubTab = .dictation
     enum VoiceSubTab: String, CaseIterable, Identifiable {
-        case tts = "Text to Speech", dictation = "Dictation"
+        // Dictation is the hero feature, so it sits first (leftmost + default).
+        case dictation = "Dictation", tts = "Text to Speech"
         var id: Self { self }
     }
 
