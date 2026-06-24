@@ -2881,47 +2881,42 @@ struct AppsTab: View {
     @State private var userBlocked = Array(Settings.shared.userBlacklist).sorted()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("App exclusions")
-                .font(.headline)
-            if userBlocked.isEmpty {
-                Text("No apps are excluded. LangFlip automatically avoids sensitive app types like terminals and password managers.")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .padding(.bottom, 8)
-            } else {
-                List {
-                    ForEach(userBlocked, id: \.self) { bundleID in
-                        HStack {
-                            Text(bundleID).font(.system(.body, design: .monospaced))
-                            Spacer()
-                            Button("Remove") { remove(bundleID) }
-                                .controlSize(.small)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                FlowSettingsGroup("App exclusions") {
+                    if userBlocked.isEmpty {
+                        Text("No apps are excluded. LangFlip automatically avoids sensitive app types like terminals and password managers.")
+                            .font(.system(size: 13))
+                            .foregroundColor(FlowTheme.inkSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        ForEach(userBlocked, id: \.self) { bundleID in
+                            HStack {
+                                Text(bundleID)
+                                    .font(.system(size: 13, design: .monospaced))
+                                    .foregroundColor(FlowTheme.ink)
+                                Spacer(minLength: 12)
+                                FlowSmallButton(title: "Remove") { remove(bundleID) }
+                            }
                         }
                     }
                 }
-                .frame(minHeight: 100, maxHeight: 200)
-            }
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Built-in blocks")
-                    .font(.headline)
-                Text("Auto-flip stays off in apps where automatic rewriting could damage commands or credentials.")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                Text("Terminals: Terminal, iTerm2, Warp, Ghostty, Alacritty, Kitty, Hyper, Tabby")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                Text("Password managers: 1Password, LastPass, Dashlane, Bitwarden, KeePassXC, and similar apps.")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
+                FlowSettingsGroup("Built-in blocks") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Auto-flip stays off in apps where automatic rewriting could damage commands or credentials.")
+                        Text("Terminals: Terminal, iTerm2, Warp, Ghostty, Alacritty, Kitty, Hyper, Tabby")
+                        Text("Password managers: 1Password, LastPass, Dashlane, Bitwarden, KeePassXC, and similar apps.")
+                    }
+                    .font(.system(size: 13))
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            Spacer()
+            .padding(28)
+            .frame(maxWidth: 820, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func remove(_ bundleID: String) {
@@ -2943,30 +2938,40 @@ struct AboutTab: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            if let icon = NSImage(named: "AppIcon") ?? NSApp.applicationIconImage {
-                Image(nsImage: icon)
-                    .resizable()
-                    .frame(width: 96, height: 96)
+        ScrollView {
+            VStack(spacing: 14) {
+                if let icon = NSImage(named: "AppIcon") ?? NSApp.applicationIconImage {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .frame(width: 88, height: 88)
+                }
+                Text("LangFlip")
+                    .font(.system(size: 24, weight: .semibold, design: .serif))
+                    .foregroundColor(FlowTheme.ink)
+                Text("Version \(version)")
+                    .font(.system(size: 13))
+                    .foregroundColor(FlowTheme.inkSecondary)
+
+                Text("A macOS writing assistant for wrong-layout fixes, selected-text cleanup, translation, and screen text capture.")
+                    .font(.system(size: 13))
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 420)
+
+                HStack(spacing: 10) {
+                    FlowSmallButton(title: "GitHub") {
+                        NSWorkspace.shared.open(URL(string: "https://github.com/MikeKorotych/lang-flip")!)
+                    }
+                    FlowSmallButton(title: "MIT License") {
+                        NSWorkspace.shared.open(URL(string: "https://github.com/MikeKorotych/lang-flip/blob/main/LICENSE")!)
+                    }
+                }
+                .padding(.top, 2)
             }
-            Text("LangFlip")
-                .font(.system(size: 24, weight: .semibold))
-            Text("Version \(version)")
-                .font(.callout)
-                .foregroundColor(.secondary)
-
-            Text("A macOS writing assistant for wrong-layout fixes, selected-text cleanup, translation, and screen text capture.")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-
-            HStack(spacing: 20) {
-                Link("GitHub", destination: URL(string: "https://github.com/MikeKorotych/lang-flip")!)
-                Link("MIT License", destination: URL(string: "https://github.com/MikeKorotych/lang-flip/blob/main/LICENSE")!)
-            }
-
-            Spacer()
+            .padding(.top, 40)
+            .padding(.horizontal, 28)
+            .frame(maxWidth: .infinity)
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
