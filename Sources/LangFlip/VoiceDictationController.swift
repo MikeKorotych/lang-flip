@@ -40,11 +40,14 @@ final class VoiceDictationController {
         notifyStateChanged()
         Sound.playFlip()
         // No FlipOverlay here — the dictation island is the visual feedback for
-        // speech-to-text. FlipOverlay is reserved for layout-flip / AI text fixes.
-        let body = mode == .pushToTalk
-            ? "Recording while \(Settings.shared.dictationPushToTalkShortcut.displayName) is held."
-            : "Recording. Press \(Settings.shared.dictationHandsFreeShortcut.displayName) to stop."
-        Notifications.show(title: "Dictation", body: body)
+        // speech-to-text (live waves while recording). FlipOverlay is reserved for
+        // layout-flip / AI text fixes. The routine banner is opt-in (off by default).
+        if Settings.shared.dictationNotifications {
+            let body = mode == .pushToTalk
+                ? "Recording while \(Settings.shared.dictationPushToTalkShortcut.displayName) is held."
+                : "Recording. Press \(Settings.shared.dictationHandsFreeShortcut.displayName) to stop."
+            Notifications.show(title: "Dictation", body: body)
+        }
     }
 
     func stopAndTranscribe() {
@@ -77,8 +80,11 @@ final class VoiceDictationController {
 
     private func beginTranscription(audioURL: URL, duration: Double?, app: String?) {
         isTranscribing = true
+        // The island shows the transcribing state; the banner is opt-in.
         notifyStateChanged()
-        Notifications.show(title: "Dictation", body: "Transcribing...")
+        if Settings.shared.dictationNotifications {
+            Notifications.show(title: "Dictation", body: "Transcribing...")
+        }
 
         Task {
             do {
@@ -149,7 +155,11 @@ final class VoiceDictationController {
         postCommandV()
         Sound.playFlip()
         DictationHistory.shared.add(cleaned, duration: duration, app: app)
-        Notifications.show(title: "Dictation inserted", body: String(cleaned.prefix(80)))
+        // The text appears at the cursor and the sound confirms it — the "inserted"
+        // banner is opt-in (off by default) to keep dictation quiet.
+        if Settings.shared.dictationNotifications {
+            Notifications.show(title: "Dictation inserted", body: String(cleaned.prefix(80)))
+        }
     }
 
     /// Put `text` on the clipboard and paste it into the frontmost app. Used by

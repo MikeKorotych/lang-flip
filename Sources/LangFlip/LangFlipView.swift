@@ -17,6 +17,11 @@ struct LangFlipView: View {
 
     @State private var appeared = false
     @State private var showingTutorial = false
+    /// Live status for the two approvals the flip/hotkey features need. Onboarding
+    /// no longer asks for these — the user grants them right here.
+    @State private var permissions = PermissionStatus.current()
+
+    private let permissionTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -35,13 +40,29 @@ struct LangFlipView: View {
             )
             .appearStagger(1, appeared)
 
+            FlowSettingsGroup("Permissions") {
+                FlowPermissionRow(title: "Accessibility",
+                                  granted: permissions.accessibility,
+                                  detail: "Lets Sayful insert the corrected text and read the focused field.",
+                                  action: PermissionStatus.openAccessibilityPane)
+                FlowPermissionRow(title: "Input Monitoring",
+                                  granted: permissions.inputMonitoring,
+                                  detail: "Lets Sayful see the flip hotkey and typed words across apps.",
+                                  action: PermissionStatus.openInputMonitoringPane)
+            }
+            .appearStagger(2, appeared)
+
+            // The flip settings only do anything once both permissions above are
+            // granted — until then there's nothing useful to configure, so we hide
+            // them behind a short notice and keep first-run focused on the grant.
+            if permissions.allGranted {
             FlowSettingsGroup {
                 FlowToggleRow(title: "Flip enabled", isOn: $enabled)
                 FlowToggleRow(title: "Auto-flip at word end",
                               detail: "After Space or punctuation, Sayful can fix a word that was typed in the wrong layout. Press Backspace right away to undo and remember an exception.",
                               isOn: $autoFlip)
             }
-            .appearStagger(2, appeared)
+            .appearStagger(3, appeared)
 
             FlowSettingsGroup("Flip hotkey") {
                 FlowPickerRow(title: "Flip hotkey",
@@ -49,7 +70,7 @@ struct LangFlipView: View {
                               selection: $hotkeyPreset,
                               options: HotkeyPreset.allCases.map { (value: $0.rawValue, label: $0.displayName) })
             }
-            .appearStagger(3, appeared)
+            .appearStagger(4, appeared)
 
             FlowSettingsGroup("No-selection actions") {
                 FlowToggleRow(title: "Single Shift fixes last sentence", isOn: $fixLastSentenceOnSingleShift)
@@ -57,7 +78,7 @@ struct LangFlipView: View {
                               detail: "When no text is selected, Sayful reads the focused text field through Accessibility and rewrites only the text before the cursor. Turn this off if a specific app behaves unpredictably.",
                               isOn: $flipLastWordsOnDoubleShift)
             }
-            .appearStagger(4, appeared)
+            .appearStagger(5, appeared)
 
             FlowSettingsGroup("Corrections") {
                 FlowToggleRow(title: "Fix sticky-shift typos (WOrld → World)",
@@ -67,7 +88,7 @@ struct LangFlipView: View {
                               detail: "Fixes common Ukrainian/Russian letter slips when the corrected word is in the target dictionary.",
                               isOn: $crossLayoutFix)
             }
-            .appearStagger(5, appeared)
+            .appearStagger(6, appeared)
 
             FlowSettingsGroup("Overlay & focus") {
                 overlayRow
@@ -75,7 +96,7 @@ struct LangFlipView: View {
                               detail: "Useful for games, video players, and other fullscreen apps where automatic changes may be distracting.",
                               isOn: $suppressInFullscreen)
             }
-            .appearStagger(6, appeared)
+            .appearStagger(7, appeared)
 
             FlowSettingsGroup("Shift gestures") {
                 gestureHint("1.circle", "Single Shift fixes selected text or the last sentence.")
@@ -84,11 +105,30 @@ struct LangFlipView: View {
                 gestureHint("pause.circle", "Press both Shift keys to pause or resume.")
                 helpText("Single, double, and triple Shift depend on press timing, so they stay as fixed gestures for now.")
             }
-            .appearStagger(7, appeared)
+            .appearStagger(8, appeared)
+            } else {
+                lockedNotice
+                    .appearStagger(3, appeared)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .appearTrigger($appeared)
+        .onReceive(permissionTimer) { _ in permissions = PermissionStatus.current() }
         .sheet(isPresented: $showingTutorial) { LangFlipTutorialSheet() }
+    }
+
+    private var lockedNotice: some View {
+        FlowCard {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "lock")
+                    .font(.system(size: 15))
+                    .foregroundColor(FlowTheme.accent)
+                Text("Grant Accessibility and Input Monitoring above to finish setup. The flip and hotkey settings show up once both are on.")
+                    .font(.system(size: 14))
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     private var overlayRow: some View {

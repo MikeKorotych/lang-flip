@@ -12,14 +12,10 @@ struct PermissionStatus: Equatable {
     let inputMonitoring: Bool
     let microphone: Bool
 
-    /// The two approvals the keyboard event tap relies on. Drives the app's
-    /// startup gating in LangFlipApp — deliberately excludes the microphone so
-    /// the flip/hotkey features still run for users who never dictate.
+    /// The two approvals the keyboard event tap relies on (flip + hotkeys).
+    /// Surfaced in the LangFlip tab's Permissions section; deliberately excludes
+    /// the microphone, which is handled on its own (onboarding + Voice tab).
     var allGranted: Bool { accessibility && inputMonitoring }
-
-    /// All three approvals needed for the full dictation-first experience.
-    /// Onboarding gates its Continue button on this.
-    var readyForDictation: Bool { allGranted && microphone }
 
     /// Read the current permission state. `prompt = true` shows the
     /// Accessibility consent dialog the first time it's queried.

@@ -110,6 +110,7 @@ struct VoiceTab: View {
     @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
     @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = false
     @AppStorage("lf.showDictationIsland") private var showDictationIsland = true
+    @AppStorage("lf.dictationNotifications") private var dictationNotifications = false
     @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.fnOption.rawValue
     @AppStorage("lf.dictationTranscriptionBackend") private var dictationTranscriptionBackend = DictationTranscriptionBackend.localWhisper.rawValue
     @AppStorage("lf.cloudSTTBaseURL") private var cloudSTTBaseURL = "https://openrouter.ai/api/v1"

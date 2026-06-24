@@ -606,6 +606,7 @@ final class Settings {
         static let returnToOnboardingAfterScreenRecording = "lf.returnToOnboardingAfterScreenRecording"
         static let showOverlay = "lf.showOverlay"
         static let showDictationIsland = "lf.showDictationIsland"
+        static let dictationNotifications = "lf.dictationNotifications"
         static let crossLayoutFix = "lf.crossLayoutFix"
         static let hotkeyPreset = "lf.hotkeyPreset"
         static let aiMode = "lf.aiMode"
@@ -734,6 +735,14 @@ final class Settings {
     var showDictationIsland: Bool {
         get { defaults.object(forKey: Keys.showDictationIsland) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.showDictationIsland) }
+    }
+
+    /// Routine dictation banners (recording started / transcribing / inserted).
+    /// Off by default — the island already shows live state, so the banners are
+    /// just noise; users who want them can opt in. Error banners ignore this.
+    var dictationNotifications: Bool {
+        get { defaults.object(forKey: Keys.dictationNotifications) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.dictationNotifications) }
     }
 
     /// Plays a short system tick on every text rewrite (auto-flip, manual
