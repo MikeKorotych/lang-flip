@@ -216,7 +216,7 @@ enum IslandMetrics {
     static let micWidth: CGFloat = 34           // ~round mic button
     static let recordingWidth: CGFloat = 156    // compact: little slack around the waves
     static let transcribingWidth: CGFloat = 164
-    static let toastWidth: CGFloat = 228        // snug: "Transcript cancelled" + Undo, minimal gap
+    static let toastWidth: CGFloat = 222        // snug: "Transcript cancelled" + Undo, minimal gap
 
     static let tooltipWidth: CGFloat = 188
     static let tooltipHeight: CGFloat = 26
@@ -378,6 +378,8 @@ struct DictationIslandView: View {
                 Text("Undo")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.black)
+                    .lineLimit(1)
+                    .fixedSize()
                     .padding(.horizontal, 11).padding(.vertical, 4)
                     .background(Capsule().fill(IslandColor.confirm))
             }
