@@ -35,6 +35,12 @@ final class DictationIslandController {
             ensurePanel()
             positionPanel()
             panel?.orderFront(nil)
+            // Display geometry can still be settling at launch (launch-at-login
+            // especially), and `panel.screen` only becomes valid once the panel
+            // is on screen. Re-place on the next runloop tick so we land at the
+            // bottom-centre even if the first pass saw stale/placeholder metrics
+            // or the wrong screen.
+            DispatchQueue.main.async { self.positionPanel() }
         }
     }
 
@@ -185,13 +191,21 @@ final class DictationIslandController {
     /// Fixed placement: bottom-centre of the screen. Never animated.
     private func positionPanel() {
         guard let panel else { return }
-        let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens.first
+        // Anchor to a deterministic screen. `NSScreen.main` is unreliable here:
+        // for an accessory app with no key window it resolves to whatever screen
+        // holds another app's focused window — on a multi-display setup that can
+        // place the island off the intended display (the "top-left corner" bug).
+        // Prefer the panel's own screen once it's on screen, else the menu-bar
+        // (primary) screen.
+        let screen = panel.screen ?? NSScreen.screens.first ?? NSScreen.main
         guard let screen else { return }
         let size = IslandMetrics.panelSize
-        let x = screen.frame.midX - size.width / 2
+        // Centre within the usable area, consistently in both axes.
+        let area = screen.visibleFrame
+        let x = area.midX - size.width / 2
         // The pill slot sits `pad` above the panel bottom; place the panel so
         // the pill rests `bottomInset` above the Dock.
-        let y = screen.visibleFrame.minY + IslandMetrics.bottomInset - IslandMetrics.pad
+        let y = area.minY + IslandMetrics.bottomInset - IslandMetrics.pad
         panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
     }
 }
