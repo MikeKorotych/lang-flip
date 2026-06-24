@@ -136,6 +136,9 @@ app: build
 	@if [ -f Resources/search-icon.png ]; then \
 		cp Resources/search-icon.png $(APP_DIR)/Contents/Resources/search-icon.png; \
 	fi
+	@if [ -f Resources/flip-icon.png ]; then \
+		cp Resources/flip-icon.png $(APP_DIR)/Contents/Resources/flip-icon.png; \
+	fi
 	@codesign --force --deep --sign - $(APP_DIR) 2>/dev/null || true
 	@echo "✓ Built $(APP_DIR)"
 

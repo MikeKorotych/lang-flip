@@ -23,6 +23,22 @@ final class FlipOverlay {
 
     private init() {}
 
+    /// The dedicated layout-flip glyph (keyboard + circular arrows) — distinct
+    /// from the app icon, since this overlay is the flip/AI-rewrite confirmation.
+    /// Loaded from the app bundle (installed) then the SPM module bundle (dev),
+    /// falling back to the app icon if the asset is missing.
+    static let flipIcon: NSImage = {
+        if let url = Bundle.main.url(forResource: "flip-icon", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        if let url = Bundle.module.url(forResource: "flip-icon", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        return NSImage(named: "AppIcon") ?? NSApp.applicationIconImage ?? NSImage()
+    }()
+
     /// Trigger the overlay. The animation kicks off automatically inside
     /// the SwiftUI view as soon as the window appears, so callers don't
     /// have to manage frames or timing.
@@ -132,7 +148,7 @@ private struct FlipOverlayView: View {
     @State private var opacity: Double = 0
 
     var body: some View {
-        Image(nsImage: appIcon)
+        Image(nsImage: FlipOverlay.flipIcon)
             .resizable()
             .interpolation(.high)
             .frame(width: 80, height: 80)
@@ -146,10 +162,6 @@ private struct FlipOverlayView: View {
                 if hidden { playOutro() }
             }
             .onAppear { playIntro() }
-    }
-
-    private var appIcon: NSImage {
-        NSImage(named: "AppIcon") ?? NSApp.applicationIconImage ?? NSImage()
     }
 
     private func playIntro() {
