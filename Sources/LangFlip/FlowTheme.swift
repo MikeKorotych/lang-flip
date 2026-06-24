@@ -246,6 +246,37 @@ struct FlowToggleRow: View {
     }
 }
 
+/// Label (+ optional detail) with a trailing menu-style picker. `options` is a
+/// list of (value, label) pairs so callers can map enums/strings inline.
+struct FlowPickerRow<T: Hashable>: View {
+    let title: String
+    var detail: String?
+    @Binding var selection: T
+    let options: [(value: T, label: String)]
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 14)).foregroundColor(FlowTheme.ink)
+                if let detail {
+                    Text(detail)
+                        .font(.system(size: 12))
+                        .foregroundColor(FlowTheme.inkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 12)
+            Picker("", selection: $selection) {
+                ForEach(options, id: \.value) { Text($0.label).tag($0.value) }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .tint(FlowTheme.ink)
+            .fixedSize()
+        }
+    }
+}
+
 /// Status row for a system permission, with an "Open System Settings" action.
 struct FlowPermissionRow: View {
     let title: String
