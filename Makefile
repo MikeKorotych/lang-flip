@@ -1,8 +1,14 @@
-APP_NAME := LangFlip
-BUNDLE_NAME := LangFlip.app
+# Product name (what the user sees: Sayful.app, Dock, process name).
+APP_NAME := Sayful
+# SPM executable product name — still "LangFlip" (Package.swift target). The
+# identity rename keeps the internal module name; only the shipped bundle is
+# renamed. `swift build` emits .build/release/LangFlip, which we copy into the
+# bundle as Contents/MacOS/Sayful (CFBundleExecutable=Sayful).
+EXEC_NAME := LangFlip
+BUNDLE_NAME := Sayful.app
 BUILD_DIR := .build/release
 APP_DIR := build/$(BUNDLE_NAME)
-EXEC := $(BUILD_DIR)/$(APP_NAME)
+EXEC := $(BUILD_DIR)/$(EXEC_NAME)
 # SPM-generated resource bundle — must sit next to the executable so
 # Bundle.module can find it. The package name in Package.swift drives
 # this filename; SPM produces "lang-flip_LangFlip.bundle" because the
@@ -16,7 +22,7 @@ SPARKLE_FW := .build/arm64-apple-macosx/release/Sparkle.framework
 # Read version from Info.plist so it's the single source of truth.
 VERSION := $(shell /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)
 BUNDLE_ID := $(shell /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" Resources/Info.plist)
-DMG_NAME := LangFlip-$(VERSION).dmg
+DMG_NAME := Sayful-$(VERSION).dmg
 DMG_PATH := build/$(DMG_NAME)
 
 # Codesigning identity. Override on the command line:
@@ -51,7 +57,7 @@ dicts:
 	./Scripts/build-dicts.sh
 
 # Regenerate AppIcon.iconset and AppIcon.icns from the master PNG
-# at Resources/lang-flip-logo.png. Run after replacing the master.
+# at Resources/sayful-logo.png. Run after replacing the master.
 icon:
 	./Scripts/build-icon.sh
 
@@ -242,7 +248,7 @@ dmg:
 	fi
 	@rm -f $(DMG_PATH)
 	@create-dmg \
-		--volname "LangFlip" \
+		--volname "Sayful" \
 		--window-size 500 320 \
 		--icon-size 96 \
 		--icon "$(BUNDLE_NAME)" 130 150 \
@@ -291,7 +297,7 @@ notarize-dmg: dmg
 # generate_keys, paired with SUPublicEDKey in Info.plist).
 sign-update:
 	@if [ -z "$(DMG)" ]; then \
-		echo "Usage: make sign-update DMG=build/LangFlip-X.Y.Z.dmg"; \
+		echo "Usage: make sign-update DMG=build/Sayful-X.Y.Z.dmg"; \
 		exit 2; \
 	fi
 	./Scripts/sign-update.sh $(DMG)

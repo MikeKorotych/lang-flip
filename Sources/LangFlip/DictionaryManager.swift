@@ -22,7 +22,7 @@ enum DictionaryManager {
     static var dictionariesDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
-        return base.appendingPathComponent("LangFlip/Dictionaries", isDirectory: true)
+        return base.appendingPathComponent("Sayful/Dictionaries", isDirectory: true)
     }
 
     static func installedURL(for layout: Layout) -> URL {

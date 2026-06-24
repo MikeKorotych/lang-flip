@@ -132,7 +132,7 @@ enum WhisperTranscriber {
     }
 
     static var modelsDirectory: URL {
-        URL(fileURLWithPath: "\(NSHomeDirectory())/Library/Application Support/LangFlip/Models", isDirectory: true)
+        URL(fileURLWithPath: "\(NSHomeDirectory())/Library/Application Support/Sayful/Models", isDirectory: true)
     }
 
     static func isInstalled(_ model: Model) -> Bool {

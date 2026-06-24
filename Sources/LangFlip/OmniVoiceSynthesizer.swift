@@ -26,7 +26,7 @@ final class OmniVoiceSynthesizer {
     private init() {}
 
     static let runtimeDirectory = URL(
-        fileURLWithPath: "\(NSHomeDirectory())/Library/Application Support/LangFlip/Runtimes/omnivoice-venv",
+        fileURLWithPath: "\(NSHomeDirectory())/Library/Application Support/Sayful/Runtimes/omnivoice-venv",
         isDirectory: true
     )
 
@@ -35,7 +35,7 @@ final class OmniVoiceSynthesizer {
     }
 
     static var outputDirectory: URL {
-        URL(fileURLWithPath: "\(NSHomeDirectory())/Library/Application Support/LangFlip/TTS", isDirectory: true)
+        URL(fileURLWithPath: "\(NSHomeDirectory())/Library/Application Support/Sayful/TTS", isDirectory: true)
     }
 
     static var modelCacheDirectory: URL {

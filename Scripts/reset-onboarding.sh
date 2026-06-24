@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BUNDLE_ID="${1:-com.antonpinkevych.lang-flip}"
+BUNDLE_ID="${1:-com.antonpinkevych.sayful}"
 MODE="${2:-settings}"
-APP_NAME="${3:-LangFlip}"
-SUPPORT_DIR="${HOME}/Library/Application Support/LangFlip"
+APP_NAME="${3:-Sayful}"
+SUPPORT_DIR="${HOME}/Library/Application Support/Sayful"
 HF_CACHE_DIR="${HOME}/.cache/huggingface/hub/models--k2-fsa--OmniVoice"
 
 echo "→ Closing ${APP_NAME} if it is running…"
@@ -27,7 +27,7 @@ if [[ "${MODE}" == "fresh" ]]; then
 fi
 
 if [[ "${MODE}" == "empty" ]]; then
-    echo "→ Removing LangFlip dictionaries, generated audio, models, and runtimes…"
+    echo "→ Removing Sayful dictionaries, generated audio, models, and runtimes…"
     rm -rf "${SUPPORT_DIR}/Dictionaries"
     rm -rf "${SUPPORT_DIR}/TTS"
     rm -rf "${SUPPORT_DIR}/Models"
@@ -35,7 +35,7 @@ if [[ "${MODE}" == "empty" ]]; then
     rm -rf "${HF_CACHE_DIR}"
 
     if command -v ollama >/dev/null 2>&1; then
-        echo "→ Removing LangFlip's recommended Ollama model if it exists…"
+        echo "→ Removing Sayful's recommended Ollama model if it exists…"
         ollama rm qwen3.5:4b >/dev/null 2>&1 || true
     else
         echo "→ Ollama CLI not found; skipped Ollama model cleanup."
@@ -44,7 +44,7 @@ fi
 
 echo "✓ Onboarding state reset."
 if [[ "${MODE}" == "empty" ]]; then
-    echo "  Removed downloaded LangFlip models/runtimes and qwen3.5:4b from Ollama when available."
+    echo "  Removed downloaded Sayful models/runtimes and qwen3.5:4b from Ollama when available."
 else
     echo "  Kept downloaded models and runtimes in:"
     echo "  ${SUPPORT_DIR}/Models"

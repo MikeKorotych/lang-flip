@@ -6,8 +6,8 @@ enum AppLog {
         FileHandle.standardError.write(Data(line.utf8))
 
         let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/LangFlip", isDirectory: true)
-        let url = dir.appendingPathComponent("LangFlip.log")
+            .appendingPathComponent("Library/Logs/Sayful", isDirectory: true)
+        let url = dir.appendingPathComponent("Sayful.log")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)

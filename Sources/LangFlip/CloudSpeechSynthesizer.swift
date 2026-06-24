@@ -16,7 +16,7 @@ final class CloudSpeechSynthesizer {
     private init() {}
 
     static var outputDirectory: URL {
-        URL(fileURLWithPath: "\(NSHomeDirectory())/Library/Application Support/LangFlip/TTS", isDirectory: true)
+        URL(fileURLWithPath: "\(NSHomeDirectory())/Library/Application Support/Sayful/TTS", isDirectory: true)
     }
 
     var isSpeaking: Bool {

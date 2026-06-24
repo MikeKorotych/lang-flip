@@ -3,7 +3,7 @@
 # `sparkle:edSignature="…"` and `length="…"` attributes to paste into
 # docs/appcast.xml's <enclosure>.
 #
-# Usage: ./Scripts/sign-update.sh build/LangFlip-X.Y.Z.dmg
+# Usage: ./Scripts/sign-update.sh build/Sayful-X.Y.Z.dmg
 
 set -euo pipefail
 

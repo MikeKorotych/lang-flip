@@ -194,7 +194,7 @@ final class VoiceRecorder: NSObject, AVAudioRecorderDelegate {
             appropriateFor: nil,
             create: true
         )
-        let dir = base.appendingPathComponent("LangFlip/Recordings", isDirectory: true)
+        let dir = base.appendingPathComponent("Sayful/Recordings", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
         return dir.appendingPathComponent("dictation-\(stamp).wav")
