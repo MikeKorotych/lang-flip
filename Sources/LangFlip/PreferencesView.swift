@@ -143,6 +143,7 @@ struct VoiceTab: View {
     @AppStorage("lf.dictationPushToTalkEnabled") private var dictationPushToTalkEnabled = false
     @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
     @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = false
+    @AppStorage("lf.showDictationIsland") private var showDictationIsland = true
     @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.fnOption.rawValue
     @AppStorage("lf.dictationTranscriptionBackend") private var dictationTranscriptionBackend = DictationTranscriptionBackend.localWhisper.rawValue
     @AppStorage("lf.cloudSTTBaseURL") private var cloudSTTBaseURL = "https://openrouter.ai/api/v1"
@@ -568,6 +569,15 @@ struct VoiceTab: View {
                     }
                 }
             }
+
+            Divider().overlay(FlowTheme.cardStroke)
+
+            FlowToggleRow(
+                title: "Show dictation island",
+                detail: "A small floating control at the bottom of the screen. Hover to dictate; it shows live waves while recording.",
+                isOn: $showDictationIsland
+            )
+            .onChange(of: showDictationIsland) { DictationIslandController.shared.setEnabled($0) }
 
             Divider().overlay(FlowTheme.cardStroke)
 

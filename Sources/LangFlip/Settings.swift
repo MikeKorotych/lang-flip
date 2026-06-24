@@ -605,6 +605,7 @@ final class Settings {
         static let onboardingDone = "lf.onboardingDone"
         static let returnToOnboardingAfterScreenRecording = "lf.returnToOnboardingAfterScreenRecording"
         static let showOverlay = "lf.showOverlay"
+        static let showDictationIsland = "lf.showDictationIsland"
         static let crossLayoutFix = "lf.crossLayoutFix"
         static let hotkeyPreset = "lf.hotkeyPreset"
         static let aiMode = "lf.aiMode"
@@ -726,6 +727,13 @@ final class Settings {
     var showOverlay: Bool {
         get { defaults.object(forKey: Keys.showOverlay) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.showOverlay) }
+    }
+
+    /// Always-visible floating dictation island at the bottom of the screen
+    /// (Wispr-style). On by default; users can hide it in Settings > Voice.
+    var showDictationIsland: Bool {
+        get { defaults.object(forKey: Keys.showDictationIsland) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.showDictationIsland) }
     }
 
     /// Plays a short system tick on every text rewrite (auto-flip, manual

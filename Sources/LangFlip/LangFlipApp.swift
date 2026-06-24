@@ -112,6 +112,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // step required (the Dictionary tab just shows status afterwards).
         DictionaryManager.autoInstallExtendedPacksIfNeeded()
 
+        // Always-on dictation island (Wispr-style) at the bottom of the screen.
+        DictationIslandController.shared.startIfEnabled()
+
         // Diagnostic: surface the AI assistant's readiness at launch
         // so users can tell why grammar / fix / translate features stay
         // silent. Foundation Models reports `.unavailable(reason)` for
