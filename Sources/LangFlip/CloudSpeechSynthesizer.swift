@@ -50,6 +50,12 @@ final class CloudSpeechSynthesizer {
     func generate(text: String) async throws -> URL {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw CloudSpeechError.emptyText }
+
+        // Sayful Cloud (signed in) → backend proxy, no provider key needed.
+        if Settings.shared.aiMode == .backend, SupabaseBackendAuth.shared.isSignedIn {
+            return try await generateViaBackend(clean)
+        }
+
         guard let apiKey = Settings.shared.openaiAPIKey, !apiKey.isEmpty else {
             throw CloudSpeechError.missingAPIKey
         }
@@ -110,6 +116,24 @@ final class CloudSpeechSynthesizer {
         await MainActor.run {
             self.lastOutputURL = outputURL
         }
+        return outputURL
+    }
+
+    /// TTS via the backend proxy (no provider key). Backend returns audio bytes
+    /// (WAV for Gemini / MP3 otherwise); afplay sniffs the format from content.
+    private func generateViaBackend(_ text: String) async throws -> URL {
+        let instructions = Settings.shared.cloudTTSInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bytes = try await HTTPBackendClient.shared.tts(
+            BackendTTSRequest(text: text,
+                              voice: Settings.shared.cloudTTSVoice,
+                              model: nil,
+                              speed: Settings.shared.cloudTTSSpeed,
+                              instructions: instructions.isEmpty ? nil : instructions))
+        guard !bytes.isEmpty else { throw CloudSpeechError.emptyAudio }
+        try FileManager.default.createDirectory(at: Self.outputDirectory, withIntermediateDirectories: true)
+        let outputURL = Self.outputDirectory.appendingPathComponent("cloud-tts-\(Self.timestamp()).wav")
+        try bytes.write(to: outputURL, options: .atomic)
+        await MainActor.run { self.lastOutputURL = outputURL }
         return outputURL
     }
 
