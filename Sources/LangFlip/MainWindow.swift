@@ -453,16 +453,29 @@ private struct SettingsHostView: View {
     }
 
     @State private var tab: Tab = .general
+    // The AI tab only configures local / self-host models. Normal users use
+    // Sayful Cloud (account in the profile menu) and never see it — it's
+    // revealed by the "Self-host / local AI" toggle in General.
+    @AppStorage("lf.showAdvancedAI") private var showAdvancedAI = false
+
+    private var visibleTabs: [Tab] {
+        showAdvancedAI ? Tab.allCases : Tab.allCases.filter { $0 != .ai }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 14) {
                 DisplayText("Settings", size: 26)
                 Picker("", selection: $tab) {
-                    ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(visibleTabs) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .onChange(of: showAdvancedAI) { advanced in
+                    // If Advanced is turned off while the AI tab is open, fall
+                    // back to General so we don't show a tab that's gone.
+                    if !advanced, tab == .ai { tab = .general }
+                }
             }
             // Cap + center the header column so it tracks the tab content
             // (which is capped at 820) instead of stretching the segmented

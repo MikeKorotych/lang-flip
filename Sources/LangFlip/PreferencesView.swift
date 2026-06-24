@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
 
 struct GeneralTab: View {
     @AppStorage("lf.soundEnabled") private var soundEnabled = false
+    @AppStorage("lf.showAdvancedAI") private var showAdvancedAI = false
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var hasScreenRecording = PermissionStatus.hasScreenRecording()
     @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
@@ -43,6 +44,12 @@ struct GeneralTab: View {
                                       granted: microphoneStatus == .authorized,
                                       detail: "Needed only for speech-to-text dictation. Install and configure voice features in the Voice tab.",
                                       action: openMicrophonePermission)
+                }
+
+                FlowSettingsGroup("Advanced") {
+                    FlowToggleRow(title: "Self-host / local AI",
+                                  detail: "Show the AI tab to run a local model (Ollama / Apple Intelligence) or use your own OpenAI-compatible key. Most people only need Sayful Cloud — sign in from the profile menu.",
+                                  isOn: $showAdvancedAI)
                 }
             }
             .padding(28)
@@ -1311,11 +1318,6 @@ struct ModelsTab: View {
 
                     helpText("Cloud OCR sends only the screenshot region you select. Best default: Gemini 3.1 Flash Lite for fast low-cost OCR; Qwen 3.6 Flash is the cheaper experiment.")
                 }
-            }
-
-            Section {
-                Toggle("Advanced (local / self-host AI)", isOn: $showAdvancedAI)
-                helpText("Most people only need Sayful Cloud. Turn this on to pick a local model (Ollama / Apple Intelligence) or bring your own OpenAI-compatible API key.")
             }
 
             Section("Privacy") {
