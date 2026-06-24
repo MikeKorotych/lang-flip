@@ -17,8 +17,11 @@ import Security
 /// turn on a cloud feature").
 enum KeychainStore {
 
-    /// Service name common to every LangFlip secret. Per-secret
-    /// uniqueness comes from the `account` parameter.
+    /// Service name common to every stored secret. Per-secret uniqueness comes
+    /// from the `account` parameter. Intentionally kept as the original
+    /// `com.antonpinkevych.lang-flip` string across the Sayful rename: it's an
+    /// opaque Keychain service id, not the app's bundle id, so leaving it
+    /// unchanged means existing API keys are still found (no Keychain migration).
     static let service = "com.antonpinkevych.lang-flip"
 
     /// Store (or replace) a string under (`service`, `account`).
@@ -85,5 +88,9 @@ enum KeychainStore {
     /// covers OpenAI direct, OpenRouter, Together, Groq, etc. — the
     /// user is expected to switch the base URL when they rotate keys.
     static let openAIAPIKey = "cloud-ai-api-key"
+
+    /// Backend session tokens (WS1 `.backend` mode) — never a provider key.
+    static let backendAccessToken = "backend-access-token"
+    static let backendRefreshToken = "backend-refresh-token"
 
 }

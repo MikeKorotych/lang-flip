@@ -13,16 +13,47 @@ import Foundation
 // MARK: - Config (non-secret)
 
 enum BackendConfig {
-    /// Base URL of the backend proxy (e.g. https://…/functions/v1 or the Railway
-    /// service). Differs per branch/env; NOT a secret. Empty until provisioned.
-    static var baseURL: URL? {
-        let raw = UserDefaults.standard.string(forKey: "lf.backendBaseURL")?
+    /// Supabase project (branch A). The anon key is a PUBLIC client key
+    /// (protected by RLS) — safe to embed; it is NOT the provider key.
+    /// An optional UserDefaults override (`lf.backendSupabaseURL`) lets us point
+    /// at a different project without a rebuild.
+    static let defaultSupabaseURL = "https://bpxsmfdpmbfsvdckndpw.supabase.co"
+    static let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJweHNtZmRwbWJmc3ZkY2tuZHB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMDI5NDAsImV4cCI6MjA5Nzg3ODk0MH0.FzxlUqw7iH0PhmSVrHKOfd6MMhoEL_tyhaSqXf6-VHY"
+
+    /// OAuth callback (reverse-DNS scheme, registered in Info.plist).
+    static let callbackScheme = "com.antonpinkevych.sayful"
+    static let callbackURL = "com.antonpinkevych.sayful://auth-callback"
+
+    static var supabaseURL: String {
+        let raw = UserDefaults.standard.string(forKey: "lf.backendSupabaseURL")?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return raw.isEmpty ? nil : URL(string: raw)
+        return raw.isEmpty ? defaultSupabaseURL : raw
     }
 
-    /// Whether a backend base URL is configured (so the UI can gate `.backend`).
-    static var isConfigured: Bool { baseURL != nil }
+    /// GoTrue auth endpoints (sign-in, refresh).
+    static var authBaseURL: URL { URL(string: supabaseURL + "/auth/v1")! }
+    /// Proxy endpoints (`/v1/*` → Edge Functions `functions/v1/<name>`).
+    static var functionsBaseURL: URL { URL(string: supabaseURL + "/functions/v1")! }
+
+    static var isConfigured: Bool { !supabaseURL.isEmpty }
+}
+
+// MARK: - JSON
+
+enum BackendJSON {
+    /// Decoder that accepts ISO-8601 with or without fractional seconds
+    /// (the server emits e.g. "2026-06-29T00:00:00.000Z").
+    static let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        let withFrac = ISO8601DateFormatter(); withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter(); plain.formatOptions = [.withInternetDateTime]
+        d.dateDecodingStrategy = .custom { dec in
+            let s = try dec.singleValueContainer().decode(String.self)
+            if let date = withFrac.date(from: s) ?? plain.date(from: s) { return date }
+            throw DecodingError.dataCorrupted(.init(codingPath: dec.codingPath, debugDescription: "Bad date: \(s)"))
+        }
+        return d
+    }()
 }
 
 // MARK: - User / quota DTOs (spec §5.1)

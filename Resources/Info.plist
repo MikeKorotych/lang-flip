@@ -5,19 +5,30 @@
 	<key>CFBundleDisplayName</key>
 	<string>Sayful</string>
 	<key>CFBundleExecutable</key>
-	<string>LangFlip</string>
+	<string>Sayful</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.antonpinkevych.lang-flip</string>
+	<string>com.antonpinkevych.sayful</string>
 	<key>CFBundleName</key>
 	<string>Sayful</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>0.4.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.antonpinkevych.sayful.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.antonpinkevych.sayful</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>0.4.0</string>
 	<key>LSMinimumSystemVersion</key>
@@ -32,7 +43,7 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>Open source — MIT.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>LangFlip needs microphone access for optional local dictation.</string>
+	<string>Sayful needs microphone access for optional local dictation.</string>
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>
