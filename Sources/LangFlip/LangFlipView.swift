@@ -20,7 +20,7 @@ struct LangFlipView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            DisplayText("Flip", size: 26)
+            DisplayText("LangFlip", size: 26)
                 .appearStagger(0, appeared)
 
             // Banner — entry point for the interactive onboarding tutorial we'll

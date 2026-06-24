@@ -94,7 +94,7 @@ enum MainSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .home:       return "Home"
-        case .langflip:   return "Flip"
+        case .langflip:   return "LangFlip"
         case .hotkeys:    return "Hotkeys"
         case .insights:   return "Insights"
         case .dictionary: return "Dictionary"
