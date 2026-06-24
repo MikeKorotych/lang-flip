@@ -216,7 +216,7 @@ enum IslandMetrics {
     static let micWidth: CGFloat = 34           // ~round mic button
     static let recordingWidth: CGFloat = 156    // compact: little slack around the waves
     static let transcribingWidth: CGFloat = 164
-    static let toastWidth: CGFloat = 270        // fits "Transcript cancelled" + Undo on one line
+    static let toastWidth: CGFloat = 228        // snug: "Transcript cancelled" + Undo, minimal gap
 
     static let tooltipWidth: CGFloat = 188
     static let tooltipHeight: CGFloat = 26
