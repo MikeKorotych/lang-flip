@@ -62,6 +62,19 @@ final class VoiceDictationController {
             return
         }
 
+        beginTranscription(audioURL: audioURL, duration: duration, app: app)
+    }
+
+    /// Re-run transcription on the last recording after a cancel — backs the
+    /// island's "Transcript cancelled / Undo" toast. `cancel()` only stops the
+    /// recorder, so the audio file is still on disk.
+    func undoCancel() {
+        guard !isRecording, !isTranscribing,
+              let audioURL = VoiceRecorder.shared.lastRecordingURL else { return }
+        beginTranscription(audioURL: audioURL, duration: nil, app: nil)
+    }
+
+    private func beginTranscription(audioURL: URL, duration: Double?, app: String?) {
         isTranscribing = true
         notifyStateChanged()
         Notifications.show(title: "Dictation", body: "Transcribing...")

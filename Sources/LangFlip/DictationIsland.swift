@@ -20,6 +20,7 @@ final class DictationIslandController {
     private var panel: NSPanel?
     private var cancellables = Set<AnyCancellable>()
     private var levelTimer: Timer?
+    private var toastTimer: Timer?
 
     private init() {}
 
@@ -80,6 +81,9 @@ final class DictationIslandController {
             self, selector: #selector(recorderChanged),
             name: .langFlipVoiceRecorderChanged, object: nil)
         NotificationCenter.default.addObserver(
+            self, selector: #selector(dictationCancelled),
+            name: .langFlipDictationCancelled, object: nil)
+        NotificationCenter.default.addObserver(
             self, selector: #selector(screenChanged),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
 
@@ -113,6 +117,22 @@ final class DictationIslandController {
         DispatchQueue.main.async { [self] in
             state.level = VoiceRecorder.shared.normalizedAveragePower
         }
+    }
+
+    @objc private func dictationCancelled() {
+        DispatchQueue.main.async { [self] in
+            state.showCancelledToast = true
+            toastTimer?.invalidate()
+            toastTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: false) { [weak self] _ in
+                self?.dismissToast()
+            }
+        }
+    }
+
+    func dismissToast() {
+        toastTimer?.invalidate()
+        toastTimer = nil
+        state.showCancelledToast = false
     }
 
     @objc private func screenChanged() {
@@ -324,7 +344,8 @@ struct DictationIslandView: View {
                 .foregroundColor(IslandColor.text)
             Spacer(minLength: 4)
             Button {
-                state.showCancelledToast = false
+                VoiceDictationController.shared.undoCancel()
+                DictationIslandController.shared.dismissToast()
             } label: {
                 Text("Undo")
                     .font(.system(size: 12, weight: .semibold))
