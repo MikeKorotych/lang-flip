@@ -74,6 +74,7 @@ enum CloudTranscriber {
 
 enum CloudTranscriptionError: LocalizedError {
     case missingAPIKey
+    case notSignedIn
     case invalidBaseURL(String)
     case noResponse
     case httpStatus(Int, String)
@@ -84,6 +85,8 @@ enum CloudTranscriptionError: LocalizedError {
         switch self {
         case .missingAPIKey:
             return "Add an OpenRouter or OpenAI API key in Voice settings."
+        case .notSignedIn:
+            return "Sign in to Sayful Cloud to use cloud dictation (profile menu, top-right)."
         case .invalidBaseURL(let value):
             return "Invalid STT base URL: \(value)"
         case .noResponse:

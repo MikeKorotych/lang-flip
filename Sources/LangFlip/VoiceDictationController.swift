@@ -131,15 +131,18 @@ final class VoiceDictationController {
 
     private static func transcribe(audioURL: URL) async throws -> String {
         if Settings.shared.dictationTranscriptionBackend == .cloud {
-            // Sayful Cloud (signed in) → backend proxy, no provider key needed.
-            // Otherwise fall back to the user's own key (BYOK).
-            if Settings.shared.aiMode == .backend, SupabaseBackendAuth.shared.isSignedIn {
+            // Sayful Cloud → backend proxy (no provider key); requires sign-in.
+            if Settings.shared.aiMode == .backend {
+                guard SupabaseBackendAuth.shared.isSignedIn else {
+                    throw CloudTranscriptionError.notSignedIn
+                }
                 let data = try Data(contentsOf: audioURL)
                 let result = try await HTTPBackendClient.shared.transcribe(
                     BackendTranscribeRequest(audio: data, filename: audioURL.lastPathComponent,
                                              language: nil, model: nil))
                 return result.text
             }
+            // BYOK cloud (user's own key) when not in Sayful Cloud mode.
             return try await CloudTranscriber.transcribe(audioURL: audioURL)
         }
         return try await WhisperTranscriber.transcribe(

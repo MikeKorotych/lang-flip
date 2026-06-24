@@ -880,7 +880,7 @@ final class EventTap {
         let countBefore = pb.changeCount
 
         guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
-            Notifications.show(title: "Transform", body: "AI isn't set up yet. Configure it in Settings → AI.")
+            Notifications.show(title: "Transform", body: Self.aiUnavailableHint())
             return
         }
 
@@ -987,7 +987,7 @@ final class EventTap {
     func captureScreenTextWithAI() {
         guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: AI not ready\n".utf8)) }
-            Notifications.show(title: "Sayful", body: "AI is off or not ready — enable Ollama (or another vision-capable backend) in Preferences.")
+            Notifications.show(title: "Sayful", body: Self.aiUnavailableHint())
             return
         }
         guard PermissionStatus.hasScreenRecording() else {
@@ -1911,6 +1911,13 @@ private extension EventTap {
             || tag.contains(":vl")
             || tag.contains("llava")
             || tag.contains("gemma4")
+    }
+
+    static func aiUnavailableHint() -> String {
+        if Settings.shared.aiMode == .backend && !SupabaseBackendAuth.shared.isSignedIn {
+            return "Sign in to Sayful Cloud to use AI — open the profile menu (top-right of the window)."
+        }
+        return "AI isn't set up yet. Configure it in Settings → AI."
     }
 
     static func canCaptureScreenTextWithCurrentAI() -> Bool {
