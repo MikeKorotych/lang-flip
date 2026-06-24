@@ -146,6 +146,35 @@ final class OpenAIAssistant: AIAssistant {
         }
     }
 
+    func applyTransform(_ input: AITransformRequest, completion: @escaping (AITransformResult) -> Void) {
+        let system = """
+        You transform the user's text according to this instruction:
+
+        \(input.instruction)
+
+        Output ONLY the transformed text — no preamble, no explanation, no quotes, no markdown fences.
+        """
+        chatCompletion(
+            messages: [
+                ["role": "system", "content": system],
+                ["role": "user",   "content": input.text],
+            ],
+            options: ["temperature": 0.3, "max_tokens": 2048]
+        ) { result in
+            switch result {
+            case .success(let raw):
+                let cleaned = Self.unwrapModelOutput(raw)
+                if cleaned.isEmpty {
+                    completion(.failed(reason: "empty response"))
+                } else {
+                    completion(.transformed(cleaned))
+                }
+            case .failure(let reason):
+                completion(.failed(reason: reason))
+            }
+        }
+    }
+
     func extractTextFromImage(_ input: AIOcrRequest, completion: @escaping (AIOcrResult) -> Void) {
         let visionModel = Settings.shared.cloudOCRModel
         let dataURL = "data:image/png;base64,\(input.imageBase64)"

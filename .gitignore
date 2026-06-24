@@ -6,3 +6,5 @@ DerivedData/
 .DS_Store
 Package.resolved
 release-notes.md
+# Internal-only strategy doc — kept local, not for the public repo.
+docs/INTERNAL-RELAUNCH-PLAN.md

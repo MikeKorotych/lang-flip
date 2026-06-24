@@ -5,306 +5,88 @@ import ServiceManagement
 import UniformTypeIdentifiers
 import Carbon.HIToolbox
 
-/// Top-level Preferences view: 5 sections covering everything that used to
-/// live in the menubar. The menubar keeps only quick toggles + the
-/// "Preferences…" entry point.
-///
-/// Uses a segmented Picker rather than SwiftUI's `TabView` because the
-/// macOS TabView styling pads the selected tab's highlight more than the
-/// label requires, so labels and the blue selection rect don't visually
-/// line up (especially noticeable on short tab names like "General").
-struct PreferencesView: View {
-    private enum Section: String, CaseIterable, Identifiable {
-        case general = "General"
-        case languages = "Languages"
-        case behavior = "Behavior"
-        case hotkeys = "Hotkeys"
-        case models = "AI"
-        case voice = "Voice"
-        case apps = "Apps"
-        case about = "About"
-
-        var id: Self { self }
-    }
-
-    @State private var section: Section = .general
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Picker("", selection: $section) {
-                ForEach(Section.allCases) { s in
-                    Text(s.rawValue).tag(s)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 12)
-
-            Divider()
-
-            Group {
-                switch section {
-                case .general:   GeneralTab()
-                case .languages: LanguagesTab()
-                case .behavior:  BehaviorTab()
-                case .hotkeys:   HotkeysTab()
-                case .models:    ModelsTab()
-                case .voice:     VoiceTab()
-                case .apps:      AppsTab()
-                case .about:     AboutTab()
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(width: 680, height: 440)
-    }
-}
+// The settings tab views below were migrated out of a standalone Preferences
+// window into the main window's Settings section (see SettingsHostView in
+// MainWindow.swift). They keep their grouped-Form styling for now; restyling to
+// the Flow aesthetic happens section by section.
 
 // MARK: - General
 
-private struct GeneralTab: View {
+struct GeneralTab: View {
     @AppStorage("lf.enabled") private var enabled = true
     @AppStorage("lf.soundEnabled") private var soundEnabled = false
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var permissions = PermissionStatus.current()
     @State private var hasScreenRecording = PermissionStatus.hasScreenRecording()
     @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
-    @State private var learnedExceptions = GeneralTab.sortedExceptions()
-    @State private var alwaysFlipRules = GeneralTab.sortedAlwaysFlipRules()
-    @State private var newException = ""
-    @State private var newAlwaysFlipWord = ""
-    @State private var newAlwaysFlipTarget = Layout.uk.rawValue
 
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        Form {
-            Section {
-                Toggle("LangFlip enabled", isOn: $enabled)
-                Toggle("Launch at login", isOn: Binding(
-                    get: { launchAtLogin },
-                    set: { newValue in
-                        launchAtLogin = newValue
-                        LaunchAtLogin.set(newValue)
-                        // Re-read in case the system rejected the change.
-                        launchAtLogin = LaunchAtLogin.isEnabled
-                    }
-                ))
-                Toggle("Sound feedback", isOn: $soundEnabled)
-            }
-
-            Section("Permissions") {
-                permissionRow(
-                    title: "Accessibility",
-                    granted: permissions.accessibility,
-                    detail: nil,
-                    open: PermissionStatus.openAccessibilityPane
-                )
-                permissionRow(
-                    title: "Input Monitoring",
-                    granted: permissions.inputMonitoring,
-                    detail: nil,
-                    open: PermissionStatus.openInputMonitoringPane
-                )
-            }
-
-            Section("Optional permissions") {
-                permissionRow(
-                    title: "Screen Recording",
-                    granted: hasScreenRecording,
-                    detail: "Needed for Copy text from screenshot.",
-                    open: PermissionStatus.openScreenRecordingPane
-                )
-                permissionRow(
-                    title: "Microphone",
-                    granted: microphoneStatus == .authorized,
-                    detail: "Needed only for speech-to-text dictation. Install and configure voice features in the Voice tab.",
-                    open: openMicrophonePermission
-                )
-            }
-
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Double-tap Shift flips selected text.", systemImage: "1.circle")
-                    Label("Triple-tap Shift uses the secondary language.", systemImage: "2.circle")
-                    Label("Press both Shift keys to pause or resume.", systemImage: "pause.circle")
-                }
-                .font(.callout)
-                .foregroundColor(.secondary)
-            }
-
-            Section("Learning") {
-                HStack {
-                    Text("Always flip")
-                    Spacer()
-                    Text("\(alwaysFlipRules.count)").foregroundColor(.secondary)
-                    Button("Clear") {
-                        AlwaysFlipRules.shared.clear()
-                        refreshLearning()
-                    }
-                    .disabled(alwaysFlipRules.isEmpty)
-                }
-
-                HStack {
-                    TextField("Word to always flip", text: $newAlwaysFlipWord)
-                        .textFieldStyle(.roundedBorder)
-                    Picker("Target", selection: $newAlwaysFlipTarget) {
-                        ForEach(Layout.allCases, id: \.self) { layout in
-                            Text(layout.displayName).tag(layout.rawValue)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                FlowSettingsGroup {
+                    FlowToggleRow(title: "LangFlip enabled", isOn: $enabled)
+                    FlowToggleRow(title: "Launch at login", isOn: Binding(
+                        get: { launchAtLogin },
+                        set: { newValue in
+                            launchAtLogin = newValue
+                            LaunchAtLogin.set(newValue)
+                            launchAtLogin = LaunchAtLogin.isEnabled
                         }
-                    }
-                    .labelsHidden()
-                    .frame(width: 150)
-                    Button("Add") {
-                        if let target = Layout(rawValue: newAlwaysFlipTarget) {
-                            AlwaysFlipRules.shared.add(word: newAlwaysFlipWord, target: target)
-                            newAlwaysFlipWord = ""
-                            refreshLearning()
-                        }
-                    }
-                    .disabled(newAlwaysFlipWord.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                .controlSize(.small)
-
-                if alwaysFlipRules.isEmpty {
-                    Text("Add words you always want LangFlip to rewrite to a specific layout, even before the full dictionaries finish loading.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    VStack(spacing: 6) {
-                        ForEach(alwaysFlipRules) { rule in
-                            HStack {
-                                Text(rule.word)
-                                    .font(.system(.body, design: .monospaced))
-                                    .lineLimit(1)
-                                Image(systemName: "arrow.right")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Text(rule.target.displayName)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                Button {
-                                    AlwaysFlipRules.shared.remove(rule)
-                                    refreshLearning()
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundColor(.secondary)
-                                .help("Remove \(rule.word) always-flip rule")
-                            }
-                            .padding(.vertical, 2)
-                        }
-                    }
+                    ))
+                    FlowToggleRow(title: "Sound feedback", isOn: $soundEnabled)
                 }
 
-                Divider()
-
-                HStack {
-                    Text("Remembered exceptions")
-                    Spacer()
-                    Text("\(learnedExceptions.count)").foregroundColor(.secondary)
-                    Button("Forget all") {
-                        BackspaceLearner.shared.clearExceptions()
-                        refreshLearning()
-                    }
-                    .disabled(learnedExceptions.isEmpty)
+                FlowSettingsGroup("Permissions") {
+                    FlowPermissionRow(title: "Accessibility",
+                                      granted: permissions.accessibility,
+                                      action: PermissionStatus.openAccessibilityPane)
+                    FlowPermissionRow(title: "Input Monitoring",
+                                      granted: permissions.inputMonitoring,
+                                      action: PermissionStatus.openInputMonitoringPane)
                 }
 
-                HStack {
-                    TextField("Add word to never auto-flip", text: $newException)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Add") {
-                        BackspaceLearner.shared.addException(newException)
-                        newException = ""
-                        refreshLearning()
-                    }
-                    .disabled(newException.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                FlowSettingsGroup("Optional permissions") {
+                    FlowPermissionRow(title: "Screen Recording",
+                                      granted: hasScreenRecording,
+                                      detail: "Needed for Copy text from screenshot.",
+                                      action: PermissionStatus.openScreenRecordingPane)
+                    FlowPermissionRow(title: "Microphone",
+                                      granted: microphoneStatus == .authorized,
+                                      detail: "Needed only for speech-to-text dictation. Install and configure voice features in the Voice tab.",
+                                      action: openMicrophonePermission)
                 }
-                .controlSize(.small)
 
-                if learnedExceptions.isEmpty {
-                    Text("No learned exceptions yet. When you undo a bad auto-flip with Backspace, LangFlip remembers that word here.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    VStack(spacing: 6) {
-                        ForEach(learnedExceptions, id: \.self) { word in
-                            HStack {
-                                Text(word)
-                                    .font(.system(.body, design: .monospaced))
-                                    .lineLimit(1)
-                                Spacer()
-                                Button {
-                                    BackspaceLearner.shared.removeException(word)
-                                    refreshLearning()
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundColor(.secondary)
-                                .help("Remove \(word) from learned exceptions")
-                            }
-                            .padding(.vertical, 2)
-                        }
+                FlowCard(padding: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        gestureHint("1.circle", "Double-tap Shift flips selected text.")
+                        gestureHint("2.circle", "Triple-tap Shift uses the secondary language.")
+                        gestureHint("pause.circle", "Press both Shift keys to pause or resume.")
                     }
                 }
             }
-        }
-        .formStyle(.grouped)
-        .onAppear {
-            refreshLearning()
+            .padding(28)
+            .frame(maxWidth: 820, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .onReceive(timer) { _ in
             permissions = PermissionStatus.current()
             hasScreenRecording = PermissionStatus.hasScreenRecording()
             microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
-            refreshLearning()
             launchAtLogin = LaunchAtLogin.isEnabled
         }
     }
 
-    private func refreshLearning() {
-        learnedExceptions = Self.sortedExceptions()
-        alwaysFlipRules = Self.sortedAlwaysFlipRules()
-    }
-
-    private static func sortedExceptions() -> [String] {
-        BackspaceLearner.shared.exceptions.sorted {
-            $0.localizedStandardCompare($1) == .orderedAscending
-        }
-    }
-
-    private static func sortedAlwaysFlipRules() -> [AlwaysFlipRules.Rule] {
-        AlwaysFlipRules.shared.rules.sorted { lhs, rhs in
-            if lhs.word == rhs.word {
-                return lhs.target.displayName.localizedStandardCompare(rhs.target.displayName) == .orderedAscending
-            }
-            return lhs.word.localizedStandardCompare(rhs.word) == .orderedAscending
-        }
-    }
-
-    @ViewBuilder
-    private func permissionRow(title: String, granted: Bool, detail: String?, open: @escaping () -> Void) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .foregroundColor(granted ? .green : .orange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                if let detail {
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Spacer()
-            Button("Open System Settings", action: open)
-                .controlSize(.small)
+    private func gestureHint(_ icon: String, _ text: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(FlowTheme.accent)
+                .frame(width: 20)
+            Text(text)
+                .font(.system(size: 13))
+                .foregroundColor(FlowTheme.inkSecondary)
         }
     }
 
@@ -324,7 +106,7 @@ private struct GeneralTab: View {
 
 // MARK: - Voice
 
-private struct VoiceTab: View {
+struct VoiceTab: View {
     @AppStorage("lf.ttsBackend") private var ttsBackend = TextToSpeechBackend.system.rawValue
     @AppStorage("lf.speechVoiceIdentifier") private var speechVoiceIdentifier = ""
     @AppStorage("lf.speechRate") private var speechRate = 190.0
@@ -394,8 +176,25 @@ private struct VoiceTab: View {
 
     private let timer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
 
+    @State private var voiceTab: VoiceSubTab = .tts
+    enum VoiceSubTab: String, CaseIterable, Identifiable {
+        case tts = "Text to Speech", dictation = "Dictation"
+        var id: Self { self }
+    }
+
     var body: some View {
-        Form {
+        VStack(spacing: 0) {
+            Picker("", selection: $voiceTab) {
+                ForEach(VoiceSubTab.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+
+            Form {
+                if voiceTab == .tts {
             Section("Text to speech") {
                 Picker(selection: $ttsBackend) {
                     ForEach(TextToSpeechBackend.allCases) { backend in
@@ -712,7 +511,7 @@ private struct VoiceTab: View {
                 Toggle("Read selected text with \(readSelectionShortcutName)", isOn: $readSelectionHotkeyEnabled)
                 helpText("Select text in any app and press \(readSelectionShortcutName). Change this shortcut in Hotkeys.")
             }
-
+                } else {
             Section("Dictation") {
                 HStack {
                     Image(systemName: microphoneStatus == .authorized ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
@@ -989,7 +788,8 @@ private struct VoiceTab: View {
                          ? "Cloud STT transcribes the last recording here for testing. Dictation shortcuts can be changed in Hotkeys."
                          : "Whisper transcribes the last recording here for testing. Dictation shortcuts can be changed in Hotkeys.")
             }
-        }
+                }
+            }
         .formStyle(.grouped)
         .onAppear {
             voices = SpeechReader.availableVoices
@@ -1008,6 +808,7 @@ private struct VoiceTab: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .langFlipVoiceRecorderChanged)) { _ in
             refreshRecorderState()
+        }
         }
     }
 
@@ -1361,204 +1162,9 @@ private struct HelpPopoverButton: View {
     }
 }
 
-// MARK: - Languages
-
-private struct LanguagesTab: View {
-    @AppStorage("lf.primaryLanguage") private var primary = "uk"
-    @AppStorage("lf.secondaryLanguage") private var secondary = "ru"
-
-    var body: some View {
-        Form {
-            Section {
-                Picker("Primary language", selection: $primary) {
-                    Text("Українська").tag("uk")
-                    Text("Русский").tag("ru")
-                }
-                .onChange(of: primary) { newValue in
-                    // Clearing the secondary if it now collides with the primary.
-                    if secondary == newValue { secondary = "" }
-                }
-
-                Picker("Secondary language", selection: $secondary) {
-                    Text("None").tag("")
-                    if primary != "uk" { Text("Українська").tag("uk") }
-                    if primary != "ru" { Text("Русский").tag("ru") }
-                }
-
-                Text("Double Shift uses the primary language for English-layout text. Triple Shift uses the secondary language. If the text is already Ukrainian or Russian, both gestures flip it back to English.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Section("Dictionaries") {
-                DictionaryPackView()
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
-
-private struct DictionaryPackView: View {
-    private enum InstallState: Equatable {
-        case idle
-        case installing
-        case installed(String)
-        case failed(String)
-    }
-
-    @State private var stats = DictionaryManager.stats()
-    @State private var state: InstallState = .idle
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                dictionaryRow("English", layout: .en)
-                dictionaryRow("Українська", layout: .uk)
-                dictionaryRow("Русский", layout: .ru)
-            }
-
-            HStack {
-                Button {
-                    installExtendedPack()
-                } label: {
-                    Label(hasInstalledWords ? "Update extended dictionaries" : "Install extended dictionaries",
-                          systemImage: hasInstalledWords ? "arrow.clockwise.circle" : "arrow.down.circle")
-                }
-                .disabled(isInstalling)
-
-                Button("Reset") {
-                    resetInstalledPack()
-                }
-                .disabled(isInstalling || !hasInstalledWords)
-
-                Spacer()
-            }
-            .controlSize(.small)
-
-            statusText
-                .font(.caption)
-                .foregroundColor(statusColor)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text("Uses \(DictionaryManager.extendedPackSource) (\(DictionaryManager.extendedPackLicense)). LangFlip keeps the most useful clean words for each language.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .onAppear {
-            refresh()
-        }
-    }
-
-    private var isInstalling: Bool {
-        if case .installing = state { return true }
-        return false
-    }
-
-    private var hasInstalledWords: Bool {
-        stats.values.contains { $0.installedCount > 0 }
-    }
-
-    @ViewBuilder
-    private var statusText: some View {
-        switch state {
-        case .idle:
-            if hasInstalledWords {
-                Text("Extended dictionaries are active. You can update them anytime or reset to the smaller bundled set.")
-            } else {
-                Text("Bundled dictionaries work offline. Extended dictionaries improve auto-flip coverage.")
-            }
-        case .installing:
-            Text("Downloading and cleaning dictionaries...")
-        case .installed(let message):
-            Text(message)
-        case .failed(let reason):
-            Text("Failed: \(reason)")
-        }
-    }
-
-    private var statusColor: Color {
-        switch state {
-        case .installed:
-            return .green
-        case .failed:
-            return .orange
-        default:
-            return .secondary
-        }
-    }
-
-    private func dictionaryRow(_ title: String, layout: Layout) -> some View {
-        let item = stats[layout] ?? .init(bundledCount: 0, installedCount: 0, effectiveCount: 0)
-        return HStack {
-            Text(title)
-            Spacer()
-            VStack(alignment: .trailing, spacing: 1) {
-                Text("\(format(item.effectiveCount)) active words")
-                    .foregroundColor(.secondary)
-                if item.installedCount > 0 {
-                    Text("extended pack installed")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .font(.callout)
-    }
-
-    private func installSummary(_ counts: [Layout: Int]) -> String {
-        Layout.allCases
-            .compactMap { layout in
-                counts[layout].map { "\(layout.rawValue.uppercased()) \(format($0))" }
-            }
-            .joined(separator: ", ")
-    }
-
-    private func installExtendedPack() {
-        state = .installing
-        DictionaryManager.installExtendedFrequencyPack { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let counts):
-                    refresh()
-                    let summary = installSummary(counts)
-                    state = .installed("Installed extended dictionaries: \(summary). Auto-flip reloaded.")
-                case .failure(let error):
-                    state = .failed(error.localizedDescription)
-                }
-            }
-        }
-    }
-
-    private func resetInstalledPack() {
-        do {
-            try DictionaryManager.resetInstalledDictionaries()
-            refresh()
-            state = .installed("Removed installed dictionaries. Bundled dictionaries are active again.")
-        } catch {
-            state = .failed(error.localizedDescription)
-        }
-    }
-
-    private func refresh() {
-        stats = DictionaryManager.stats()
-    }
-
-    private func format(_ value: Int) -> String {
-        Self.formatter.string(from: NSNumber(value: value)) ?? "\(value)"
-    }
-
-    private static let formatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        return formatter
-    }()
-}
-
 // MARK: - Hotkeys
 
-private struct HotkeysTab: View {
+struct HotkeysTab: View {
     @AppStorage("lf.hotkeyPreset") private var hotkeyPreset = HotkeyPreset.doubleShift.rawValue
     @AppStorage("lf.translationHotkeyPreset") private var translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
     @AppStorage("lf.translationHotkeyCustom") private var translationHotkeyCustom = ""
@@ -1734,7 +1340,7 @@ private struct ShortcutRecorderRow: View {
 
 // MARK: - Behavior
 
-private struct BehaviorTab: View {
+struct BehaviorTab: View {
     @AppStorage("lf.autoFlip") private var autoFlip = true
     @AppStorage("lf.doubleCapsFix") private var doubleCapsFix = true
     @AppStorage("lf.crossLayoutFix") private var crossLayoutFix = true
@@ -1802,7 +1408,7 @@ private struct BehaviorTab: View {
 
 // MARK: - Models (AI)
 
-private struct ModelsTab: View {
+struct ModelsTab: View {
     private let releaseAIModes: [AIMode] = [.off, .appleFoundation, .ollama, .openai]
 
     @AppStorage("lf.aiMode") private var aiMode = AIMode.off.rawValue
@@ -3260,7 +2866,7 @@ private struct OpenRouterModel: Decodable, Identifiable {
 
 // MARK: - Apps
 
-private struct AppsTab: View {
+struct AppsTab: View {
     @State private var userBlocked = Array(Settings.shared.userBlacklist).sorted()
 
     var body: some View {
@@ -3317,7 +2923,7 @@ private struct AppsTab: View {
 
 // MARK: - About
 
-private struct AboutTab: View {
+struct AboutTab: View {
     private var version: String {
         let info = Bundle.main.infoDictionary
         let v = info?["CFBundleShortVersionString"] as? String ?? "?"

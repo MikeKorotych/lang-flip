@@ -193,6 +193,22 @@ final class EventTap {
             return nil
         }
 
+        // Transforms: Option + digit (1…9) applies the bound transform to the
+        // current selection. Only intercept when a transform is bound to that
+        // digit and AI is available — otherwise Option+digit types normally.
+        if Settings.shared.aiMode != .off {
+            let onlyOption = flags.intersection([.maskCommand, .maskAlternate, .maskControl, .maskShift]) == [.maskAlternate]
+            if onlyOption,
+               let digit = Self.transformDigit(forKeyCode: keyCode),
+               let transform = TransformStore.shared.transform(forShortcut: digit) {
+                if debug { FileHandle.standardError.write(Data("lang-flip[debug]: transform hotkey ⌥\(digit) → \(transform.name)\n".utf8)) }
+                DispatchQueue.main.async { [weak self] in
+                    self?.applyTransformWithAI(transform)
+                }
+                return nil
+            }
+        }
+
         // Any keypress while a hotkey-watched modifier is held means the
         // user pressed it as a real shortcut modifier, not as a hotkey
         // tap — disqualify the current sequence.
@@ -851,6 +867,74 @@ final class EventTap {
         postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
             snapshot.restore(to: pb)
+        }
+    }
+
+    // MARK: - Transforms
+
+    /// Copy the current selection, run it through the transform's prompt via
+    /// the AI assistant, and paste the result over the selection.
+    func applyTransformWithAI(_ transform: Transform) {
+        let pb = NSPasteboard.general
+        let snapshot = PasteboardSnapshot.capture(pb)
+        let countBefore = pb.changeCount
+
+        guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
+            Notifications.show(title: "Transform", body: "AI isn't set up yet. Configure it in Settings → AI.")
+            return
+        }
+
+        postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_C))
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let deadline = Date().addingTimeInterval(Self.copyPollDeadline)
+            self.pollPasteboardChange(pb, before: countBefore, deadline: deadline)
+
+            DispatchQueue.main.async {
+                guard pb.changeCount > countBefore,
+                      let text = pb.string(forType: .string),
+                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    snapshot.restore(to: pb)
+                    Notifications.show(title: transform.name, body: "Select text first, then press \(transform.shortcutLabel).")
+                    return
+                }
+
+                let request = AITransformRequest(text: text, instruction: transform.prompt)
+                AIAssistantManager.shared.current.applyTransform(request) { [weak self] result in
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        switch result {
+                        case .transformed(let out):
+                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: transform \(transform.name) \(text.count)→\(out.count)\n".utf8)) }
+                            self.pasteTextThenRestoreClipboard(out, snapshot: snapshot)
+                            Sound.playFlip()
+                            FlipOverlay.shared.show()
+                        case .unsupported:
+                            snapshot.restore(to: pb)
+                            Notifications.show(title: "Transform", body: "The current AI backend doesn't support transforms.")
+                        case .failed(let reason):
+                            snapshot.restore(to: pb)
+                            Notifications.show(title: "Transform failed", body: reason)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Maps a digit key code to its 1…9 value (for Option+digit transform hotkeys).
+    private static func transformDigit(forKeyCode keyCode: CGKeyCode) -> Int? {
+        switch Int(keyCode) {
+        case kVK_ANSI_1: return 1
+        case kVK_ANSI_2: return 2
+        case kVK_ANSI_3: return 3
+        case kVK_ANSI_4: return 4
+        case kVK_ANSI_5: return 5
+        case kVK_ANSI_6: return 6
+        case kVK_ANSI_7: return 7
+        case kVK_ANSI_8: return 8
+        case kVK_ANSI_9: return 9
+        default: return nil
         }
     }
 

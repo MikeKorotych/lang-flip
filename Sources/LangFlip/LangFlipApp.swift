@@ -12,11 +12,11 @@ struct LangFlipApp: App {
 
     var body: some Scene {
         // Settings is the only Scene we declare — the actual UI lives in
-        // hand-rolled NSWindow controllers (Onboarding, Preferences) so
-        // we have full control over activation policy. The Settings scene
-        // here is intentionally empty: macOS hooks Cmd+, to it for free,
-        // but we never present its window — the menubar's Preferences…
-        // item opens our own PreferencesWindowController instead.
+        // hand-rolled NSWindow controllers (Onboarding, Main) so we have
+        // full control over activation policy. The Settings scene here is
+        // intentionally empty: macOS hooks Cmd+, to it for free, but we
+        // never present its window — the menubar's Preferences… item opens
+        // the main window's Settings section instead.
         SwiftUI.Settings { EmptyView() }
     }
 }
@@ -37,16 +37,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// user can confirm the app is alive.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         if !hasVisibleWindows {
-            PreferencesWindowController.shared.show()
+            MainWindowController.shared.show()
         }
         return true
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Status-bar accessory: no Dock icon, no main menu.
-        // OnboardingWindowController and PreferencesWindowController flip
-        // this to .regular while their window is on screen, then back to
-        // .accessory when it closes.
+        // OnboardingWindowController and MainWindowController flip this to
+        // .regular while their window is on screen, then back to .accessory
+        // when it closes.
         NSApp.setActivationPolicy(.accessory)
 
         log("startup, pid=\(getpid())")
@@ -102,10 +102,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             log("event tap FAILED: \(error.localizedDescription)")
         }
 
-        // Menubar gets a reference to the tap so its "Translate selection"
-        // submenu can dispatch into it.
-        menubar = MenubarController(eventTap: tap)
+        // The menubar no longer dispatches per-action commands (those run via
+        // global hotkeys handled by the event tap), so it doesn't need a tap
+        // reference — it's a thin launcher/settings menu now.
+        menubar = MenubarController()
         log("menubar ready (look for ⌥ icon in menu bar)")
+
+        // Extended dictionaries install themselves on first launch — no manual
+        // step required (the Dictionary tab just shows status afterwards).
+        DictionaryManager.autoInstallExtendedPacksIfNeeded()
 
         // Diagnostic: surface the AI assistant's readiness at launch
         // so users can tell why grammar / fix / translate features stay

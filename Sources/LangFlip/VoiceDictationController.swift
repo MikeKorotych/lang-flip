@@ -13,7 +13,9 @@ final class VoiceDictationController {
 
     private(set) var isRecording = false
     private var mode: Mode?
-    private var isTranscribing = false
+    private(set) var isTranscribing = false
+    private var recordingStartedAt: Date?
+    private var recordingApp: String?
 
     private init() {}
 
@@ -31,6 +33,10 @@ final class VoiceDictationController {
         }
         self.mode = mode
         isRecording = true
+        recordingStartedAt = Date()
+        // Frontmost app now is the dictation target (global hotkeys don't focus
+        // LangFlip). Captured here for the usage-by-app breakdown in Insights.
+        recordingApp = NSWorkspace.shared.frontmostApplication?.localizedName
         Sound.playFlip()
         FlipOverlay.shared.show()
         let body = mode == .pushToTalk
@@ -44,6 +50,10 @@ final class VoiceDictationController {
         VoiceRecorder.shared.stop()
         isRecording = false
         mode = nil
+        let duration = recordingStartedAt.map { Date().timeIntervalSince($0) }
+        recordingStartedAt = nil
+        let app = recordingApp
+        recordingApp = nil
 
         guard let audioURL = VoiceRecorder.shared.lastRecordingURL else {
             Notifications.show(title: "Dictation failed", body: "No recording was saved.")
@@ -58,7 +68,7 @@ final class VoiceDictationController {
                 let text = try await Self.transcribe(audioURL: audioURL)
                 await MainActor.run {
                     self.isTranscribing = false
-                    self.insert(text)
+                    self.insert(text, duration: duration, app: app)
                 }
             } catch {
                 await MainActor.run {
@@ -87,12 +97,15 @@ final class VoiceDictationController {
         )
     }
 
-    private func insert(_ text: String) {
-        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleaned.isEmpty else {
+    private func insert(_ text: String, duration: Double? = nil, app: String? = nil) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
             Notifications.show(title: "Dictation", body: "No speech was recognized.")
             return
         }
+
+        // Expand any snippet triggers automatically before inserting.
+        let cleaned = SnippetStore.shared.expand(trimmed)
 
         let pb = NSPasteboard.general
         pb.clearContents()
@@ -100,7 +113,20 @@ final class VoiceDictationController {
         postCommandV()
         Sound.playFlip()
         FlipOverlay.shared.show()
+        DictationHistory.shared.add(cleaned, duration: duration, app: app)
         Notifications.show(title: "Dictation inserted", body: String(cleaned.prefix(80)))
+    }
+
+    /// Put `text` on the clipboard and paste it into the frontmost app. Used by
+    /// the menubar's "Paste last transcript" — unlike `insert`, it doesn't log
+    /// to history or play feedback (it's re-pasting something already captured).
+    func pasteText(_ text: String) {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(cleaned, forType: .string)
+        postCommandV()
     }
 
     private func postCommandV() {

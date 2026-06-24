@@ -125,6 +125,30 @@ enum DictionaryManager {
         }
     }
 
+    /// Installs the extended packs once, silently in the background, on first
+    /// launch — so they're present by default without the user clicking
+    /// anything. Skips if already installed, or if a prior auto-install already
+    /// succeeded (so a deliberate Reset isn't undone). Retries next launch if a
+    /// download fails (e.g. offline).
+    static func autoInstallExtendedPacksIfNeeded() {
+        let key = "lf.didAutoInstallDicts"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        if stats().values.contains(where: { $0.installedCount > 0 }) {
+            UserDefaults.standard.set(true, forKey: key)
+            return
+        }
+        AppLog.write("auto-installing extended dictionaries on first launch")
+        installExtendedFrequencyPack { result in
+            switch result {
+            case .success:
+                UserDefaults.standard.set(true, forKey: key)
+                AppLog.write("auto-install dictionaries: success")
+            case .failure(let error):
+                AppLog.write("auto-install dictionaries failed (retry next launch): \(error.localizedDescription)")
+            }
+        }
+    }
+
     static func resetInstalledDictionaries() throws {
         for layout in Layout.allCases {
             let url = installedURL(for: layout)

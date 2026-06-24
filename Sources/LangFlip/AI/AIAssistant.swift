@@ -56,6 +56,10 @@ protocol AIAssistant: AnyObject {
     /// model (Gemma 3+, Qwen 2.5-VL, LLaVA) does the real work.
     func extractTextFromImage(_ input: AIOcrRequest, completion: @escaping (AIOcrResult) -> Void)
 
+    /// Apply a user-defined Transform: rewrite `text` per a custom instruction
+    /// (the transform's prompt). Used by the Transforms feature.
+    func applyTransform(_ input: AITransformRequest, completion: @escaping (AITransformResult) -> Void)
+
     /// Optional cold-start warm-up. Backends with a local runtime can use
     /// this to load the model before the user's first real request.
     func warmUp()
@@ -74,7 +78,25 @@ extension AIAssistant {
     func extractTextFromImage(_ input: AIOcrRequest, completion: @escaping (AIOcrResult) -> Void) {
         completion(.unsupported)
     }
+    func applyTransform(_ input: AITransformRequest, completion: @escaping (AITransformResult) -> Void) {
+        completion(.unsupported)
+    }
     func warmUp() {}
+}
+
+// MARK: - Transform (custom-prompt rewrite)
+
+struct AITransformRequest {
+    /// The text to transform (selected text).
+    let text: String
+    /// The transform's custom instruction / prompt.
+    let instruction: String
+}
+
+enum AITransformResult {
+    case transformed(String)
+    case unsupported
+    case failed(reason: String)
 }
 
 // MARK: - Vote model

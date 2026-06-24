@@ -66,7 +66,7 @@ final class OnboardingWindowController: NSObject {
         cb?()
         if openPreferences {
             DispatchQueue.main.async {
-                PreferencesWindowController.shared.show()
+                MainWindowController.shared.show(section: .settings)
             }
         }
     }
