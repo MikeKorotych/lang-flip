@@ -284,11 +284,16 @@ struct DictationIslandView: View {
     @ObservedObject var state: DictationIslandState
 
     @State private var toastProgress: CGFloat = 1   // 1 → 0 over the toast lifetime
+    @State private var recShown = false             // drives the in-place staggered cascade of controls
+    @State private var pillPop: CGFloat = 1         // transient "breath" scale on record-start
 
     private var pillWidth: CGFloat { IslandMetrics.contentSize(for: state).width }
     private var pillHeight: CGFloat { IslandMetrics.contentSize(for: state).height }
     private var stateKey: String { "\(state.phase)-\(state.hovering)-\(state.showCancelledToast)" }
-    private var anim: Animation { .spring(response: 0.30, dampingFraction: 0.82) }
+
+    // Pill grow/shrink — a touch longer with a soft overshoot so it springs in
+    // place rather than snapping. (Grows from the centre; the panel never moves.)
+    private var pillSpring: Animation { .spring(response: 0.44, dampingFraction: 0.70) }
 
     var body: some View {
         // Fixed-size root so NSHostingController never resizes the window; the
@@ -303,12 +308,21 @@ struct DictationIslandView: View {
             .padding(.bottom, IslandMetrics.pad)
         }
         .frame(width: IslandMetrics.panelSize.width, height: IslandMetrics.panelSize.height)
-        .animation(anim, value: stateKey)
+        .animation(pillSpring, value: stateKey)
         // Lifetime bar fills left→right; re-armed on every cancel (token bump),
         // so a fresh cancel while a toast is still up restarts it cleanly.
         .onChange(of: state.toastToken) { _ in
             toastProgress = 0
             withAnimation(.linear(duration: IslandMetrics.toastDuration)) { toastProgress = 1 }
+        }
+        // Breath: a quick scale-up + springy settle the instant recording starts,
+        // like an inhale before listening.
+        .onChange(of: state.phase) { newPhase in
+            guard newPhase == .recording else { return }
+            withAnimation(.easeOut(duration: 0.12)) { pillPop = 1.05 }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.55)) { pillPop = 1 }
+            }
         }
     }
 
@@ -340,6 +354,7 @@ struct DictationIslandView: View {
                     .padding(.bottom, 0)
                     .opacity(state.showCancelledToast ? 1 : 0)
             }
+            .scaleEffect(pillPop, anchor: .center)
             .contentShape(Capsule())
             .onTapGesture {
                 if state.phase == .idle && !state.showCancelledToast {
@@ -367,17 +382,25 @@ struct DictationIslandView: View {
     }
 
     private var recordingContent: some View {
+        // Pill expands first (pillSpring); the controls then pop in IN PLACE,
+        // cascaded ✕ → wave → ✓ (StaggerIn animates scale/opacity, so they don't
+        // slide in from anywhere — they grow where they sit).
         HStack(spacing: 7) {
             circleButton(system: "xmark", fg: IslandColor.text, bg: IslandColor.cancel) {
                 VoiceDictationController.shared.cancel()
             }
+            .modifier(StaggerIn(shown: recShown, delay: 0.06))
             WaveBars(level: state.level)
                 .frame(maxWidth: .infinity)
+                .modifier(StaggerIn(shown: recShown, delay: 0.14))
             circleButton(system: "checkmark", fg: .black, bg: IslandColor.confirm) {
                 VoiceDictationController.shared.stopAndTranscribe()
             }
+            .modifier(StaggerIn(shown: recShown, delay: 0.22))
         }
         .padding(.horizontal, 5)
+        .onAppear { recShown = true }
+        .onDisappear { recShown = false }
     }
 
     private var transcribingContent: some View {
@@ -389,6 +412,11 @@ struct DictationIslandView: View {
                 .modifier(ShimmerText())
         }
         .padding(.horizontal, 12)
+        // Keep intrinsic size (don't reflow as the pill collapses), and on the
+        // way out shrink straight into the centre + fade — so the spinner and
+        // label dissolve into the pill instead of sliding off to the corner.
+        .fixedSize()
+        .transition(.scale(scale: 0.3, anchor: .center).combined(with: .opacity))
     }
 
     private var toastContent: some View {
@@ -464,27 +492,57 @@ private struct WaveBars: View {
     private let spacing: CGFloat = 3
     private let maxHeight: CGFloat = 24
     private let minHeight: CGFloat = 3
+    private let introDuration: TimeInterval = 0.35
+
+    @State private var appearedAt: Date?
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
+            let intro = introFactor(now: timeline.date)
             HStack(spacing: spacing) {
                 ForEach(0..<barCount, id: \.self) { i in
                     Capsule().fill(IslandColor.text)
-                        .frame(width: barWidth, height: height(i, t))
+                        .frame(width: barWidth, height: height(i, t, intro))
                 }
             }
         }
+        .onAppear { appearedAt = Date() }
     }
 
-    private func height(_ i: Int, _ t: TimeInterval) -> CGFloat {
+    /// 0 → 1 over `introDuration` after the bars appear (easeOutCubic): the bars
+    /// swell up from a flat line into the live response — "the mic woke up".
+    private func introFactor(now: Date) -> Double {
+        guard let appearedAt else { return 0 }
+        let p = min(1, max(0, now.timeIntervalSince(appearedAt) / introDuration))
+        return 1 - pow(1 - p, 3)
+    }
+
+    private func height(_ i: Int, _ t: TimeInterval, _ intro: Double) -> CGFloat {
         let boosted = min(1.0, max(0.18, level * 2.6))
         let center = Double(barCount - 1) / 2
         let distance = abs(Double(i) - center) / center
         let envelope = 1.0 - distance * 0.45
         let wobble = 0.5 + 0.5 * sin(t * 9 + Double(i) * 0.8)
-        let amp = boosted * envelope * (0.45 + 0.55 * wobble)
+        let amp = boosted * envelope * (0.45 + 0.55 * wobble) * intro
         return minHeight + CGFloat(amp) * (maxHeight - minHeight)
+    }
+}
+
+// MARK: - Stagger-in
+
+/// In-place cascade entrance: each element pops from shrunk + transparent to
+/// full size with a springy overshoot. The per-element `delay` makes the
+/// recording controls arrive in sequence (✕ → wave → ✓) without sliding.
+private struct StaggerIn: ViewModifier {
+    let shown: Bool
+    let delay: Double
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(shown ? 1 : 0.4, anchor: .center)
+            .opacity(shown ? 1 : 0)
+            .animation(.spring(response: 0.40, dampingFraction: 0.56).delay(delay), value: shown)
     }
 }
 
