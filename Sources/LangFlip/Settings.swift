@@ -1009,10 +1009,11 @@ final class Settings {
     var cloudSTTModel: String {
         get {
             let raw = defaults.string(forKey: Keys.cloudSTTModel)?.trimmingCharacters(in: .whitespaces)
-            guard let raw, !raw.isEmpty else { return "nvidia/parakeet-tdt-0.6b-v3" }
+            guard let raw, !raw.isEmpty else { return "qwen/qwen3-asr-flash-2026-02-10" }
             switch raw {
-            case "openai/whisper-1", "openai/gpt-4o-mini-transcribe", "openai/whisper-large-v3":
-                return "nvidia/parakeet-tdt-0.6b-v3"
+            case "openai/whisper-large-v3":
+                // Not available on OpenRouter — fall back to the default.
+                return "qwen/qwen3-asr-flash-2026-02-10"
             default:
                 return raw
             }

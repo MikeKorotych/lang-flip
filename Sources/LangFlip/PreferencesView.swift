@@ -124,7 +124,7 @@ struct VoiceTab: View {
     @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.fnOption.rawValue
     @AppStorage("lf.dictationTranscriptionBackend") private var dictationTranscriptionBackend = DictationTranscriptionBackend.localWhisper.rawValue
     @AppStorage("lf.cloudSTTBaseURL") private var cloudSTTBaseURL = "https://openrouter.ai/api/v1"
-    @AppStorage("lf.cloudSTTModel") private var cloudSTTModel = "nvidia/parakeet-tdt-0.6b-v3"
+    @AppStorage("lf.cloudSTTModel") private var cloudSTTModel = "qwen/qwen3-asr-flash-2026-02-10"
 
     @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
     @State private var voices = SpeechReader.availableVoices
@@ -2394,18 +2394,18 @@ private struct CuratedTranscriptionModel: Identifiable {
     let label: String
     let note: String
 
-    static let defaultID = "nvidia/parakeet-tdt-0.6b-v3"
+    static let defaultID = "qwen/qwen3-asr-flash-2026-02-10"
 
     static let curated: [CuratedTranscriptionModel] = [
         .init(
-            id: "nvidia/parakeet-tdt-0.6b-v3",
-            label: "NVIDIA: Parakeet TDT 0.6B v3 - $0.0015/min",
-            note: "Best default: very cheap, multilingual EU coverage, punctuation and timestamps."
-        ),
-        .init(
             id: "qwen/qwen3-asr-flash-2026-02-10",
             label: "Qwen: Qwen3 ASR Flash - $0.000035/sec (~$0.0021/min)",
-            note: "Strong noisy/mixed-language option; supports Russian and several major languages."
+            note: "Best default: strongest Cyrillic / Ukrainian / Russian in field use, cheap, robust to noise and mixed languages."
+        ),
+        .init(
+            id: "nvidia/parakeet-tdt-0.6b-v3",
+            label: "NVIDIA: Parakeet TDT 0.6B v3 - $0.0015/min",
+            note: "Very cheap, multilingual EU coverage, punctuation and timestamps."
         ),
         .init(
             id: "mistralai/voxtral-mini-transcribe",
@@ -2418,9 +2418,19 @@ private struct CuratedTranscriptionModel: Identifiable {
             note: "Higher-cost OpenAI transcription model; compare quality before daily use."
         ),
         .init(
+            id: "openai/gpt-4o-mini-transcribe",
+            label: "OpenAI: GPT-4o Mini Transcribe",
+            note: "Cheaper OpenAI option. Previously dropped as weaker on Cyrillic — kept here for A/B testing."
+        ),
+        .init(
+            id: "openai/whisper-1",
+            label: "OpenAI: Whisper v1 - $0.006/min",
+            note: "Classic Whisper. Previously dropped as weaker — kept here for A/B testing."
+        ),
+        .init(
             id: "google/chirp-3",
             label: "Google: Chirp 3 - $0.016/min",
-            note: "Google STT option; currently much pricier than Parakeet/Qwen/Whisper V3."
+            note: "Google STT option; pricier than Qwen/Parakeet."
         ),
     ]
 
