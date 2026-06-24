@@ -358,6 +358,7 @@ struct FlowSmallButton: View {
                 )
         }
         .buttonStyle(.plain)
+        .focusable(false)   // no blue keyboard focus ring (e.g. in popovers)
         .onHover { hovering = $0 }
     }
 }
