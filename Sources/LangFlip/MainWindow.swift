@@ -18,7 +18,7 @@ final class MainWindowController {
         if window == nil {
             let host = NSHostingController(rootView: MainView())
             let win = NSWindow(contentViewController: host)
-            win.title = "LangFlip"
+            win.title = "Sayful"
             win.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             win.titlebarAppearsTransparent = true
             win.titleVisibility = .hidden
@@ -69,7 +69,7 @@ final class MainWindowController {
 
     @objc private func handleWindowWillClose(_ note: Notification) {
         let otherVisible = NSApp.windows.contains {
-            $0.isVisible && $0 !== window && $0.title == "LangFlip"
+            $0.isVisible && $0 !== window && $0.title == "Sayful"
         }
         if !otherVisible {
             NSApp.setActivationPolicy(.accessory)
@@ -80,20 +80,25 @@ final class MainWindowController {
 // MARK: - Sections
 
 enum MainSection: String, CaseIterable, Identifiable {
-    case home, insights, dictionary, snippets, style, transforms, settings
+    case home, langflip, hotkeys, insights, dictionary, snippets, transforms, settings
 
     var id: String { rawValue }
 
-    /// Sections shown in the top sidebar list. `settings` lives at the bottom.
-    static let primary: [MainSection] = [.home, .insights, .dictionary, .snippets, .style, .transforms]
+    /// Top sidebar group — the speech-to-text features. `settings` lives at the
+    /// bottom; the layout-flip tools (`secondary`) sit in their own group below.
+    static let primary: [MainSection] = [.home, .insights, .snippets, .transforms]
+
+    /// Layout-flip tools + global shortcuts, grouped apart from the STT features.
+    static let secondary: [MainSection] = [.dictionary, .langflip, .hotkeys]
 
     var title: String {
         switch self {
         case .home:       return "Home"
+        case .langflip:   return "Flip"
+        case .hotkeys:    return "Hotkeys"
         case .insights:   return "Insights"
         case .dictionary: return "Dictionary"
         case .snippets:   return "Snippets"
-        case .style:      return "Style"
         case .transforms: return "Transforms"
         case .settings:   return "Settings"
         }
@@ -102,10 +107,11 @@ enum MainSection: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .home:       return "square.grid.2x2"
+        case .langflip:   return "keyboard"
+        case .hotkeys:    return "command"
         case .insights:   return "chart.bar"
         case .dictionary: return "character.book.closed"
         case .snippets:   return "scissors"
-        case .style:      return "textformat"
         case .transforms: return "wand.and.stars"
         case .settings:   return "gearshape"
         }
@@ -151,13 +157,11 @@ struct MainView: View {
                 Group {
                     switch nav.section {
                     case .home:       HomeView()
+                    case .langflip:   LangFlipView()
+                    case .hotkeys:    HotkeysView()
                     case .insights:   InsightsView()
                     case .dictionary: DictionaryView()
                     case .snippets:   SnippetsView()
-                    case .style:      ComingSoonSection(section: .style,
-                                                        heroTitle: "Make it sound like",
-                                                        heroEmphasis: "you",
-                                                        heroSubtitle: "Choose how much LangFlip cleans up every dictation — from none to a full rewrite.")
                     case .transforms: TransformsView()
                     case .settings:   EmptyView()
                     }
@@ -184,7 +188,7 @@ private struct SidebarView: View {
             SidebarItem(icon: "waveform", iconColor: FlowTheme.accent, collapsed: collapsed,
                         isSelected: false, showHighlight: false) {
                 HStack(spacing: 7) {
-                    Text("LangFlip")
+                    Text("Sayful")
                         .font(.system(size: 18, weight: .bold, design: .serif))
                         .foregroundColor(FlowTheme.ink)
                         .lineLimit(1)
@@ -199,12 +203,16 @@ private struct SidebarView: View {
             .padding(.top, 8)
             .padding(.bottom, 20)
 
-            ForEach(MainSection.primary) { item in
-                SidebarItem(icon: item.icon, collapsed: collapsed, isSelected: section == item,
-                            action: { section = item }) {
-                    Text(item.title).font(.system(size: 14, weight: section == item ? .semibold : .regular))
-                }
-            }
+            ForEach(MainSection.primary) { navRow($0) }
+
+            // Set the layout-flip tools (Dictionary, LangFlip) apart from the
+            // speech-to-text features above with a divider + extra spacing.
+            Divider()
+                .overlay(FlowTheme.cardStroke)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+
+            ForEach(MainSection.secondary) { navRow($0) }
 
             Spacer()
 
@@ -225,6 +233,14 @@ private struct SidebarView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.horizontal, 10)
         .background(FlowTheme.paper)
+    }
+
+    @ViewBuilder
+    private func navRow(_ item: MainSection) -> some View {
+        SidebarItem(icon: item.icon, collapsed: collapsed, isSelected: section == item,
+                    action: { section = item }) {
+            Text(item.title).font(.system(size: 14, weight: section == item ? .semibold : .regular))
+        }
     }
 }
 
@@ -335,8 +351,6 @@ private struct TopIconButton: View {
 private struct SettingsHostView: View {
     enum Tab: String, CaseIterable, Identifiable {
         case general = "General"
-        case behavior = "Behavior"
-        case hotkeys = "Hotkeys"
         case ai = "AI"
         case voice = "Voice"
         case apps = "Apps"
@@ -371,8 +385,6 @@ private struct SettingsHostView: View {
             Group {
                 switch tab {
                 case .general:   GeneralTab()
-                case .behavior:  BehaviorTab()
-                case .hotkeys:   HotkeysTab()
                 case .ai:        ModelsTab()
                 case .voice:     VoiceTab()
                 case .apps:      AppsTab()
@@ -383,36 +395,5 @@ private struct SettingsHostView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(FlowTheme.paper)
-    }
-}
-
-// MARK: - Placeholder sections
-
-private struct ComingSoonSection: View {
-    let section: MainSection
-    let heroTitle: String
-    var heroEmphasis: String = ""
-    var heroTrailing: String = ""
-    let heroSubtitle: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            DisplayText(section.title, size: 26)
-
-            FlowHero(titleLeading: heroTitle,
-                     titleEmphasis: heroEmphasis,
-                     titleTrailing: heroTrailing,
-                     subtitle: heroSubtitle)
-
-            FlowCard {
-                HStack(spacing: 12) {
-                    Image(systemName: "hammer")
-                        .foregroundColor(FlowTheme.accent)
-                    Text("Coming soon — this screen is on the roadmap.")
-                        .font(.system(size: 14))
-                        .foregroundColor(FlowTheme.inkSecondary)
-                }
-            }
-        }
     }
 }

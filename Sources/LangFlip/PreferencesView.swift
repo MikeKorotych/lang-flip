@@ -3,7 +3,6 @@ import AppKit
 import AVFoundation
 import ServiceManagement
 import UniformTypeIdentifiers
-import Carbon.HIToolbox
 
 // The settings tab views below were migrated out of a standalone Preferences
 // window into the main window's Settings section (see SettingsHostView in
@@ -13,7 +12,6 @@ import Carbon.HIToolbox
 // MARK: - General
 
 struct GeneralTab: View {
-    @AppStorage("lf.enabled") private var enabled = true
     @AppStorage("lf.soundEnabled") private var soundEnabled = false
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var permissions = PermissionStatus.current()
@@ -26,7 +24,6 @@ struct GeneralTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 FlowSettingsGroup {
-                    FlowToggleRow(title: "LangFlip enabled", isOn: $enabled)
                     FlowToggleRow(title: "Launch at login", isOn: Binding(
                         get: { launchAtLogin },
                         set: { newValue in
@@ -57,14 +54,6 @@ struct GeneralTab: View {
                                       detail: "Needed only for speech-to-text dictation. Install and configure voice features in the Voice tab.",
                                       action: openMicrophonePermission)
                 }
-
-                FlowCard(padding: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        gestureHint("1.circle", "Double-tap Shift flips selected text.")
-                        gestureHint("2.circle", "Triple-tap Shift uses the secondary language.")
-                        gestureHint("pause.circle", "Press both Shift keys to pause or resume.")
-                    }
-                }
             }
             .padding(28)
             .frame(maxWidth: 820, alignment: .leading)
@@ -75,18 +64,6 @@ struct GeneralTab: View {
             hasScreenRecording = PermissionStatus.hasScreenRecording()
             microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
             launchAtLogin = LaunchAtLogin.isEnabled
-        }
-    }
-
-    private func gestureHint(_ icon: String, _ text: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundColor(FlowTheme.accent)
-                .frame(width: 20)
-            Text(text)
-                .font(.system(size: 13))
-                .foregroundColor(FlowTheme.inkSecondary)
         }
     }
 
@@ -289,7 +266,7 @@ struct VoiceTab: View {
 
                 FlowPickerRow(
                     title: "Voice",
-                    detail: "Voice identifiers are model-specific. LangFlip shows known voices for the selected curated model.",
+                    detail: "Voice identifiers are model-specific. Sayful shows known voices for the selected curated model.",
                     selection: $cloudTTSVoice,
                     options: cloudTTSVoiceOptions.map { (value: $0.id, label: $0.label) }
                 )
@@ -487,7 +464,7 @@ struct VoiceTab: View {
                             Settings.shared.resetOmniVoiceGenerationSettings()
                             syncOmniVoiceGenerationSettingsFromDefaults()
                         }
-                        .help("Restore speed, pauses, quality, and advanced generation settings to LangFlip defaults.")
+                        .help("Restore speed, pauses, quality, and advanced generation settings to Sayful defaults.")
                     }
                     .padding(.top, 6)
                 }
@@ -708,7 +685,7 @@ struct VoiceTab: View {
 
                 OpenRouterTranscriptionModelPicker(selectedModel: $cloudSTTModel)
                 helpText("Best default: NVIDIA Parakeet TDT 0.6B v3 for very low cost and strong multilingual STT. Qwen3 ASR Flash is a good noisy/mixed-language fallback.")
-                helpText("Cloud STT always lets the provider auto-detect the spoken language from audio. LangFlip does not send the current keyboard layout or a language override.")
+                helpText("Cloud STT always lets the provider auto-detect the spoken language from audio. Sayful does not send the current keyboard layout or a language override.")
             } else {
                 FlowPickerRow(
                     title: "Language",
@@ -977,7 +954,7 @@ struct VoiceTab: View {
 
     private func readTTSSample() {
         let sample = """
-        LangFlip can read selected text aloud. Sentence pauses make stories easier to follow.
+        Sayful can read selected text aloud. Sentence pauses make stories easier to follow.
         A new line can pause a little longer.
         """
         if activeTTSBackend == .system {
@@ -1150,270 +1127,6 @@ struct VoiceTab: View {
     }
 }
 
-// MARK: - Hotkeys
-
-struct HotkeysTab: View {
-    @AppStorage("lf.hotkeyPreset") private var hotkeyPreset = HotkeyPreset.doubleShift.rawValue
-    @AppStorage("lf.translationHotkeyPreset") private var translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
-    @AppStorage("lf.translationHotkeyCustom") private var translationHotkeyCustom = ""
-    @AppStorage("lf.screenTextCaptureHotkeyPreset") private var screenTextCaptureHotkeyPreset = GlobalShortcutPreset.commandShiftS.rawValue
-    @AppStorage("lf.screenTextCaptureHotkeyCustom") private var screenTextCaptureHotkeyCustom = ""
-    @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.controlOptionX.rawValue
-    @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
-    @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
-    @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.fnOption.rawValue
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                FlowSettingsGroup("Layout flip") {
-                    FlowPickerRow(title: "Flip hotkey",
-                                  detail: "Flips selected text between keyboard layouts. If no text is selected and the Behavior toggle is on, the same gesture can try the last words before the cursor.",
-                                  selection: $hotkeyPreset,
-                                  options: HotkeyPreset.allCases.map { (value: $0.rawValue, label: $0.displayName) })
-                }
-
-                FlowSettingsGroup("AI actions") {
-                    ShortcutRecorderRow(
-                        title: "Translate selection",
-                        preset: $translationHotkeyPreset,
-                        custom: $translationHotkeyCustom,
-                        choices: GlobalShortcutPreset.translationChoices
-                    )
-                    ShortcutRecorderRow(
-                        title: "Capture text from screen",
-                        preset: $screenTextCaptureHotkeyPreset,
-                        custom: $screenTextCaptureHotkeyCustom,
-                        choices: GlobalShortcutPreset.screenCaptureChoices
-                    )
-                    helpText("These shortcuts work globally. Turn each feature on or off in AI settings without losing the shortcut you picked here.")
-                }
-
-                FlowSettingsGroup("Voice") {
-                    ShortcutRecorderRow(
-                        title: "Read selected text aloud",
-                        preset: $readSelectionHotkeyPreset,
-                        custom: $readSelectionHotkeyCustom,
-                        choices: GlobalShortcutPreset.readAloudChoices
-                    )
-                    helpText("Reads the current text selection with the voice backend selected in Voice settings.")
-                }
-
-                FlowSettingsGroup("Dictation") {
-                    FlowPickerRow(title: "Push-to-talk",
-                                  selection: $dictationPushToTalkShortcut,
-                                  options: DictationPushToTalkShortcut.allCases.map { (value: $0.rawValue, label: $0.displayName) })
-                    FlowPickerRow(title: "Hands-free toggle",
-                                  selection: $dictationHandsFreeShortcut,
-                                  options: DictationHandsFreeShortcut.allCases.map { (value: $0.rawValue, label: $0.displayName) })
-                    helpText("Push-to-talk records while held. Hands-free starts and stops recording with the same modifier chord. Enable or disable each mode in Voice.")
-                }
-
-                FlowSettingsGroup("Modifier gestures") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Single Shift fixes selected text or the last sentence.")
-                            .font(.system(size: 13)).foregroundColor(FlowTheme.ink)
-                        Text("Double Shift flips selected text or the last words.")
-                            .font(.system(size: 13)).foregroundColor(FlowTheme.ink)
-                        helpText("Single and double Shift depend on press timing, so they stay as fixed gestures for now. Dictation modifier gestures are configurable above.")
-                    }
-                }
-            }
-            .padding(28)
-            .frame(maxWidth: 820, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .top)
-        }
-    }
-
-    @ViewBuilder
-    private func helpText(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 12))
-            .foregroundColor(FlowTheme.inkSecondary)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-private struct ShortcutRecorderRow: View {
-    let title: String
-    @Binding var preset: String
-    @Binding var custom: String
-    let choices: [GlobalShortcutPreset]
-
-    @State private var isRecording = false
-    @State private var warning = ""
-    @State private var monitor: Any?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                Text(title).font(.system(size: 14)).foregroundColor(FlowTheme.ink)
-                Spacer(minLength: 12)
-                Picker("", selection: $preset) {
-                    ForEach(choices) { shortcut in
-                        Text(shortcut.displayName).tag(shortcut.rawValue)
-                    }
-                }
-                .labelsHidden().pickerStyle(.menu).tint(FlowTheme.ink).fixedSize()
-                .disabled(hasCustom || isRecording)
-
-                FlowSmallButton(title: isRecording ? "Press keys…" : "Record") {
-                    startRecording()
-                }
-                .disabled(isRecording)
-
-                if hasCustom {
-                    FlowSmallButton(title: "Use preset") {
-                        custom = ""
-                        warning = ""
-                    }
-                }
-            }
-
-            if hasCustom || isRecording || !warning.isEmpty {
-                HStack(spacing: 8) {
-                    if let shortcut = GlobalShortcut.decode(custom) {
-                        Text("Custom: \(shortcut.displayName)")
-                            .foregroundColor(FlowTheme.accent)
-                    } else if isRecording {
-                        Text("Press modifiers plus a normal key. Esc cancels.")
-                            .foregroundColor(FlowTheme.inkSecondary)
-                    }
-                    if !warning.isEmpty {
-                        Text(warning)
-                            .foregroundColor(.orange)
-                    }
-                }
-                .font(.system(size: 12))
-            }
-        }
-        .onDisappear {
-            stopRecording()
-        }
-    }
-
-    private var hasCustom: Bool {
-        GlobalShortcut.decode(custom) != nil
-    }
-
-    private func startRecording() {
-        stopRecording()
-        isRecording = true
-        ShortcutRecordingState.isRecording = true
-        warning = ""
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            handle(event: event)
-        }
-    }
-
-    private func stopRecording() {
-        if let monitor {
-            NSEvent.removeMonitor(monitor)
-            self.monitor = nil
-        }
-        isRecording = false
-        ShortcutRecordingState.isRecording = false
-    }
-
-    private func handle(event: NSEvent) -> NSEvent? {
-        if event.keyCode == UInt16(kVK_Escape) {
-            stopRecording()
-            return nil
-        }
-        guard let shortcut = GlobalShortcut.from(event: event) else {
-            warning = "Use at least one modifier plus a normal key."
-            return nil
-        }
-        if shortcut.modifiers == GlobalShortcut.shift && shortcut.keyCode != CGKeyCode(kVK_Space) {
-            warning = "Shift-only shortcuts are too easy to trigger. Add Control, Option, or Command."
-            return nil
-        }
-        custom = shortcut.encoded
-        warning = ""
-        stopRecording()
-        return nil
-    }
-}
-
-// MARK: - Behavior
-
-struct BehaviorTab: View {
-    @AppStorage("lf.autoFlip") private var autoFlip = true
-    @AppStorage("lf.doubleCapsFix") private var doubleCapsFix = true
-    @AppStorage("lf.crossLayoutFix") private var crossLayoutFix = true
-    @AppStorage("lf.suppressInFullscreen") private var suppressInFullscreen = false
-    @AppStorage("lf.showOverlay") private var showOverlay = true
-    @AppStorage("lf.fixLastSentenceOnSingleShift") private var fixLastSentenceOnSingleShift = true
-    @AppStorage("lf.flipLastWordsOnDoubleShift") private var flipLastWordsOnDoubleShift = true
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                FlowSettingsGroup {
-                    FlowToggleRow(title: "Auto-flip at word end",
-                                  detail: "After Space or punctuation, LangFlip can fix a word that was typed in the wrong layout. Press Backspace right away to undo and remember an exception.",
-                                  isOn: $autoFlip)
-                }
-
-                FlowSettingsGroup("No-selection actions") {
-                    FlowToggleRow(title: "Single Shift fixes last sentence", isOn: $fixLastSentenceOnSingleShift)
-                    FlowToggleRow(title: "Double Shift flips last words",
-                                  detail: "When no text is selected, LangFlip reads the focused text field through Accessibility and rewrites only the text before the cursor. Turn this off if a specific app behaves unpredictably.",
-                                  isOn: $flipLastWordsOnDoubleShift)
-                }
-
-                FlowSettingsGroup("Corrections") {
-                    FlowToggleRow(title: "Fix sticky-shift typos (WOrld → World)",
-                                  detail: "Fixes accidental double-capital starts when the corrected word is clearly safe.",
-                                  isOn: $doubleCapsFix)
-                    FlowToggleRow(title: "Fix UK ↔ RU letter slips (ы ↔ і, э ↔ є)",
-                                  detail: "Fixes common Ukrainian/Russian letter slips when the corrected word is in the target dictionary.",
-                                  isOn: $crossLayoutFix)
-                }
-
-                FlowSettingsGroup("Overlay & focus") {
-                    overlayRow
-                    FlowToggleRow(title: "Pause auto-flip in fullscreen apps",
-                                  detail: "Useful for games, video players, and other fullscreen apps where automatic changes may be distracting.",
-                                  isOn: $suppressInFullscreen)
-                }
-            }
-            .padding(28)
-            .frame(maxWidth: 820, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .top)
-        }
-    }
-
-    private var overlayRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 12) {
-                Text("Show flip overlay").font(.system(size: 14)).foregroundColor(FlowTheme.ink)
-                Spacer(minLength: 12)
-                FlowSmallButton(title: "Preview") { previewOverlay() }
-                Toggle("", isOn: $showOverlay)
-                    .labelsHidden().toggleStyle(.switch).tint(FlowTheme.accent)
-            }
-            Text("Shows a small visual confirmation whenever LangFlip rewrites text.")
-                .font(.system(size: 12))
-                .foregroundColor(FlowTheme.inkSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func previewOverlay() {
-        // Force the overlay to play even when the user has it toggled off, so
-        // they can see what they'd be opting into before flipping the switch.
-        let wasOn = Settings.shared.showOverlay
-        Settings.shared.showOverlay = true
-        FlipOverlay.shared.show()
-        if !wasOn {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                Settings.shared.showOverlay = false
-            }
-        }
-    }
-}
-
 // MARK: - Models (AI)
 
 struct ModelsTab: View {
@@ -1530,7 +1243,7 @@ struct ModelsTab: View {
                 ))
                 .disabled(!aiReadyForHotkeys)
                 helpText(aiReadyForHotkeys
-                         ? "A single clean Shift tap sends the selected text to the active AI model for typo, punctuation, and grammar cleanup. The experimental Behavior toggle can also try the last sentence before the cursor."
+                         ? "A single clean Shift tap sends the selected text to the active AI model for typo, punctuation, and grammar cleanup. The experimental Sayful toggle can also try the last sentence before the cursor."
                          : "Install and select a local model to enable this shortcut.")
             }
 
@@ -1609,7 +1322,7 @@ struct ModelsTab: View {
         case .off:
             return "AI is off. Layout correction runs locally on your Mac."
         case .appleFoundation:
-            return "Apple Intelligence runs on-device when available. LangFlip does not send text to its own servers."
+            return "Apple Intelligence runs on-device when available. Sayful does not send text to its own servers."
         case .ollama:
             return "Ollama mode sends selected text only to the local Ollama app on this Mac."
         case .bundledModel:
@@ -2882,7 +2595,7 @@ struct AppsTab: View {
             VStack(alignment: .leading, spacing: 22) {
                 FlowSettingsGroup("App exclusions") {
                     if userBlocked.isEmpty {
-                        Text("No apps are excluded. LangFlip automatically avoids sensitive app types like terminals and password managers.")
+                        Text("No apps are excluded. Sayful automatically avoids sensitive app types like terminals and password managers.")
                             .font(.system(size: 13))
                             .foregroundColor(FlowTheme.inkSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -2942,7 +2655,7 @@ struct AboutTab: View {
                         .resizable()
                         .frame(width: 88, height: 88)
                 }
-                Text("LangFlip")
+                Text("Sayful")
                     .font(.system(size: 24, weight: .semibold, design: .serif))
                     .foregroundColor(FlowTheme.ink)
                 Text("Version \(version)")

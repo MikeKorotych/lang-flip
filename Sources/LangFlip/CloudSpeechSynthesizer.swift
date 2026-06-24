@@ -92,7 +92,7 @@ final class CloudSpeechSynthesizer {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         if baseURL.host?.localizedCaseInsensitiveContains("openrouter.ai") == true {
-            request.setValue("LangFlip", forHTTPHeaderField: "X-Title")
+            request.setValue("Sayful", forHTTPHeaderField: "X-Title")
             request.setValue("https://github.com/MikeKorotych/lang-flip", forHTTPHeaderField: "HTTP-Referer")
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

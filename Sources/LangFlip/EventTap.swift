@@ -963,7 +963,7 @@ final class EventTap {
                       !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 else {
                     if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: speech: no selected text\n".utf8)) }
-                    Notifications.show(title: "LangFlip", body: "Select text first, then press \(Settings.shared.readSelectionShortcut.displayName).")
+                    Notifications.show(title: "Sayful", body: "Select text first, then press \(Settings.shared.readSelectionShortcut.displayName).")
                     return
                 }
                 Notifications.show(title: "Reading selected text", body: String(text.prefix(80)))
@@ -987,14 +987,14 @@ final class EventTap {
     func captureScreenTextWithAI() {
         guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: AI not ready\n".utf8)) }
-            Notifications.show(title: "LangFlip", body: "AI is off or not ready — enable Ollama (or another vision-capable backend) in Preferences.")
+            Notifications.show(title: "Sayful", body: "AI is off or not ready — enable Ollama (or another vision-capable backend) in Preferences.")
             return
         }
         guard PermissionStatus.hasScreenRecording() else {
             AppLog.write("ocr skipped: screen recording permission missing")
             PermissionStatus.requestScreenRecording()
             PermissionStatus.openScreenRecordingPane()
-            Notifications.show(title: "LangFlip", body: "Screen text capture needs Screen Recording permission. Toggle LangFlip on, then try again.")
+            Notifications.show(title: "Sayful", body: "Screen text capture needs Screen Recording permission. Toggle Sayful on, then try again.")
             return
         }
 
@@ -1026,7 +1026,7 @@ final class EventTap {
                 }
                 let b64 = imageData.base64EncodedString()
                 if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: sending \(imageData.count) bytes (b64=\(b64.count) chars) to AI\n".utf8)) }
-                Notifications.show(title: "LangFlip", body: "Reading text from screenshot…")
+                Notifications.show(title: "Sayful", body: "Reading text from screenshot…")
 
                 let request = AIOcrRequest(imageBase64: b64)
                 AIAssistantManager.shared.current.extractTextFromImage(request) { [weak self] result in
@@ -1045,7 +1045,7 @@ final class EventTap {
                             Notifications.show(title: "Text copied", body: text.count > 60 ? "\(preview)…" : preview)
                         case .unsupported:
                             if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: assistant doesn't support OCR\n".utf8)) }
-                            Notifications.show(title: "LangFlip", body: "Copy text from screenshot needs a vision-capable model. Switch to Ollama with Qwen 3.5 in Preferences.")
+                            Notifications.show(title: "Sayful", body: "Copy text from screenshot needs a vision-capable model. Switch to Ollama with Qwen 3.5 in Preferences.")
                         case .failed(let reason):
                             if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: failed: \(reason)\n".utf8)) }
                             Notifications.show(title: "Copy text from screenshot failed", body: reason)
@@ -1059,7 +1059,7 @@ final class EventTap {
             try task.run()
         } catch {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: failed to spawn screencapture: \(error)\n".utf8)) }
-            Notifications.show(title: "LangFlip", body: "Couldn't launch screen capture: \(error.localizedDescription)")
+            Notifications.show(title: "Sayful", body: "Couldn't launch screen capture: \(error.localizedDescription)")
             try? FileManager.default.removeItem(at: pngURL)
         }
     }

@@ -8,6 +8,7 @@ struct SnippetsView: View {
     @ObservedObject private var store = SnippetStore.shared
     @State private var showingAdd = false
     @State private var editing: Snippet?
+    @State private var appeared = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -16,6 +17,7 @@ struct SnippetsView: View {
                 Spacer()
                 FlowSmallButton(title: "Add new", prominent: true) { showingAdd = true }
             }
+            .appearStagger(0, appeared)
 
             FlowHero(
                 titleLeading: "The stuff",
@@ -25,32 +27,37 @@ struct SnippetsView: View {
                 ctaTitle: "Add new snippet",
                 ctaAction: { showingAdd = true }
             )
+            .appearStagger(1, appeared)
 
-            if store.snippets.isEmpty {
-                FlowCard {
-                    HStack(spacing: 12) {
-                        Image(systemName: "scissors").foregroundColor(FlowTheme.inkSecondary)
-                        Text("No snippets yet. Add one and it'll expand automatically when you dictate its trigger.")
-                            .font(.system(size: 14)).foregroundColor(FlowTheme.inkSecondary)
-                    }
-                }
-            } else {
-                FlowCard(padding: 0) {
-                    VStack(spacing: 0) {
-                        ForEach(Array(store.snippets.enumerated()), id: \.element.id) { index, snippet in
-                            if index > 0 { Divider().overlay(FlowTheme.cardStroke) }
-                            SnippetRow(snippet: snippet,
-                                       onEdit: { editing = snippet },
-                                       onDelete: { store.remove(snippet) })
+            Group {
+                if store.snippets.isEmpty {
+                    FlowCard {
+                        HStack(spacing: 12) {
+                            Image(systemName: "scissors").foregroundColor(FlowTheme.inkSecondary)
+                            Text("No snippets yet. Add one and it'll expand automatically when you dictate its trigger.")
+                                .font(.system(size: 14)).foregroundColor(FlowTheme.inkSecondary)
                         }
                     }
-                    // Clip row hover backgrounds to the card's rounded corners so
-                    // they don't bleed past the rounded edges.
-                    .clipShape(RoundedRectangle(cornerRadius: FlowTheme.cornerRadius - 1, style: .continuous))
+                } else {
+                    FlowCard(padding: 0) {
+                        VStack(spacing: 0) {
+                            ForEach(Array(store.snippets.enumerated()), id: \.element.id) { index, snippet in
+                                if index > 0 { Divider().overlay(FlowTheme.cardStroke) }
+                                SnippetRow(snippet: snippet,
+                                           onEdit: { editing = snippet },
+                                           onDelete: { store.remove(snippet) })
+                            }
+                        }
+                        // Clip row hover backgrounds to the card's rounded corners so
+                        // they don't bleed past the rounded edges.
+                        .clipShape(RoundedRectangle(cornerRadius: FlowTheme.cornerRadius - 1, style: .continuous))
+                    }
                 }
             }
+            .appearStagger(2, appeared)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .appearTrigger($appeared)
         .sheet(isPresented: $showingAdd) {
             SnippetEditor(existing: nil)
         }

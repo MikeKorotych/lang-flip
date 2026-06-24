@@ -24,7 +24,7 @@ final class VoiceDictationController {
         guard PermissionStatus.hasMicrophone() else {
             PermissionStatus.requestMicrophone()
             PermissionStatus.openMicrophonePane()
-            Notifications.show(title: "LangFlip Dictation", body: "Microphone access is required for dictation.")
+            Notifications.show(title: "Sayful Dictation", body: "Microphone access is required for dictation.")
             return
         }
         guard VoiceRecorder.shared.start() else {

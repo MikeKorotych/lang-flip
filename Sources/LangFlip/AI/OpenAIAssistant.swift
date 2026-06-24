@@ -283,7 +283,7 @@ final class OpenAIAssistant: AIAssistant {
             req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
         if usesOpenRouter {
-            req.setValue("LangFlip", forHTTPHeaderField: "X-Title")
+            req.setValue("Sayful", forHTTPHeaderField: "X-Title")
             req.setValue("https://github.com/MikeKorotych/lang-flip", forHTTPHeaderField: "HTTP-Referer")
         }
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)

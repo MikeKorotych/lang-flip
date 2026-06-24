@@ -998,22 +998,5 @@ private struct YourVoiceView: View {
     }()
 }
 
-// MARK: - Staggered appear animation
-
-private struct AppearStagger: ViewModifier {
-    let index: Int
-    let appeared: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .opacity(appeared ? 1 : 0)
-            .offset(y: appeared ? 0 : 16)
-            .animation(.easeOut(duration: 0.5).delay(Double(index) * 0.09), value: appeared)
-    }
-}
-
-extension View {
-    func appearStagger(_ index: Int, _ appeared: Bool) -> some View {
-        modifier(AppearStagger(index: index, appeared: appeared))
-    }
-}
+// `AppearStagger` / `.appearStagger` now live in FlowTheme.swift (shared by all
+// sidebar tabs). Insights re-arms its own `appeared` flag in onAppear above.

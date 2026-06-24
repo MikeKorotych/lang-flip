@@ -22,9 +22,12 @@ private func compactShortcut(_ name: String) -> String {
 /// orb is a live control — clicking it starts/stops a hands-free recording
 /// through the same `VoiceDictationController` the global hotkey uses.
 struct HomeView: View {
+    @State private var appeared = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             DisplayText("Welcome back", size: 28)
+                .appearStagger(0, appeared)
 
             HStack(alignment: .top, spacing: 18) {
                 VStack(alignment: .leading, spacing: 22) {
@@ -38,7 +41,9 @@ struct HomeView: View {
                 }
                 .frame(width: 290)
             }
+            .appearStagger(1, appeared)
         }
+        .appearTrigger($appeared)
     }
 }
 
@@ -121,7 +126,7 @@ private struct DictationHeroCard: View {
                     .foregroundColor(.white)
                     .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Dictate in any app and LangFlip writes it wherever your cursor is.")
+                    Text("Dictate in any app and Sayful writes it wherever your cursor is.")
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.8))
                         .fixedSize(horizontal: false, vertical: true)
@@ -361,7 +366,7 @@ private struct SuperpowersCard: View {
                     Text("Superpowers")
                         .font(.system(size: 16, weight: .semibold, design: .serif))
                         .foregroundColor(FlowTheme.ink)
-                    Text("Everything else LangFlip does, by hotkey.")
+                    Text("Everything else Sayful does, by hotkey.")
                         .font(.system(size: 12))
                         .foregroundColor(FlowTheme.inkSecondary)
                 }

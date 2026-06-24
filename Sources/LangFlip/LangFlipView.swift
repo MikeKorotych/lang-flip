@@ -1,0 +1,188 @@
+import SwiftUI
+
+/// LangFlip section: all of the core layout-flip logic in one place. Gathers the
+/// settings that used to live across the old Settings tabs — the enable toggle
+/// and gesture hints (General), the flip behaviors and corrections (Behavior),
+/// and the flip hotkey + modifier gestures (Hotkeys).
+struct LangFlipView: View {
+    @AppStorage("lf.enabled") private var enabled = true
+    @AppStorage("lf.autoFlip") private var autoFlip = true
+    @AppStorage("lf.doubleCapsFix") private var doubleCapsFix = true
+    @AppStorage("lf.crossLayoutFix") private var crossLayoutFix = true
+    @AppStorage("lf.suppressInFullscreen") private var suppressInFullscreen = false
+    @AppStorage("lf.showOverlay") private var showOverlay = true
+    @AppStorage("lf.fixLastSentenceOnSingleShift") private var fixLastSentenceOnSingleShift = true
+    @AppStorage("lf.flipLastWordsOnDoubleShift") private var flipLastWordsOnDoubleShift = true
+    @AppStorage("lf.hotkeyPreset") private var hotkeyPreset = HotkeyPreset.doubleShift.rawValue
+
+    @State private var appeared = false
+    @State private var showingTutorial = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            DisplayText("Flip", size: 26)
+                .appearStagger(0, appeared)
+
+            // Banner — entry point for the interactive onboarding tutorial we'll
+            // build here next. "Try it out" opens the (placeholder) tutorial.
+            FlowHero(
+                titleLeading: "Never retype the",
+                titleEmphasis: "wrong",
+                titleTrailing: "layout.",
+                subtitle: "Caught a sentence typed in the wrong keyboard layout? Select it and flip it in place — no deleting, no copy-paste.",
+                ctaTitle: "Try it out",
+                ctaAction: { showingTutorial = true }
+            )
+            .appearStagger(1, appeared)
+
+            FlowSettingsGroup {
+                FlowToggleRow(title: "Flip enabled", isOn: $enabled)
+                FlowToggleRow(title: "Auto-flip at word end",
+                              detail: "After Space or punctuation, Sayful can fix a word that was typed in the wrong layout. Press Backspace right away to undo and remember an exception.",
+                              isOn: $autoFlip)
+            }
+            .appearStagger(2, appeared)
+
+            FlowSettingsGroup("Flip hotkey") {
+                FlowPickerRow(title: "Flip hotkey",
+                              detail: "Flips selected text between keyboard layouts. If no text is selected and the no-selection toggle is on, the same gesture can try the last words before the cursor.",
+                              selection: $hotkeyPreset,
+                              options: HotkeyPreset.allCases.map { (value: $0.rawValue, label: $0.displayName) })
+            }
+            .appearStagger(3, appeared)
+
+            FlowSettingsGroup("No-selection actions") {
+                FlowToggleRow(title: "Single Shift fixes last sentence", isOn: $fixLastSentenceOnSingleShift)
+                FlowToggleRow(title: "Double Shift flips last words",
+                              detail: "When no text is selected, Sayful reads the focused text field through Accessibility and rewrites only the text before the cursor. Turn this off if a specific app behaves unpredictably.",
+                              isOn: $flipLastWordsOnDoubleShift)
+            }
+            .appearStagger(4, appeared)
+
+            FlowSettingsGroup("Corrections") {
+                FlowToggleRow(title: "Fix sticky-shift typos (WOrld → World)",
+                              detail: "Fixes accidental double-capital starts when the corrected word is clearly safe.",
+                              isOn: $doubleCapsFix)
+                FlowToggleRow(title: "Fix UK ↔ RU letter slips (ы ↔ і, э ↔ є)",
+                              detail: "Fixes common Ukrainian/Russian letter slips when the corrected word is in the target dictionary.",
+                              isOn: $crossLayoutFix)
+            }
+            .appearStagger(5, appeared)
+
+            FlowSettingsGroup("Overlay & focus") {
+                overlayRow
+                FlowToggleRow(title: "Pause auto-flip in fullscreen apps",
+                              detail: "Useful for games, video players, and other fullscreen apps where automatic changes may be distracting.",
+                              isOn: $suppressInFullscreen)
+            }
+            .appearStagger(6, appeared)
+
+            FlowSettingsGroup("Shift gestures") {
+                gestureHint("1.circle", "Single Shift fixes selected text or the last sentence.")
+                gestureHint("2.circle", "Double-tap Shift flips selected text or the last words.")
+                gestureHint("3.circle", "Triple-tap Shift uses the secondary language.")
+                gestureHint("pause.circle", "Press both Shift keys to pause or resume.")
+                helpText("Single, double, and triple Shift depend on press timing, so they stay as fixed gestures for now.")
+            }
+            .appearStagger(7, appeared)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .appearTrigger($appeared)
+        .sheet(isPresented: $showingTutorial) { LangFlipTutorialSheet() }
+    }
+
+    private var overlayRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                Text("Show flip overlay").font(.system(size: 14)).foregroundColor(FlowTheme.ink)
+                Spacer(minLength: 12)
+                FlowSmallButton(title: "Preview") { previewOverlay() }
+                Toggle("", isOn: $showOverlay)
+                    .labelsHidden().toggleStyle(.switch).tint(FlowTheme.accent)
+            }
+            Text("Shows a small visual confirmation whenever Sayful rewrites text.")
+                .font(.system(size: 12))
+                .foregroundColor(FlowTheme.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func previewOverlay() {
+        // Force the overlay to play even when the user has it toggled off, so
+        // they can see what they'd be opting into before flipping the switch.
+        let wasOn = Settings.shared.showOverlay
+        Settings.shared.showOverlay = true
+        FlipOverlay.shared.show()
+        if !wasOn {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                Settings.shared.showOverlay = false
+            }
+        }
+    }
+
+    private func gestureHint(_ icon: String, _ text: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(FlowTheme.accent)
+                .frame(width: 20)
+            Text(text)
+                .font(.system(size: 13))
+                .foregroundColor(FlowTheme.inkSecondary)
+        }
+    }
+
+    @ViewBuilder
+    private func helpText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundColor(FlowTheme.inkSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Placeholder for the interactive layout-flip tutorial. For now it explains how
+/// to try the feature by hand; the live, step-by-step onboarding lands here next.
+private struct LangFlipTutorialSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    private let steps: [(icon: String, text: String)] = [
+        ("text.cursor", "Type a sentence in the wrong keyboard layout (e.g. English while your layout is Ukrainian)."),
+        ("selection.pin.in.out", "Select the garbled text."),
+        ("arrow.2.squarepath", "Double-tap Shift — Sayful flips it to the right layout in place."),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            DisplayText("Try a flip", size: 20)
+
+            Text("An interactive walkthrough is coming here. For now, give it a go yourself:")
+                .font(.system(size: 13))
+                .foregroundColor(FlowTheme.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: step.icon)
+                            .font(.system(size: 15))
+                            .foregroundColor(FlowTheme.accent)
+                            .frame(width: 24)
+                        Text(step.text)
+                            .font(.system(size: 13))
+                            .foregroundColor(FlowTheme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            HStack {
+                Spacer()
+                FlowSmallButton(title: "Got it", prominent: true) { dismiss() }
+            }
+        }
+        .padding(24)
+        .frame(width: 460)
+        .background(FlowTheme.paper)
+    }
+}

@@ -723,7 +723,7 @@ final class Settings {
 
     /// Bouncy app-icon flourish at the bottom of the screen on every
     /// rewrite. On by default, matching the Preferences UI; users who
-    /// find it distracting can turn it off in Preferences > Behavior.
+    /// find it distracting can turn it off in the LangFlip section.
     var showOverlay: Bool {
         get { defaults.object(forKey: Keys.showOverlay) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.showOverlay) }

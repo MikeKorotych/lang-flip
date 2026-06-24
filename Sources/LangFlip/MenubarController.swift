@@ -10,14 +10,14 @@ final class MenubarController: NSObject {
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
 
-    private let openItem = NSMenuItem(title: "Open LangFlip", action: #selector(openMain), keyEquivalent: "")
+    private let openItem = NSMenuItem(title: "Open Sayful", action: #selector(openMain), keyEquivalent: "")
     private let updatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     private let pasteLastItem = NSMenuItem(title: "Paste last transcript", action: #selector(pasteLastTranscript), keyEquivalent: "v")
     private let pastePreviewItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
     private let languagesItem = NSMenuItem(title: "Language", action: nil, keyEquivalent: "")
     private let helpItem = NSMenuItem(title: "Help", action: #selector(openHelp), keyEquivalent: "")
-    private let quitItem = NSMenuItem(title: "Quit LangFlip", action: #selector(quit), keyEquivalent: "q")
+    private let quitItem = NSMenuItem(title: "Quit Sayful", action: #selector(quit), keyEquivalent: "q")
 
     /// Cached, resized copy of AppIcon for the menu bar. macOS renders
     /// menu-bar items at ~18pt; pre-resizing here keeps the layout stable.
@@ -44,7 +44,7 @@ final class MenubarController: NSObject {
             } else {
                 button.title = "⌥"
             }
-            button.toolTip = "LangFlip"
+            button.toolTip = "Sayful"
         }
 
         for item in [openItem, updatesItem, pasteLastItem, settingsItem, helpItem, quitItem] {

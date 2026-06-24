@@ -383,3 +383,37 @@ struct FlowTextField: View {
             )
     }
 }
+
+// MARK: - Staggered appear animation
+
+/// Fades + slides a view up as it appears, with a per-index delay so a column
+/// of elements cascades in. Pair with a `@State var appeared` re-armed by
+/// `appearTrigger` so it replays every time the view (e.g. a sidebar tab) opens.
+struct AppearStagger: ViewModifier {
+    let index: Int
+    let appeared: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 16)
+            .animation(.easeOut(duration: 0.5).delay(Double(index) * 0.09), value: appeared)
+    }
+}
+
+extension View {
+    func appearStagger(_ index: Int, _ appeared: Bool) -> some View {
+        modifier(AppearStagger(index: index, appeared: appeared))
+    }
+
+    /// Re-arms a staggered-appear flag each time the view appears (e.g. on a
+    /// sidebar tab switch, which recreates the view), so `appearStagger` replays.
+    func appearTrigger(_ appeared: Binding<Bool>) -> some View {
+        onAppear {
+            appeared.wrappedValue = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+                appeared.wrappedValue = true
+            }
+        }
+    }
+}

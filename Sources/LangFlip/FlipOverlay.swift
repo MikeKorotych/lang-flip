@@ -8,7 +8,7 @@ import SwiftUI
 ///
 /// Off by default — the icon-style overlay is more of a delight than a
 /// utility, and continuous flipping while typing in the wrong layout
-/// could be distracting. Opt in via Preferences > Behavior.
+/// could be distracting. Opt in via the LangFlip section.
 final class FlipOverlay {
     static let shared = FlipOverlay()
 

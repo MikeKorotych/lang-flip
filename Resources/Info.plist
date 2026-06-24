@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>LangFlip</string>
+	<string>Sayful</string>
 	<key>CFBundleExecutable</key>
 	<string>LangFlip</string>
 	<key>CFBundleIconFile</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleIdentifier</key>
 	<string>com.antonpinkevych.lang-flip</string>
 	<key>CFBundleName</key>
-	<string>LangFlip</string>
+	<string>Sayful</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

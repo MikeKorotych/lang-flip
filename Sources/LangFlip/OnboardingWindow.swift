@@ -29,7 +29,7 @@ final class OnboardingWindowController: NSObject {
             })
             let host = NSHostingController(rootView: view)
             let win = NSWindow(contentViewController: host)
-            win.title = "LangFlip"
+            win.title = "Sayful"
             win.styleMask = [.titled, .closable]
             win.setContentSize(NSSize(width: 600, height: 680))
             win.isReleasedWhenClosed = false
@@ -477,7 +477,7 @@ private struct SetupChecklist: View {
             Settings.shared.returnToOnboardingAfterScreenRecording = true
             PermissionStatus.requestScreenRecording()
             PermissionStatus.openScreenRecordingPane()
-            ocrState = .failed("Screen Recording permission is required. Toggle LangFlip on. If macOS asks to restart LangFlip, reopen it and this setup screen will continue here.")
+            ocrState = .failed("Screen Recording permission is required. Toggle Sayful on. If macOS asks to restart Sayful, reopen it and this setup screen will continue here.")
             return
         }
         Settings.shared.returnToOnboardingAfterScreenRecording = false
@@ -750,7 +750,7 @@ private struct OnboardingView: View {
                 .frame(width: 96, height: 96)
         }
         VStack(spacing: 4) {
-            Text(status.allGranted ? "All set!" : "Welcome to LangFlip")
+            Text(status.allGranted ? "All set!" : "Welcome to Sayful")
                 .font(.system(size: 20, weight: .semibold))
             Text(headerSubtitle)
                 .font(.body)
@@ -767,7 +767,7 @@ private struct OnboardingView: View {
         case 1:
             return "One more permission to go."
         default:
-            return "LangFlip is ready. One quick setup pass can make the first session much better."
+            return "Sayful is ready. One quick setup pass can make the first session much better."
         }
     }
 
@@ -792,7 +792,7 @@ private struct OnboardingView: View {
             // Plain helper text while the user is mid-flow. Tells them
             // explicitly to come back, since otherwise it's easy to assume
             // System Settings is where the app lives now.
-            Text("After toggling LangFlip on, this window will update automatically. You don't have to come back manually.")
+            Text("After toggling Sayful on, this window will update automatically. You don't have to come back manually.")
                 .font(.callout)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -816,18 +816,18 @@ private struct OnboardingView: View {
         var rationale: String {
             switch self {
             case .accessibility:
-                return "Lets LangFlip see the keys you press, so it can detect a wrong-layout word."
+                return "Lets Sayful see the keys you press, so it can detect a wrong-layout word."
             case .inputMonitoring:
-                return "Lets LangFlip receive keyboard events even while you type in another app."
+                return "Lets Sayful receive keyboard events even while you type in another app."
             }
         }
 
         var instruction: LocalizedStringKey {
             switch self {
             case .accessibility:
-                return "Click below, find **LangFlip** in the list and toggle it on."
+                return "Click below, find **Sayful** in the list and toggle it on."
             case .inputMonitoring:
-                return "Click below, press **+** if LangFlip is missing, add **/Applications/LangFlip.app**, then toggle it on."
+                return "Click below, press **+** if Sayful is missing, add **/Applications/LangFlip.app**, then toggle it on."
             }
         }
 

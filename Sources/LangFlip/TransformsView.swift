@@ -8,12 +8,14 @@ struct TransformsView: View {
     @State private var editing: Transform?
     @State private var showingNew = false
     @State private var showingDemo = false
+    @State private var appeared = false
 
     private let columns = [GridItem(.adaptive(minimum: 210), spacing: 16)]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             DisplayText("Transforms", size: 26)
+                .appearStagger(0, appeared)
 
             FlowHero(
                 titleLeading: "Transform works anywhere you",
@@ -23,6 +25,7 @@ struct TransformsView: View {
                 ctaTitle: "Try it out",
                 ctaAction: { showingDemo = true }
             )
+            .appearStagger(1, appeared)
 
             HStack {
                 Text("My Transforms")
@@ -32,6 +35,7 @@ struct TransformsView: View {
                 FlowSmallButton(title: "Reset to defaults") { store.resetToDefaults() }
                 FlowSmallButton(title: "Create New", prominent: true) { showingNew = true }
             }
+            .appearStagger(2, appeared)
 
             LazyVGrid(columns: columns, spacing: 16) {
                 ForEach(store.transforms) { transform in
@@ -39,8 +43,10 @@ struct TransformsView: View {
                 }
                 CreateCard { showingNew = true }
             }
+            .appearStagger(3, appeared)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .appearTrigger($appeared)
         .sheet(isPresented: $showingNew) { TransformEditor(existing: nil) }
         .sheet(item: $editing) { t in TransformEditor(existing: t) }
         .sheet(isPresented: $showingDemo) { TransformDemo() }
@@ -224,7 +230,7 @@ private struct TransformDemo: View {
                 }.buttonStyle(.plain)
             }
 
-            Text("Select text in any app, then press a Transform's shortcut. LangFlip rewrites the selection in place.")
+            Text("Select text in any app, then press a Transform's shortcut. Sayful rewrites the selection in place.")
                 .font(.system(size: 14)).foregroundColor(FlowTheme.inkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 

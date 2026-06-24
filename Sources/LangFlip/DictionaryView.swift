@@ -6,18 +6,25 @@ import SwiftUI
 struct DictionaryView: View {
     enum Tab: String, CaseIterable { case languages = "Languages", learning = "Learning" }
     @State private var tab: Tab = .languages
+    @State private var appeared = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             DisplayText("Dictionary", size: 26)
+                .appearStagger(0, appeared)
             tabBar
-            if tab == .languages {
-                LanguagesPane()
-            } else {
-                LearningPane()
+                .appearStagger(1, appeared)
+            Group {
+                if tab == .languages {
+                    LanguagesPane()
+                } else {
+                    LearningPane()
+                }
             }
+            .appearStagger(2, appeared)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .appearTrigger($appeared)
     }
 
     private var tabBar: some View {
@@ -108,7 +115,7 @@ private struct DictionaryPacks: View {
                 .foregroundColor(FlowTheme.inkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Uses \(DictionaryManager.extendedPackSource) (\(DictionaryManager.extendedPackLicense)). LangFlip keeps the most useful clean words for each language.")
+            Text("Uses \(DictionaryManager.extendedPackSource) (\(DictionaryManager.extendedPackLicense)). Sayful keeps the most useful clean words for each language.")
                 .font(.system(size: 11))
                 .foregroundColor(FlowTheme.inkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -188,7 +195,7 @@ private struct LearningPane: View {
                 }
 
                 if alwaysFlipRules.isEmpty {
-                    hint("Add words you always want LangFlip to rewrite to a specific layout, even before the full dictionaries finish loading.")
+                    hint("Add words you always want Sayful to rewrite to a specific layout, even before the full dictionaries finish loading.")
                 } else {
                     VStack(spacing: 8) {
                         ForEach(alwaysFlipRules) { rule in
@@ -226,7 +233,7 @@ private struct LearningPane: View {
                 }
 
                 if learnedExceptions.isEmpty {
-                    hint("No learned exceptions yet. When you undo a bad auto-flip with Backspace, LangFlip remembers that word here.")
+                    hint("No learned exceptions yet. When you undo a bad auto-flip with Backspace, Sayful remembers that word here.")
                 } else {
                     VStack(spacing: 8) {
                         ForEach(learnedExceptions, id: \.self) { word in
