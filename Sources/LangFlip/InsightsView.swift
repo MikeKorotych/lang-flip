@@ -598,11 +598,14 @@ private struct ActivityCard: View {
 
     static let dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-    private var counts: [Date: Int] {
+    /// Words dictated per day — drives the heatmap intensity. (Was a count of
+    /// dictation events, which made a 500-word day and a 2700-word day share a
+    /// colour whenever they had a similar number of sessions.)
+    private var wordsByDay: [Date: Int] {
         let cal = Calendar.current
         var result: [Date: Int] = [:]
         for entry in history.entries {
-            result[cal.startOfDay(for: entry.date), default: 0] += 1
+            result[cal.startOfDay(for: entry.date), default: 0] += entry.wordCount
         }
         return result
     }
@@ -620,13 +623,16 @@ private struct ActivityCard: View {
 
     private func level(for day: Date?) -> Int {
         guard let day else { return -1 } // padding
-        let c = counts[Calendar.current.startOfDay(for: day)] ?? 0
-        switch c {
-        case 0: return 0
-        case 1: return 1
-        case 2...3: return 2
-        case 4...6: return 3
-        default: return 4
+        // Bucket by words dictated that day, not session count, so the colour
+        // reflects how much was actually written. Thresholds spread typical
+        // daily volumes across the four levels (e.g. ~500 words → 2, ~2700 → 4).
+        let words = wordsByDay[Calendar.current.startOfDay(for: day)] ?? 0
+        switch words {
+        case 0:          return 0
+        case 1...200:    return 1
+        case 201...600:  return 2
+        case 601...1500: return 3
+        default:         return 4
         }
     }
 
