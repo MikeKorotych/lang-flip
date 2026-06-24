@@ -513,6 +513,12 @@ private struct ActivityCard: View {
 
     var body: some View {
         let cell = cellSize
+        // Build these once per render. `wordsByDay` and `weeks` are O(history)
+        // computed properties; calling `level(for:)` per cell previously rebuilt
+        // the whole words dictionary ~90 times (once per heatmap cell), which is
+        // what made opening the Insights tab stutter.
+        let wordsPerDay = wordsByDay
+        let weeksGrid = weeks
         return FlowCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
@@ -554,11 +560,11 @@ private struct ActivityCard: View {
                             }
                         }
                         // Grid
-                        ForEach(Array(weeks.enumerated()), id: \.offset) { weekIndex, week in
+                        ForEach(Array(weeksGrid.enumerated()), id: \.offset) { weekIndex, week in
                             VStack(spacing: gap) {
                                 ForEach(0..<7, id: \.self) { dayIndex in
                                     HeatCell(
-                                        level: level(for: week[dayIndex]),
+                                        level: level(for: week[dayIndex], wordsPerDay),
                                         day: week[dayIndex],
                                         size: cell,
                                         // Start after the card has faded in (~0.55s)
@@ -621,12 +627,12 @@ private struct ActivityCard: View {
         return DayTooltip(date: cal.startOfDay(for: day), words: words, apps: apps, topApp: topApp)
     }
 
-    private func level(for day: Date?) -> Int {
+    private func level(for day: Date?, _ wordsPerDay: [Date: Int]) -> Int {
         guard let day else { return -1 } // padding
         // Bucket by words dictated that day, not session count, so the colour
         // reflects how much was actually written. Thresholds spread typical
         // daily volumes across the four levels (e.g. ~500 words → 2, ~2700 → 4).
-        let words = wordsByDay[Calendar.current.startOfDay(for: day)] ?? 0
+        let words = wordsPerDay[Calendar.current.startOfDay(for: day)] ?? 0
         switch words {
         case 0:          return 0
         case 1...200:    return 1
