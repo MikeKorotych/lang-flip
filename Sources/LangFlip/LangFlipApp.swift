@@ -156,6 +156,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 assistant.warmUp()
             }
         }
+
+        // Surface the app's main window on launch instead of starting silently
+        // in the menu bar — flips the activation policy to .regular for us.
+        MainWindowController.shared.show()
     }
 
     /// Create + start the keyboard event tap if it isn't running and the two

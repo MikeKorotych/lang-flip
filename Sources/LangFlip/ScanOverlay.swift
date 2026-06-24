@@ -83,10 +83,14 @@ final class ScanOverlay {
     private func position(_ panel: NSPanel?) {
         guard let panel else { return }
         let screen = screenForOverlay()
-        let size = panel.frame.size
-        let x = screen.frame.midX - size.width / 2
+        // Centre using the known panel side, NOT panel.frame.size: on the very
+        // first show the hosting controller hasn't settled the window size yet,
+        // so reading panel.frame gave a too-small width and the overlay landed
+        // off-centre (shifted right). Setting an explicit square frame fixes it.
+        let side = Self.panelSize
+        let x = screen.frame.midX - side / 2
         let y = screen.visibleFrame.minY + Self.bottomInset
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        panel.setFrame(NSRect(x: x, y: y, width: side, height: side), display: false)
     }
 
     private func screenForOverlay() -> NSScreen {
