@@ -1350,59 +1350,70 @@ struct BehaviorTab: View {
     @AppStorage("lf.flipLastWordsOnDoubleShift") private var flipLastWordsOnDoubleShift = true
 
     var body: some View {
-        Form {
-            Section {
-                Toggle("Auto-flip at word end", isOn: $autoFlip)
-                helpText("After Space or punctuation, LangFlip can fix a word that was typed in the wrong layout. Press Backspace right away to undo and remember an exception.")
-            }
-            Section("No-selection actions") {
-                Toggle("Single Shift fixes last sentence", isOn: $fixLastSentenceOnSingleShift)
-                Toggle("Double Shift flips last words", isOn: $flipLastWordsOnDoubleShift)
-                helpText("When no text is selected, LangFlip reads the focused text field through Accessibility and rewrites only the text before the cursor. Turn this off if a specific app behaves unpredictably.")
-            }
-            Section {
-                Toggle("Fix sticky-shift typos (WOrld → World)", isOn: $doubleCapsFix)
-                helpText("Fixes accidental double-capital starts when the corrected word is clearly safe.")
-            }
-            Section {
-                Toggle("Fix UK ↔ RU letter slips (ы ↔ і, э ↔ є)", isOn: $crossLayoutFix)
-                helpText("Fixes common Ukrainian/Russian letter slips when the corrected word is in the target dictionary.")
-            }
-            Section {
-                HStack {
-                    Toggle("Show flip overlay", isOn: $showOverlay)
-                    Spacer()
-                    Button("Preview") {
-                        // Force the overlay to play even when the user has
-                        // it toggled off, so they can see what they'd be
-                        // opting into before flipping the switch.
-                        let wasOn = Settings.shared.showOverlay
-                        Settings.shared.showOverlay = true
-                        FlipOverlay.shared.show()
-                        if !wasOn {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                                Settings.shared.showOverlay = false
-                            }
-                        }
-                    }
-                    .controlSize(.small)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                FlowSettingsGroup {
+                    FlowToggleRow(title: "Auto-flip at word end",
+                                  detail: "After Space or punctuation, LangFlip can fix a word that was typed in the wrong layout. Press Backspace right away to undo and remember an exception.",
+                                  isOn: $autoFlip)
                 }
-                helpText("Shows a small visual confirmation whenever LangFlip rewrites text.")
+
+                FlowSettingsGroup("No-selection actions") {
+                    FlowToggleRow(title: "Single Shift fixes last sentence", isOn: $fixLastSentenceOnSingleShift)
+                    FlowToggleRow(title: "Double Shift flips last words",
+                                  detail: "When no text is selected, LangFlip reads the focused text field through Accessibility and rewrites only the text before the cursor. Turn this off if a specific app behaves unpredictably.",
+                                  isOn: $flipLastWordsOnDoubleShift)
+                }
+
+                FlowSettingsGroup("Corrections") {
+                    FlowToggleRow(title: "Fix sticky-shift typos (WOrld → World)",
+                                  detail: "Fixes accidental double-capital starts when the corrected word is clearly safe.",
+                                  isOn: $doubleCapsFix)
+                    FlowToggleRow(title: "Fix UK ↔ RU letter slips (ы ↔ і, э ↔ є)",
+                                  detail: "Fixes common Ukrainian/Russian letter slips when the corrected word is in the target dictionary.",
+                                  isOn: $crossLayoutFix)
+                }
+
+                FlowSettingsGroup("Overlay & focus") {
+                    overlayRow
+                    FlowToggleRow(title: "Pause auto-flip in fullscreen apps",
+                                  detail: "Useful for games, video players, and other fullscreen apps where automatic changes may be distracting.",
+                                  isOn: $suppressInFullscreen)
+                }
             }
-            Section {
-                Toggle("Pause auto-flip in fullscreen apps", isOn: $suppressInFullscreen)
-                helpText("Useful for games, video players, and other fullscreen apps where automatic changes may be distracting.")
-            }
+            .padding(28)
+            .frame(maxWidth: 820, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .formStyle(.grouped)
     }
 
-    @ViewBuilder
-    private func helpText(_ text: String) -> some View {
-        Text(text)
-            .font(.callout)
-            .foregroundColor(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+    private var overlayRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                Text("Show flip overlay").font(.system(size: 14)).foregroundColor(FlowTheme.ink)
+                Spacer(minLength: 12)
+                FlowSmallButton(title: "Preview") { previewOverlay() }
+                Toggle("", isOn: $showOverlay)
+                    .labelsHidden().toggleStyle(.switch).tint(FlowTheme.accent)
+            }
+            Text("Shows a small visual confirmation whenever LangFlip rewrites text.")
+                .font(.system(size: 12))
+                .foregroundColor(FlowTheme.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func previewOverlay() {
+        // Force the overlay to play even when the user has it toggled off, so
+        // they can see what they'd be opting into before flipping the switch.
+        let wasOn = Settings.shared.showOverlay
+        Settings.shared.showOverlay = true
+        FlipOverlay.shared.show()
+        if !wasOn {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                Settings.shared.showOverlay = false
+            }
+        }
     }
 }
 
