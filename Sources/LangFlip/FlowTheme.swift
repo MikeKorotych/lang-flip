@@ -277,6 +277,35 @@ struct FlowPickerRow<T: Hashable>: View {
     }
 }
 
+/// Label (+ optional detail) with a trailing slider and a value readout.
+struct FlowSliderRow: View {
+    let title: String
+    var detail: String?
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    var step: Double = 1
+    let valueLabel: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                Text(title).font(.system(size: 14)).foregroundColor(FlowTheme.ink)
+                Slider(value: $value, in: range, step: step).tint(FlowTheme.accent)
+                Text(valueLabel)
+                    .font(.system(size: 12))
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .frame(width: 50, alignment: .trailing)
+            }
+            if let detail {
+                Text(detail)
+                    .font(.system(size: 12))
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
 /// Status row for a system permission, with an "Open System Settings" action.
 struct FlowPermissionRow: View {
     let title: String
