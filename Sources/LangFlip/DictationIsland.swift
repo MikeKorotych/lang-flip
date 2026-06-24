@@ -147,7 +147,7 @@ final class DictationIslandController {
         DispatchQueue.main.async { [self] in
             state.showCancelledToast = true
             toastTimer?.invalidate()
-            toastTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: false) { [weak self] _ in
+            toastTimer = Timer.scheduledTimer(withTimeInterval: IslandMetrics.toastDuration, repeats: false) { [weak self] _ in
                 self?.dismissToast()
             }
         }
@@ -216,11 +216,14 @@ enum IslandMetrics {
     static let micWidth: CGFloat = 34           // ~round mic button
     static let recordingWidth: CGFloat = 156    // compact: little slack around the waves
     static let transcribingWidth: CGFloat = 164
-    static let toastWidth: CGFloat = 210
+    static let toastWidth: CGFloat = 270        // fits "Transcript cancelled" + Undo on one line
 
     static let tooltipWidth: CGFloat = 188
     static let tooltipHeight: CGFloat = 26
     static let tooltipGap: CGFloat = 7
+
+    /// How long the "Transcript cancelled" toast lives before it auto-dismisses.
+    static let toastDuration: TimeInterval = 4
 
     /// Current pill content size (width drives the in-place animation).
     static func contentSize(for state: DictationIslandState) -> CGSize {
@@ -258,6 +261,8 @@ private enum IslandColor {
 
 struct DictationIslandView: View {
     @ObservedObject var state: DictationIslandState
+
+    @State private var toastProgress: CGFloat = 1   // 1 → 0 over the toast lifetime
 
     private var pillWidth: CGFloat { IslandMetrics.contentSize(for: state).width }
     private var pillHeight: CGFloat { IslandMetrics.contentSize(for: state).height }
@@ -351,6 +356,8 @@ struct DictationIslandView: View {
             Text("Transcript cancelled")
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundColor(IslandColor.text)
+                .lineLimit(1)
+                .fixedSize()
             Spacer(minLength: 4)
             Button {
                 VoiceDictationController.shared.undoCancel()
@@ -365,6 +372,19 @@ struct DictationIslandView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 12)
+        // Lifetime progress bar pinned to the bottom edge, draining left→right.
+        .overlay(alignment: .bottom) {
+            Capsule()
+                .fill(IslandColor.text.opacity(0.4))
+                .frame(height: 2.5)
+                .scaleEffect(x: toastProgress, anchor: .leading)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 3)
+        }
+        .onAppear {
+            toastProgress = 1
+            withAnimation(.linear(duration: IslandMetrics.toastDuration)) { toastProgress = 0 }
+        }
     }
 
     private var tooltip: some View {
