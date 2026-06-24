@@ -1176,66 +1176,72 @@ struct HotkeysTab: View {
     @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.fnOption.rawValue
 
     var body: some View {
-        Form {
-            Section {
-                Picker("Hotkey", selection: $hotkeyPreset) {
-                    ForEach(HotkeyPreset.allCases) { preset in
-                        Text(preset.displayName).tag(preset.rawValue)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                FlowSettingsGroup("Layout flip") {
+                    FlowPickerRow(title: "Flip hotkey",
+                                  detail: "Flips selected text between keyboard layouts. If no text is selected and the Behavior toggle is on, the same gesture can try the last words before the cursor.",
+                                  selection: $hotkeyPreset,
+                                  options: HotkeyPreset.allCases.map { (value: $0.rawValue, label: $0.displayName) })
+                }
+
+                FlowSettingsGroup("AI actions") {
+                    ShortcutRecorderRow(
+                        title: "Translate selection",
+                        preset: $translationHotkeyPreset,
+                        custom: $translationHotkeyCustom,
+                        choices: GlobalShortcutPreset.translationChoices
+                    )
+                    ShortcutRecorderRow(
+                        title: "Capture text from screen",
+                        preset: $screenTextCaptureHotkeyPreset,
+                        custom: $screenTextCaptureHotkeyCustom,
+                        choices: GlobalShortcutPreset.screenCaptureChoices
+                    )
+                    helpText("These shortcuts work globally. Turn each feature on or off in AI settings without losing the shortcut you picked here.")
+                }
+
+                FlowSettingsGroup("Voice") {
+                    ShortcutRecorderRow(
+                        title: "Read selected text aloud",
+                        preset: $readSelectionHotkeyPreset,
+                        custom: $readSelectionHotkeyCustom,
+                        choices: GlobalShortcutPreset.readAloudChoices
+                    )
+                    helpText("Reads the current text selection with the voice backend selected in Voice settings.")
+                }
+
+                FlowSettingsGroup("Dictation") {
+                    FlowPickerRow(title: "Push-to-talk",
+                                  selection: $dictationPushToTalkShortcut,
+                                  options: DictationPushToTalkShortcut.allCases.map { (value: $0.rawValue, label: $0.displayName) })
+                    FlowPickerRow(title: "Hands-free toggle",
+                                  selection: $dictationHandsFreeShortcut,
+                                  options: DictationHandsFreeShortcut.allCases.map { (value: $0.rawValue, label: $0.displayName) })
+                    helpText("Push-to-talk records while held. Hands-free starts and stops recording with the same modifier chord. Enable or disable each mode in Voice.")
+                }
+
+                FlowSettingsGroup("Modifier gestures") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Single Shift fixes selected text or the last sentence.")
+                            .font(.system(size: 13)).foregroundColor(FlowTheme.ink)
+                        Text("Double Shift flips selected text or the last words.")
+                            .font(.system(size: 13)).foregroundColor(FlowTheme.ink)
+                        helpText("Single and double Shift depend on press timing, so they stay as fixed gestures for now. Dictation modifier gestures are configurable above.")
                     }
                 }
-                helpText("Flips selected text between keyboard layouts. If no text is selected and the Behavior toggle is on, the same gesture can try the last words before the cursor.")
             }
-            Section("AI actions") {
-                ShortcutRecorderRow(
-                    title: "Translate selection",
-                    preset: $translationHotkeyPreset,
-                    custom: $translationHotkeyCustom,
-                    choices: GlobalShortcutPreset.translationChoices
-                )
-                ShortcutRecorderRow(
-                    title: "Capture text from screen",
-                    preset: $screenTextCaptureHotkeyPreset,
-                    custom: $screenTextCaptureHotkeyCustom,
-                    choices: GlobalShortcutPreset.screenCaptureChoices
-                )
-                helpText("These shortcuts work globally. Turn each feature on or off in AI settings without losing the shortcut you picked here.")
-            }
-            Section("Voice") {
-                ShortcutRecorderRow(
-                    title: "Read selected text aloud",
-                    preset: $readSelectionHotkeyPreset,
-                    custom: $readSelectionHotkeyCustom,
-                    choices: GlobalShortcutPreset.readAloudChoices
-                )
-                helpText("Reads the current text selection with the voice backend selected in Voice settings.")
-            }
-            Section("Dictation") {
-                Picker("Push-to-talk", selection: $dictationPushToTalkShortcut) {
-                    ForEach(DictationPushToTalkShortcut.allCases) { shortcut in
-                        Text(shortcut.displayName).tag(shortcut.rawValue)
-                    }
-                }
-                Picker("Hands-free toggle", selection: $dictationHandsFreeShortcut) {
-                    ForEach(DictationHandsFreeShortcut.allCases) { shortcut in
-                        Text(shortcut.displayName).tag(shortcut.rawValue)
-                    }
-                }
-                helpText("Push-to-talk records while held. Hands-free starts and stops recording with the same modifier chord. Enable or disable each mode in Voice.")
-            }
-            Section("Modifier gestures") {
-                Text("Single Shift fixes selected text or the last sentence.")
-                Text("Double Shift flips selected text or the last words.")
-                helpText("Single and double Shift depend on press timing, so they stay as fixed gestures for now. Dictation modifier gestures are configurable above.")
-            }
+            .padding(28)
+            .frame(maxWidth: 820, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .formStyle(.grouped)
     }
 
     @ViewBuilder
     private func helpText(_ text: String) -> some View {
         Text(text)
-            .font(.callout)
-            .foregroundColor(.secondary)
+            .font(.system(size: 12))
+            .foregroundColor(FlowTheme.inkSecondary)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -1252,21 +1258,24 @@ private struct ShortcutRecorderRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Picker(title, selection: $preset) {
+            HStack(spacing: 10) {
+                Text(title).font(.system(size: 14)).foregroundColor(FlowTheme.ink)
+                Spacer(minLength: 12)
+                Picker("", selection: $preset) {
                     ForEach(choices) { shortcut in
                         Text(shortcut.displayName).tag(shortcut.rawValue)
                     }
                 }
+                .labelsHidden().pickerStyle(.menu).tint(FlowTheme.ink).fixedSize()
                 .disabled(hasCustom || isRecording)
 
-                Button(isRecording ? "Press keys..." : "Record") {
+                FlowSmallButton(title: isRecording ? "Press keys…" : "Record") {
                     startRecording()
                 }
                 .disabled(isRecording)
 
                 if hasCustom {
-                    Button("Use preset") {
+                    FlowSmallButton(title: "Use preset") {
                         custom = ""
                         warning = ""
                     }
@@ -1277,17 +1286,17 @@ private struct ShortcutRecorderRow: View {
                 HStack(spacing: 8) {
                     if let shortcut = GlobalShortcut.decode(custom) {
                         Text("Custom: \(shortcut.displayName)")
-                            .foregroundColor(.green)
+                            .foregroundColor(FlowTheme.accent)
                     } else if isRecording {
                         Text("Press modifiers plus a normal key. Esc cancels.")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(FlowTheme.inkSecondary)
                     }
                     if !warning.isEmpty {
                         Text(warning)
                             .foregroundColor(.orange)
                     }
                 }
-                .font(.caption)
+                .font(.system(size: 12))
             }
         }
         .onDisappear {
