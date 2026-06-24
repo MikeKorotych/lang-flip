@@ -1,12 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// Welcome / permissions wizard shown on first launch (and on any launch
-/// where a previously-granted permission has been revoked). Walks the user
-/// through Microphone, Accessibility, and Input Monitoring one at a time so
-/// they don't have to figure out the right order or remember to come back to
-/// the window after a System Settings detour. Dictation-first: the microphone
-/// comes first because speaking-to-text is the core feature.
+/// Welcome screen shown on first launch. Dictation-first: it asks for the
+/// microphone — the one permission the hero feature (speak-to-text) needs — and
+/// nothing else. The flip/hotkey permissions (Accessibility, Input Monitoring)
+/// are granted later from the LangFlip tab's Permissions section, so a brand-new
+/// user gets the shortest possible path to "speak and it types".
 final class OnboardingWindowController: NSObject {
     static let shared = OnboardingWindowController()
 
@@ -90,6 +89,8 @@ private struct SetupChecklist: View {
 
     let onOpenPreferences: () -> Void
 
+    @ObservedObject private var auth = SupabaseBackendAuth.shared
+    @State private var signingIn = false
     @State private var dictionaryStats = DictionaryManager.stats()
     @State private var dictionaryState: RunState = .idle
     @State private var dictionaryProgress: Double?
@@ -107,6 +108,25 @@ private struct SetupChecklist: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Divider().padding(.vertical, 2)
+
+            checklistRow(
+                done: auth.isSignedIn,
+                icon: "person.crop.circle",
+                title: "Sign in for AI (recommended)",
+                detail: auth.isSignedIn
+                    ? "Signed in as \(auth.currentUser?.email ?? "your account") — cloud AI is ready."
+                    : "Sign in with Google to use AI (grammar, translate, transforms, screen text) — no API key needed.",
+                state: .idle
+            ) {
+                Button {
+                    signIn()
+                } label: {
+                    Text(auth.isSignedIn ? "Signed in" : (signingIn ? "Signing in..." : "Sign in"))
+                        .frame(width: 92)
+                }
+                .disabled(signingIn || auth.isSignedIn)
+                .focusable(false)
+            }
 
             checklistRow(
                 done: hasExtendedDictionaries,
@@ -155,6 +175,21 @@ private struct SetupChecklist: View {
 
     private var hasExtendedDictionaries: Bool {
         dictionaryStats.values.contains { $0.installedCount > 0 }
+    }
+
+    private func signIn() {
+        signingIn = true
+        Task { @MainActor in
+            defer { signingIn = false }
+            do {
+                _ = try await auth.signIn()
+                // Wire AI to the backend so the user is set up end-to-end.
+                Settings.shared.aiMode = .backend
+            } catch {
+                // Sign-in is optional here; failures stay quiet (the user can
+                // retry from the profile menu or AI settings).
+            }
+        }
     }
 
     @ViewBuilder
@@ -284,14 +319,13 @@ private struct OnboardingView: View {
     /// forward.
     private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
-    /// Ordered permission steps. Microphone first — dictation is the core.
-    private let steps: [Step] = [.microphone, .accessibility, .inputMonitoring]
+    /// Onboarding asks for the microphone only — dictation is the hero, and the
+    /// flip/hotkey permissions live in the LangFlip tab now.
+    private let steps: [Step] = [.microphone]
 
     private func isGranted(_ step: Step) -> Bool {
         switch step {
-        case .microphone:      return status.microphone
-        case .accessibility:   return status.accessibility
-        case .inputMonitoring: return status.inputMonitoring
+        case .microphone: return status.microphone
         }
     }
 
@@ -299,6 +333,9 @@ private struct OnboardingView: View {
     private var currentStep: Step? {
         steps.first { !isGranted($0) }
     }
+
+    /// True once every shown step is granted — drives the "All set" state.
+    private var allStepsGranted: Bool { currentStep == nil }
 
     var body: some View {
         VStack(spacing: 18) {
@@ -318,7 +355,7 @@ private struct OnboardingView: View {
                         upcomingStep(step)
                     }
                 }
-                if status.readyForDictation {
+                if allStepsGranted {
                     SetupChecklist(onOpenPreferences: onOpenPreferences)
                 }
             }
@@ -332,7 +369,7 @@ private struct OnboardingView: View {
         .onReceive(timer) { _ in
             let next = PermissionStatus.current()
             guard next != status else { return }
-            let wasIncomplete = !status.readyForDictation
+            let wasIncomplete = !allStepsGranted
             status = next
             // Pop the window forward when something just changed, so the
             // user immediately sees the next instruction after toggling
@@ -353,7 +390,7 @@ private struct OnboardingView: View {
                 .frame(width: 96, height: 96)
         }
         VStack(spacing: 4) {
-            Text(status.readyForDictation ? "All set!" : "Welcome to Sayful")
+            Text(allStepsGranted ? "All set!" : "Welcome to Sayful")
                 .font(.system(size: 20, weight: .semibold))
             Text(headerSubtitle)
                 .font(.body)
@@ -367,14 +404,13 @@ private struct OnboardingView: View {
         let remaining = steps.filter { !isGranted($0) }.count
         switch remaining {
         case 0:  return "Sayful is ready. Speak in any app and it types for you."
-        case 1:  return "One more permission to go."
-        default: return "\(remaining) quick permissions and you're ready."
+        default: return "One quick permission and you're ready."
         }
     }
 
     @ViewBuilder
     private var footer: some View {
-        if status.readyForDictation {
+        if allStepsGranted {
             HStack(spacing: 10) {
                 Button(action: onContinue) {
                     Text("Continue")
@@ -405,67 +441,27 @@ private struct OnboardingView: View {
     // MARK: Step rendering
 
     private enum Step: Hashable {
-        case microphone, accessibility, inputMonitoring
+        case microphone
 
-        var title: String {
-            switch self {
-            case .microphone:      return "Microphone"
-            case .accessibility:   return "Accessibility"
-            case .inputMonitoring: return "Input Monitoring"
-            }
-        }
+        var title: String { "Microphone" }
 
         var rationale: String {
-            switch self {
-            case .microphone:
-                return "Lets Sayful hear you for dictation — the core feature."
-            case .accessibility:
-                return "Lets Sayful insert text and detect a wrong-layout word."
-            case .inputMonitoring:
-                return "Lets Sayful receive keyboard events even while you type in another app."
-            }
+            "Lets Sayful hear you for dictation — the core feature."
         }
 
         var instruction: LocalizedStringKey {
-            switch self {
-            case .microphone:
-                return "Click below and allow microphone access so you can dictate."
-            case .accessibility:
-                return "Click below, find **Sayful** in the list and toggle it on."
-            case .inputMonitoring:
-                return "Click below, press **+** if Sayful is missing, add **/Applications/LangFlip.app**, then toggle it on."
-            }
+            "Click below and allow microphone access so you can dictate."
         }
 
-        var actionTitle: String {
-            self == .microphone ? "Allow Microphone" : "Open System Settings"
-        }
+        var actionTitle: String { "Allow Microphone" }
 
-        var stepNumber: Int {
-            switch self {
-            case .microphone:      return 1
-            case .accessibility:   return 2
-            case .inputMonitoring: return 3
-            }
-        }
+        var stepNumber: Int { 1 }
 
         func openSettings() {
-            switch self {
-            case .microphone:
-                // First call surfaces the system consent dialog; the pane is a
-                // fallback for when the user has already answered once.
-                PermissionStatus.requestMicrophone()
-                PermissionStatus.openMicrophonePane()
-            case .accessibility:
-                PermissionStatus.openAccessibilityPane()
-            case .inputMonitoring:
-                // Do not call CGRequestListenEventAccess here. On recent
-                // macOS builds it can make the privacy APIs report
-                // "granted" immediately even when Sayful is not visible
-                // in the Input Monitoring list yet. Opening the pane and
-                // waiting for the real toggle keeps onboarding honest.
-                PermissionStatus.openInputMonitoringPane()
-            }
+            // First call surfaces the system consent dialog; the pane is a
+            // fallback for when the user has already answered once.
+            PermissionStatus.requestMicrophone()
+            PermissionStatus.openMicrophonePane()
         }
     }
 
@@ -478,9 +474,11 @@ private struct OnboardingView: View {
                     .foregroundColor(.accentColor)
                 Text(step.title)
                     .font(.headline)
-                Text("(step \(step.stepNumber) of \(steps.count))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                if steps.count > 1 {
+                    Text("(step \(step.stepNumber) of \(steps.count))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
             Text(step.rationale)
                 .font(.callout)
