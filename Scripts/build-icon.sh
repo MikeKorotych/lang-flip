@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generate the macOS iconset and AppIcon.icns from a single 1024x1024 master
-# PNG (Resources/lang-flip-logo.png by default). Re-run after changing the
+# PNG (Resources/sayful-logo.png by default). Re-run after changing the
 # master to refresh the icon.
 
 set -euo pipefail
@@ -8,7 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-MASTER="${1:-$ROOT_DIR/Resources/lang-flip-logo.png}"
+MASTER="${1:-$ROOT_DIR/Resources/sayful-logo.png}"
 ICONSET="$ROOT_DIR/Resources/AppIcon.iconset"
 ICNS="$ROOT_DIR/Resources/AppIcon.icns"
 
