@@ -10,6 +10,7 @@ struct InsightsView: View {
     @ObservedObject private var history = DictationHistory.shared
     @State private var appeared = false
     @State private var tab: UsageTab = .usage
+    @State private var usage = InsightsUsageSnapshot.make(entries: DictationHistory.shared.entries)
 
     enum UsageTab: String, CaseIterable { case usage = "Your Usage", voice = "Your Voice" }
 
@@ -29,12 +30,15 @@ struct InsightsView: View {
                 // minimum stole more. Measure THIS row's width and give each card
                 // exactly half — clamped so it can never overflow the row.
                 HStack(alignment: .top, spacing: 16) {
-                    AppBreakdownCard(history: history, appeared: appeared)
+                    AppBreakdownCard(breakdown: usage.appBreakdown,
+                                     total: usage.entriesCount,
+                                     uniqueApps: usage.uniqueApps,
+                                     appeared: appeared)
                         .frame(maxWidth: .infinity)
                         .appearStagger(4, appeared)
                     // Card fades/slides in like the others; its cells then pop
                     // diagonally on top (their base delay is after the fade).
-                    ActivityCard(history: history, appeared: appeared)
+                    ActivityCard(heatmap: usage.heatmap, appeared: appeared)
                         .frame(maxWidth: .infinity)
                         .appearStagger(4, appeared)
                 }
@@ -46,6 +50,9 @@ struct InsightsView: View {
         .onAppear {
             appeared = false
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { appeared = true }
+        }
+        .onReceive(history.$entries) { entries in
+            usage = InsightsUsageSnapshot.make(entries: entries)
         }
     }
 
@@ -98,95 +105,139 @@ struct InsightsView: View {
 
     private var metricsRow: some View {
         HStack(spacing: 16) {
-            WPMGaugeCard(wpm: wpm, peak: peakWpm, spokenMinutes: spokenMinutes, appeared: appeared)
-            TotalWordsCard(total: totalWords, pages: pages, wordsToday: wordsToday, trend: monthTrend, appeared: appeared)
-            DictationsCard(count: history.entries.count, avgWords: avgWords, today: dictationsToday, streak: streak, longest: longestStreak)
+            WPMGaugeCard(wpm: usage.wpm, peak: usage.peakWpm, spokenMinutes: usage.spokenMinutes, appeared: appeared)
+            TotalWordsCard(total: usage.totalWords, pages: usage.pages, wordsToday: usage.wordsToday, trend: usage.monthTrend, appeared: appeared)
+            DictationsCard(count: usage.entriesCount, avgWords: usage.avgWords, today: usage.dictationsToday, streak: usage.currentStreak, longest: usage.longestStreak)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
+}
 
-    private var wordsToday: Int {
+private struct EntryDigest {
+    let date: Date
+    let day: Date
+    let wordCount: Int
+    let duration: Double?
+    let app: String?
+}
+
+private struct InsightsUsageSnapshot {
+    let entriesCount: Int
+    let totalWords: Int
+    let wordsToday: Int
+    let dictationsToday: Int
+    let wpm: Int?
+    let peakWpm: Int?
+    let spokenMinutes: Int
+    let pages: Int
+    let avgWords: Int
+    let currentStreak: Int
+    let longestStreak: Int
+    let monthTrend: Int?
+    let appBreakdown: [(category: AppCategory, count: Int)]
+    let uniqueApps: Int
+    let heatmap: ActivityHeatmapSnapshot
+
+    static let empty = make(entries: [])
+
+    static func make(entries: [DictationEntry]) -> InsightsUsageSnapshot {
         let cal = Calendar.current
-        return history.entries.filter { cal.isDateInToday($0.date) }.reduce(0) { $0 + $1.wordCount }
-    }
-
-    private var dictationsToday: Int {
-        let cal = Calendar.current
-        return history.entries.filter { cal.isDateInToday($0.date) }.count
-    }
-
-    // MARK: Derived metrics
-
-    private var totalWords: Int { history.entries.reduce(0) { $0 + $1.wordCount } }
-
-    private var wpm: Int? {
-        let timed = history.entries.filter { ($0.duration ?? 0) > 0 }
-        let words = timed.reduce(0) { $0 + $1.wordCount }
-        let minutes = timed.reduce(0.0) { $0 + ($1.duration ?? 0) / 60 }
-        guard minutes > 0, words > 0 else { return nil }
-        return Int(Double(words) / minutes)
-    }
-
-    /// Fastest single dictation (words per minute).
-    private var peakWpm: Int? {
-        let vals = history.entries.compactMap { e -> Double? in
-            guard let d = e.duration, d > 0 else { return nil }
-            return Double(e.wordCount) / (d / 60)
+        let now = Date()
+        let today = cal.startOfDay(for: now)
+        let digests = entries.map {
+            EntryDigest(date: $0.date,
+                        day: cal.startOfDay(for: $0.date),
+                        wordCount: $0.wordCount,
+                        duration: $0.duration,
+                        app: $0.app)
         }
-        guard let max = vals.max() else { return nil }
-        return Int(max)
-    }
 
-    /// Total minutes spoken across all timed dictations.
-    private var spokenMinutes: Int {
-        Int((history.entries.reduce(0.0) { $0 + ($1.duration ?? 0) } / 60).rounded())
-    }
+        let totalWords = digests.reduce(0) { $0 + $1.wordCount }
+        let wordsToday = digests.reduce(0) { $1.day == today ? $0 + $1.wordCount : $0 }
+        let dictationsToday = digests.reduce(0) { $1.day == today ? $0 + 1 : $0 }
 
-    /// Pages written, ~250 words per page.
-    private var pages: Int { Int((Double(totalWords) / 250).rounded()) }
+        let timed = digests.filter { ($0.duration ?? 0) > 0 }
+        let timedWords = timed.reduce(0) { $0 + $1.wordCount }
+        let timedMinutes = timed.reduce(0.0) { $0 + ($1.duration ?? 0) / 60 }
+        let wpm = timedMinutes > 0 && timedWords > 0 ? Int(Double(timedWords) / timedMinutes) : nil
+        let peakWpm = timed.compactMap { entry -> Double? in
+            guard let duration = entry.duration, duration > 0 else { return nil }
+            return Double(entry.wordCount) / (duration / 60)
+        }.max().map(Int.init)
 
-    private var avgWords: Int {
-        history.entries.isEmpty ? 0 : Int((Double(totalWords) / Double(history.entries.count)).rounded())
-    }
+        let days = Set(digests.map(\.day))
+        let currentStreak = Self.currentStreak(days: days, calendar: cal, today: today)
+        let longestStreak = Self.longestStreak(days: days, calendar: cal)
+        let monthTrend = Self.monthTrend(digests: digests, calendar: cal, now: now)
 
-    private var longestStreak: Int {
-        let cal = Calendar.current
-        let sorted = Set(history.entries.map { cal.startOfDay(for: $0.date) }).sorted()
-        guard !sorted.isEmpty else { return 0 }
-        var longest = 1, cur = 1
-        for i in 1..<sorted.count {
-            if cal.dateComponents([.day], from: sorted[i - 1], to: sorted[i]).day == 1 {
-                cur += 1; longest = max(longest, cur)
-            } else { cur = 1 }
+        var categoryCounts: [AppCategory: Int] = [:]
+        for entry in digests {
+            categoryCounts[AppCategory.classify(entry.app), default: 0] += 1
         }
-        return longest
+        let appBreakdown = categoryCounts.sorted { $0.value > $1.value }
+            .map { (category: $0.key, count: $0.value) }
+
+        return InsightsUsageSnapshot(
+            entriesCount: digests.count,
+            totalWords: totalWords,
+            wordsToday: wordsToday,
+            dictationsToday: dictationsToday,
+            wpm: wpm,
+            peakWpm: peakWpm,
+            spokenMinutes: Int((digests.reduce(0.0) { $0 + ($1.duration ?? 0) } / 60).rounded()),
+            pages: Int((Double(totalWords) / 250).rounded()),
+            avgWords: digests.isEmpty ? 0 : Int((Double(totalWords) / Double(digests.count)).rounded()),
+            currentStreak: currentStreak,
+            longestStreak: longestStreak,
+            monthTrend: monthTrend,
+            appBreakdown: appBreakdown,
+            uniqueApps: Set(digests.compactMap(\.app)).count,
+            heatmap: ActivityHeatmapSnapshot.make(digests: digests, calendar: cal, today: today)
+        )
     }
 
-    private var streak: Int {
-        let cal = Calendar.current
-        let days = Set(history.entries.map { cal.startOfDay(for: $0.date) })
+    static func currentStreak(days: Set<Date>, calendar: Calendar, today: Date) -> Int {
         var count = 0
-        var day = cal.startOfDay(for: Date())
+        var day = today
         while days.contains(day) {
             count += 1
-            guard let prev = cal.date(byAdding: .day, value: -1, to: day) else { break }
+            guard let prev = calendar.date(byAdding: .day, value: -1, to: day) else { break }
             day = prev
         }
         return count
     }
 
-    /// Percentage change in words dictated this calendar month vs last month.
-    private var monthTrend: Int? {
-        let cal = Calendar.current
-        let now = Date()
-        guard let thisMonthStart = cal.date(from: cal.dateComponents([.year, .month], from: now)),
-              let lastMonthStart = cal.date(byAdding: .month, value: -1, to: thisMonthStart)
-        else { return nil }
-        func words(in range: Range<Date>) -> Int {
-            history.entries.filter { range.contains($0.date) }.reduce(0) { $0 + $1.wordCount }
+    static func longestStreak(days: Set<Date>, calendar: Calendar) -> Int {
+        let sorted = days.sorted()
+        guard !sorted.isEmpty else { return 0 }
+        var longest = 1
+        var current = 1
+        for i in 1..<sorted.count {
+            if calendar.dateComponents([.day], from: sorted[i - 1], to: sorted[i]).day == 1 {
+                current += 1
+                longest = max(longest, current)
+            } else {
+                current = 1
+            }
         }
-        let thisMonth = words(in: thisMonthStart..<now)
-        let lastMonth = words(in: lastMonthStart..<thisMonthStart)
+        return longest
+    }
+
+    private static func monthTrend(digests: [EntryDigest], calendar: Calendar, now: Date) -> Int? {
+        guard let thisMonthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now)),
+              let lastMonthStart = calendar.date(byAdding: .month, value: -1, to: thisMonthStart)
+        else { return nil }
+
+        var thisMonth = 0
+        var lastMonth = 0
+        for entry in digests {
+            if entry.date >= thisMonthStart && entry.date < now {
+                thisMonth += entry.wordCount
+            } else if entry.date >= lastMonthStart && entry.date < thisMonthStart {
+                lastMonth += entry.wordCount
+            }
+        }
+
         guard lastMonth > 0 else { return nil }
         return Int((Double(thisMonth - lastMonth) / Double(lastMonth)) * 100)
     }
@@ -361,20 +412,10 @@ private struct DictationsCard: View {
 // MARK: - Usage by app
 
 private struct AppBreakdownCard: View {
-    @ObservedObject var history: DictationHistory
+    let breakdown: [(category: AppCategory, count: Int)]
+    let total: Int
+    let uniqueApps: Int
     let appeared: Bool
-
-    private var breakdown: [(category: AppCategory, count: Int)] {
-        var counts: [AppCategory: Int] = [:]
-        for entry in history.entries {
-            counts[AppCategory.classify(entry.app), default: 0] += 1
-        }
-        return counts.sorted { $0.value > $1.value }
-            .map { (category: $0.key, count: $0.value) }
-    }
-
-    private var total: Int { history.entries.count }
-    private var uniqueApps: Int { Set(history.entries.compactMap { $0.app }).count }
 
     var body: some View {
         FlowCard {
@@ -494,11 +535,124 @@ enum AppCategory: String, CaseIterable {
 
 // MARK: - Activity heatmap
 
+private struct ActivityDay {
+    let date: Date
+    let level: Int
+}
+
+private struct ActivityHeatmapSnapshot {
+    let currentStreak: Int
+    let longestStreak: Int
+    let monthLabels: [String]
+    let weeks: [[ActivityDay?]]
+    private let tooltipsByDay: [Date: DayTooltip]
+
+    static let empty = make(digests: [], calendar: .current, today: Calendar.current.startOfDay(for: Date()))
+
+    func tooltip(_ day: Date) -> DayTooltip {
+        tooltipsByDay[day] ?? DayTooltip(date: day, words: 0, apps: 0, topApp: nil)
+    }
+
+    static func make(digests: [EntryDigest], calendar: Calendar, today: Date, weeksBack: Int = 13) -> ActivityHeatmapSnapshot {
+        var wordsByDay: [Date: Int] = [:]
+        var appCountsByDay: [Date: [String: Int]] = [:]
+        for entry in digests {
+            wordsByDay[entry.day, default: 0] += entry.wordCount
+            if let app = entry.app {
+                appCountsByDay[entry.day, default: [:]][app, default: 0] += 1
+            }
+        }
+
+        let daySet = Set(digests.map(\.day))
+        let currentStreak = InsightsUsageSnapshot.currentStreak(days: daySet, calendar: calendar, today: today)
+        let longestStreak = InsightsUsageSnapshot.longestStreak(days: daySet, calendar: calendar)
+
+        guard let firstDay = calendar.date(byAdding: .day, value: -(weeksBack * 7 - 1), to: today) else {
+            return ActivityHeatmapSnapshot(currentStreak: currentStreak,
+                                           longestStreak: longestStreak,
+                                           monthLabels: [],
+                                           weeks: [],
+                                           tooltipsByDay: [:])
+        }
+
+        let weekday = calendar.component(.weekday, from: firstDay) // 1 = Sunday
+        guard let gridStart = calendar.date(byAdding: .day, value: -(weekday - 1), to: firstDay) else {
+            return ActivityHeatmapSnapshot(currentStreak: currentStreak,
+                                           longestStreak: longestStreak,
+                                           monthLabels: [],
+                                           weeks: [],
+                                           tooltipsByDay: [:])
+        }
+
+        var weeks: [[ActivityDay?]] = []
+        var tooltips: [Date: DayTooltip] = [:]
+        var day = gridStart
+        while day <= today {
+            var week: [ActivityDay?] = []
+            for _ in 0..<7 {
+                if day <= today {
+                    let words = wordsByDay[day] ?? 0
+                    let appCounts = appCountsByDay[day] ?? [:]
+                    let topApp = appCounts.max { $0.value < $1.value }?.key
+                    let normalizedDay = day
+                    week.append(ActivityDay(date: normalizedDay, level: level(forWords: words)))
+                    tooltips[normalizedDay] = DayTooltip(date: normalizedDay,
+                                                         words: words,
+                                                         apps: appCounts.count,
+                                                         topApp: topApp)
+                } else {
+                    week.append(nil)
+                }
+                if let next = calendar.date(byAdding: .day, value: 1, to: day) {
+                    day = next
+                } else {
+                    break
+                }
+            }
+            weeks.append(week)
+        }
+
+        return ActivityHeatmapSnapshot(currentStreak: currentStreak,
+                                       longestStreak: longestStreak,
+                                       monthLabels: monthLabels(for: weeks, calendar: calendar),
+                                       weeks: weeks,
+                                       tooltipsByDay: tooltips)
+    }
+
+    private static func level(forWords words: Int) -> Int {
+        switch words {
+        case 0:          return 0
+        case 1...200:    return 1
+        case 201...600:  return 2
+        case 601...1500: return 3
+        default:         return 4
+        }
+    }
+
+    private static func monthLabels(for weeks: [[ActivityDay?]], calendar: Calendar) -> [String] {
+        var result = Array(repeating: "", count: weeks.count)
+        var lastLabeled = -10
+        var prevMonth: Int?
+        for (i, week) in weeks.enumerated() {
+            guard let first = week.compactMap({ $0?.date }).first else { continue }
+            let month = calendar.component(.month, from: first)
+            let isBoundary = (prevMonth == nil) || (month != prevMonth!)
+            if isBoundary && (i - lastLabeled) >= 3 {
+                result[i] = monthAbbr[month - 1]
+                lastLabeled = i
+            }
+            prevMonth = month
+        }
+        return result
+    }
+
+    private static let monthAbbr = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+}
+
 private struct ActivityCard: View {
-    @ObservedObject var history: DictationHistory
+    let heatmap: ActivityHeatmapSnapshot
     let appeared: Bool
 
-    private let weeksBack = 13
     private let gap: CGFloat = 4
     private let dayLabelW: CGFloat = 34
     @State private var gridWidth: CGFloat = 0
@@ -506,28 +660,22 @@ private struct ActivityCard: View {
     /// Cell size derived from the card width so the grid fills it edge to edge.
     private var cellSize: CGFloat {
         guard gridWidth > 0 else { return 12 }
-        let cols = CGFloat(weeks.count)
+        let cols = CGFloat(max(heatmap.weeks.count, 1))
         let avail = gridWidth - dayLabelW - (cols - 1) * gap
         return max(7, min(20, avail / cols))
     }
 
     var body: some View {
         let cell = cellSize
-        // Build these once per render. `wordsByDay` and `weeks` are O(history)
-        // computed properties; calling `level(for:)` per cell previously rebuilt
-        // the whole words dictionary ~90 times (once per heatmap cell), which is
-        // what made opening the Insights tab stutter.
-        let wordsPerDay = wordsByDay
-        let weeksGrid = weeks
         return FlowCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("\(currentStreak) day streak")
+                    Text("\(heatmap.currentStreak) day streak")
                         .font(.system(size: 18, weight: .semibold, design: .serif))
                         .foregroundColor(FlowTheme.ink)
                         .lineLimit(1)
                     Spacer(minLength: 8)
-                    Text("LONGEST STREAK | \(longestStreak) DAYS")
+                    Text("LONGEST STREAK | \(heatmap.longestStreak) DAYS")
                         .font(.system(size: 11, weight: .semibold))
                         .tracking(0.4)
                         .foregroundColor(FlowTheme.inkSecondary)
@@ -540,7 +688,7 @@ private struct ActivityCard: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .top, spacing: gap) {
                         Color.clear.frame(width: dayLabelW)
-                        ForEach(Array(monthLabels.enumerated()), id: \.offset) { _, label in
+                        ForEach(Array(heatmap.monthLabels.enumerated()), id: \.offset) { _, label in
                             Text(label)
                                 .font(.system(size: 10))
                                 .foregroundColor(FlowTheme.inkSecondary)
@@ -560,18 +708,19 @@ private struct ActivityCard: View {
                             }
                         }
                         // Grid
-                        ForEach(Array(weeksGrid.enumerated()), id: \.offset) { weekIndex, week in
+                        ForEach(Array(heatmap.weeks.enumerated()), id: \.offset) { weekIndex, week in
                             VStack(spacing: gap) {
                                 ForEach(0..<7, id: \.self) { dayIndex in
+                                    let day = week[dayIndex]
                                     HeatCell(
-                                        level: level(for: week[dayIndex], wordsPerDay),
-                                        day: week[dayIndex],
+                                        level: day?.level ?? -1,
+                                        day: day?.date,
                                         size: cell,
                                         // Start after the card has faded in (~0.55s)
                                         // so the diagonal pop plays on a visible card.
                                         delay: 0.55 + 0.03 * Double(weekIndex + (6 - dayIndex)),
                                         appeared: appeared,
-                                        tooltip: dayTooltip
+                                        tooltip: heatmap.tooltip
                                     )
                                 }
                             }
@@ -603,113 +752,6 @@ private struct ActivityCard: View {
     }
 
     static let dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-
-    /// Words dictated per day — drives the heatmap intensity. (Was a count of
-    /// dictation events, which made a 500-word day and a 2700-word day share a
-    /// colour whenever they had a similar number of sessions.)
-    private var wordsByDay: [Date: Int] {
-        let cal = Calendar.current
-        var result: [Date: Int] = [:]
-        for entry in history.entries {
-            result[cal.startOfDay(for: entry.date), default: 0] += entry.wordCount
-        }
-        return result
-    }
-
-    private func dayTooltip(_ day: Date) -> DayTooltip {
-        let cal = Calendar.current
-        let entries = history.entries.filter { cal.isDate($0.date, inSameDayAs: day) }
-        let words = entries.reduce(0) { $0 + $1.wordCount }
-        let appNames = entries.compactMap { $0.app }
-        let apps = Set(appNames).count
-        let topApp = Dictionary(grouping: appNames, by: { $0 })
-            .max { $0.value.count < $1.value.count }?.key
-        return DayTooltip(date: cal.startOfDay(for: day), words: words, apps: apps, topApp: topApp)
-    }
-
-    private func level(for day: Date?, _ wordsPerDay: [Date: Int]) -> Int {
-        guard let day else { return -1 } // padding
-        // Bucket by words dictated that day, not session count, so the colour
-        // reflects how much was actually written. Thresholds spread typical
-        // daily volumes across the four levels (e.g. ~500 words → 2, ~2700 → 4).
-        let words = wordsPerDay[Calendar.current.startOfDay(for: day)] ?? 0
-        switch words {
-        case 0:          return 0
-        case 1...200:    return 1
-        case 201...600:  return 2
-        case 601...1500: return 3
-        default:         return 4
-        }
-    }
-
-    /// One label per week column: the month abbreviation at each month boundary
-    /// (including the first/previous month), suppressed within 3 columns of the
-    /// last label so wider months never overlap.
-    private var monthLabels: [String] {
-        let cal = Calendar.current
-        let cols = weeks.count
-        var result = Array(repeating: "", count: cols)
-        var lastLabeled = -10
-        var prevMonth: Int?
-        for (i, week) in weeks.enumerated() {
-            guard let first = week.compactMap({ $0 }).first else { continue }
-            let month = cal.component(.month, from: first)
-            let isBoundary = (prevMonth == nil) || (month != prevMonth!)
-            if isBoundary && (i - lastLabeled) >= 3 {
-                result[i] = Self.monthAbbr[month - 1]
-                lastLabeled = i
-            }
-            prevMonth = month
-        }
-        return result
-    }
-
-    static let monthAbbr = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-    private var currentStreak: Int {
-        let cal = Calendar.current
-        let days = Set(history.entries.map { cal.startOfDay(for: $0.date) })
-        var count = 0
-        var day = cal.startOfDay(for: Date())
-        while days.contains(day) {
-            count += 1
-            guard let prev = cal.date(byAdding: .day, value: -1, to: day) else { break }
-            day = prev
-        }
-        return count
-    }
-
-    private var longestStreak: Int {
-        let cal = Calendar.current
-        let sorted = Set(history.entries.map { cal.startOfDay(for: $0.date) }).sorted()
-        guard !sorted.isEmpty else { return 0 }
-        var longest = 1, cur = 1
-        for i in 1..<sorted.count {
-            if cal.dateComponents([.day], from: sorted[i - 1], to: sorted[i]).day == 1 {
-                cur += 1; longest = max(longest, cur)
-            } else { cur = 1 }
-        }
-        return longest
-    }
-
-    private var weeks: [[Date?]] {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        guard let firstDay = cal.date(byAdding: .day, value: -(weeksBack * 7 - 1), to: today) else { return [] }
-        let weekday = cal.component(.weekday, from: firstDay) // 1 = Sunday
-        guard let gridStart = cal.date(byAdding: .day, value: -(weekday - 1), to: firstDay) else { return [] }
-        var result: [[Date?]] = []
-        var day = gridStart
-        while day <= today {
-            var week: [Date?] = []
-            for _ in 0..<7 {
-                week.append(day <= today ? day : nil)
-                if let next = cal.date(byAdding: .day, value: 1, to: day) { day = next } else { break }
-            }
-            result.append(week)
-        }
-        return result
-    }
 }
 
 /// Per-day stats shown in the heatmap hover tooltip.
