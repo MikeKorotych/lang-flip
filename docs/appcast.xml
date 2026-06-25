@@ -26,6 +26,29 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.6.0</title>
+      <pubDate>Thu, 25 Jun 2026 18:28:26 +0000</pubDate>
+      <sparkle:version>0.6.0</sparkle:version>
+      <sparkle:shortVersionString>0.6.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Personal dictation spellings</h2>
+        <ul>
+          <li>Added Personal dictation words in Dictionary → Learning, with manual entries and automatically learned spellings.</li>
+          <li>Sayful now watches short edits after a transcript is inserted and can learn safe recognized phrase → preferred spelling pairs.</li>
+          <li>Personal dictionary replacements run before and after dictation auto-formatting, so saved product names, people, jargon, and casing survive cleanup.</li>
+          <li>Cached Insights usage and heatmap snapshots for a smoother Insights tab.</li>
+          <li>Made the dictation island lift animation quicker.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.6.0/Sayful-0.6.0.dmg"
+        length="6517358"
+        type="application/octet-stream"
+        sparkle:edSignature="gAwSoaXPvSfFp8GxObFtB4W7qPwrxNRmParA/Sd2dXEb4F7lZ36ZOhtj833pm6z9f7c2CBE+uzQAtrPuYRsPCw==" />
+    </item>
+
+    <item>
       <title>v0.5.0</title>
       <pubDate>Thu, 25 Jun 2026 09:52:22 +0000</pubDate>
       <sparkle:version>0.5.0</sparkle:version>
