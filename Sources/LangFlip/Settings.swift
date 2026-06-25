@@ -231,6 +231,7 @@ enum DictationHandsFreeShortcut: String, CaseIterable, Identifiable {
 enum GlobalShortcutPreset: String, CaseIterable, Identifiable {
     case shiftSpace
     case commandShiftS
+    case commandShiftX
     case controlOptionX
     case controlOptionR
     case controlOptionT
@@ -251,13 +252,14 @@ enum GlobalShortcutPreset: String, CaseIterable, Identifiable {
     ]
 
     static let readAloudChoices: [GlobalShortcutPreset] = [
-        .controlOptionX, .controlOptionR, .controlOptionT, .commandOptionT
+        .commandShiftX, .controlOptionX, .controlOptionR, .controlOptionT, .commandOptionT
     ]
 
     var displayName: String {
         switch self {
         case .shiftSpace: return "Shift+Space"
         case .commandShiftS: return "Shift+Command+S"
+        case .commandShiftX: return "Shift+Command+X"
         case .controlOptionX: return "Control+Option+X"
         case .controlOptionR: return "Control+Option+R"
         case .controlOptionT: return "Control+Option+T"
@@ -273,7 +275,7 @@ enum GlobalShortcutPreset: String, CaseIterable, Identifiable {
         switch self {
         case .shiftSpace: return CGKeyCode(kVK_Space)
         case .commandShiftS, .controlOptionS, .commandOptionS: return CGKeyCode(kVK_ANSI_S)
-        case .controlOptionX: return CGKeyCode(kVK_ANSI_X)
+        case .commandShiftX, .controlOptionX: return CGKeyCode(kVK_ANSI_X)
         case .controlOptionR: return CGKeyCode(kVK_ANSI_R)
         case .controlOptionT, .commandOptionT: return CGKeyCode(kVK_ANSI_T)
         case .controlOptionO, .commandOptionO: return CGKeyCode(kVK_ANSI_O)
@@ -283,7 +285,7 @@ enum GlobalShortcutPreset: String, CaseIterable, Identifiable {
     var requiredFlags: CGEventFlags {
         switch self {
         case .shiftSpace: return [.maskShift]
-        case .commandShiftS: return [.maskCommand, .maskShift]
+        case .commandShiftS, .commandShiftX: return [.maskCommand, .maskShift]
         case .controlOptionX, .controlOptionR, .controlOptionT, .controlOptionS, .controlOptionO:
             return [.maskControl, .maskAlternate]
         case .commandOptionT, .commandOptionS, .commandOptionO:
@@ -295,7 +297,7 @@ enum GlobalShortcutPreset: String, CaseIterable, Identifiable {
         switch self {
         case .shiftSpace: return " "
         case .commandShiftS, .controlOptionS, .commandOptionS: return "s"
-        case .controlOptionX: return "x"
+        case .commandShiftX, .controlOptionX: return "x"
         case .controlOptionR: return "r"
         case .controlOptionT, .commandOptionT: return "t"
         case .controlOptionO, .commandOptionO: return "o"
@@ -649,6 +651,7 @@ final class Settings {
         static let readSelectionHotkeyEnabled = "lf.readSelectionHotkeyEnabled"
         static let readSelectionHotkeyPreset = "lf.readSelectionHotkeyPreset"
         static let readSelectionHotkeyCustom = "lf.readSelectionHotkeyCustom"
+        static let readSelectionHotkeyDefaultMigration = "lf.readSelectionHotkeyDefaultMigration.commandShiftXV1"
         static let microphoneDeviceID = "lf.microphoneDeviceID"
         static let cloudSTTBaseURL = "lf.cloudSTTBaseURL"
         static let cloudSTTModel = "lf.cloudSTTModel"
@@ -668,6 +671,7 @@ final class Settings {
     private init() {
         migrateLegacyCloudSTTDefault()
         migrateLegacyCloudTTSDefault()
+        migrateReadSelectionHotkeyDefault()
     }
 
     private func migrateLegacyCloudSTTDefault() {
@@ -689,6 +693,17 @@ final class Settings {
             defaults.set(Self.defaultCloudTTSVoice, forKey: Keys.cloudTTSVoice)
         }
         defaults.set(true, forKey: Keys.cloudTTSDefaultMigration)
+    }
+
+    private func migrateReadSelectionHotkeyDefault() {
+        guard !defaults.bool(forKey: Keys.readSelectionHotkeyDefaultMigration) else { return }
+        let custom = defaults.string(forKey: Keys.readSelectionHotkeyCustom)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = defaults.string(forKey: Keys.readSelectionHotkeyPreset)
+        if custom?.isEmpty ?? true, raw == nil || raw == GlobalShortcutPreset.controlOptionX.rawValue {
+            defaults.set(GlobalShortcutPreset.commandShiftX.rawValue, forKey: Keys.readSelectionHotkeyPreset)
+        }
+        defaults.set(true, forKey: Keys.readSelectionHotkeyDefaultMigration)
     }
 
     var enabled: Bool {
@@ -1041,7 +1056,7 @@ final class Settings {
         get {
             guard let raw = defaults.string(forKey: Keys.readSelectionHotkeyPreset),
                   let preset = GlobalShortcutPreset(rawValue: raw)
-            else { return .controlOptionX }
+            else { return .commandShiftX }
             return preset
         }
         set { defaults.set(newValue.rawValue, forKey: Keys.readSelectionHotkeyPreset) }

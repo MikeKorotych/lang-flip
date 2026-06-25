@@ -107,7 +107,7 @@ struct VoiceTab: View {
     @AppStorage("lf.cloudTTSSpeed") private var cloudTTSSpeed = 1.0
     @AppStorage("lf.cloudTTSInstructions") private var cloudTTSInstructions = ""
     @AppStorage("lf.readSelectionHotkeyEnabled") private var readSelectionHotkeyEnabled = true
-    @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.controlOptionX.rawValue
+    @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.commandShiftX.rawValue
     @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
     @AppStorage("lf.showDictationIsland") private var showDictationIsland = true
     @AppStorage("lf.dictationNotifications") private var dictationNotifications = false
@@ -535,7 +535,7 @@ struct VoiceTab: View {
 
     private var readSelectionShortcutName: String {
         GlobalShortcut.decode(readSelectionHotkeyCustom)?.displayName
-            ?? (GlobalShortcutPreset(rawValue: readSelectionHotkeyPreset) ?? .controlOptionX).displayName
+            ?? (GlobalShortcutPreset(rawValue: readSelectionHotkeyPreset) ?? .commandShiftX).displayName
     }
 
     private var cloudTTSUsesOpenRouter: Bool {

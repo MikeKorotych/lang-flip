@@ -173,8 +173,7 @@ final class EventTap {
             return nil
         }
 
-        // Read selected text aloud: Control+Option+X. This is global and
-        // intentionally avoids Command-based browser/editor shortcuts.
+        // Read selected text aloud. This is global and user-configurable in Hotkeys.
         if Settings.shared.readSelectionHotkeyEnabled,
            Settings.shared.readSelectionShortcut.matches(keyCode: keyCode, flags: flags) {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: read-aloud hotkey fired\n".utf8)) }
