@@ -622,6 +622,7 @@ final class Settings {
         static let cloudTTSBaseURL = "lf.cloudTTSBaseURL"
         static let cloudTTSModel = "lf.cloudTTSModel"
         static let cloudTTSVoice = "lf.cloudTTSVoice"
+        static let cloudTTSDefaultMigration = "lf.cloudTTSDefaultMigration.geminiFlashTTSV1"
         static let cloudTTSSpeed = "lf.cloudTTSSpeed"
         static let cloudTTSInstructions = "lf.cloudTTSInstructions"
         static let omniVoiceLanguage = "lf.omniVoiceLanguage"
@@ -659,9 +660,13 @@ final class Settings {
 
     private static let defaultCloudSTTModel = "groq/whisper-large-v3"
     private static let legacyQwenCloudSTTModel = "qwen/qwen3-asr-flash-2026-02-10"
+    private static let defaultCloudTTSModel = "google/gemini-3.1-flash-tts-preview"
+    private static let defaultCloudTTSVoice = "Kore"
+    private static let legacyOpenAICloudTTSModel = "openai/gpt-4o-mini-tts-2025-12-15"
 
     private init() {
         migrateLegacyCloudSTTDefault()
+        migrateLegacyCloudTTSDefault()
     }
 
     private func migrateLegacyCloudSTTDefault() {
@@ -672,6 +677,17 @@ final class Settings {
             defaults.set(Self.defaultCloudSTTModel, forKey: Keys.cloudSTTModel)
         }
         defaults.set(true, forKey: Keys.cloudSTTDefaultMigration)
+    }
+
+    private func migrateLegacyCloudTTSDefault() {
+        guard !defaults.bool(forKey: Keys.cloudTTSDefaultMigration) else { return }
+        let raw = defaults.string(forKey: Keys.cloudTTSModel)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw == nil || raw == Self.legacyOpenAICloudTTSModel {
+            defaults.set(Self.defaultCloudTTSModel, forKey: Keys.cloudTTSModel)
+            defaults.set(Self.defaultCloudTTSVoice, forKey: Keys.cloudTTSVoice)
+        }
+        defaults.set(true, forKey: Keys.cloudTTSDefaultMigration)
     }
 
     var enabled: Bool {
@@ -832,14 +848,12 @@ final class Settings {
         }
     }
 
-    /// Default is the cost-efficient, OpenAI-compatible model that
-    /// OpenRouter documents for `/audio/speech`. Users can switch to
-    /// `google/gemini-3.1-flash-tts-preview` or another speech model
-    /// from Preferences when they want higher multilingual/style range.
+    /// Default is the current multilingual Sayful Cloud TTS choice. The legacy
+    /// OpenAI Mini TTS id was removed from OpenRouter's live model catalog.
     var cloudTTSModel: String {
         get {
             let raw = defaults.string(forKey: Keys.cloudTTSModel)?.trimmingCharacters(in: .whitespaces)
-            return (raw?.isEmpty == false) ? raw! : "openai/gpt-4o-mini-tts-2025-12-15"
+            return (raw?.isEmpty == false) ? raw! : Self.defaultCloudTTSModel
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespaces)
@@ -850,7 +864,7 @@ final class Settings {
     var cloudTTSVoice: String {
         get {
             let raw = defaults.string(forKey: Keys.cloudTTSVoice)?.trimmingCharacters(in: .whitespaces)
-            return (raw?.isEmpty == false) ? raw! : "nova"
+            return (raw?.isEmpty == false) ? raw! : Self.defaultCloudTTSVoice
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespaces)

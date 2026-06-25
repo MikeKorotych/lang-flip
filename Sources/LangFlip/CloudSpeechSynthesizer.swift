@@ -148,13 +148,17 @@ final class CloudSpeechSynthesizer {
         let bytes = try await HTTPBackendClient.shared.tts(
             BackendTTSRequest(text: text,
                               voice: Settings.shared.cloudTTSVoice,
-                              model: nil,
+                              model: Settings.shared.cloudTTSModel,
                               speed: Settings.shared.cloudTTSSpeed,
                               instructions: instructions.isEmpty ? nil : instructions))
         guard !bytes.isEmpty else { throw CloudSpeechError.emptyAudio }
         try FileManager.default.createDirectory(at: Self.outputDirectory, withIntermediateDirectories: true)
         let outputURL = Self.outputDirectory.appendingPathComponent("cloud-tts-\(Self.timestamp()).wav")
+        let writeStart = DispatchTime.now()
         try bytes.write(to: outputURL, options: .atomic)
+        NetworkLatency.log.info(
+            "TTS write=\(String(format: "%.0f", NetworkLatency.elapsedMs(since: writeStart)), privacy: .public)ms audio=\(bytes.count, privacy: .public)B model=\(Settings.shared.cloudTTSModel, privacy: .public)"
+        )
         await MainActor.run { self.lastOutputURL = outputURL }
         return outputURL
     }

@@ -102,8 +102,8 @@ struct VoiceTab: View {
     @AppStorage("lf.ttsBackend") private var ttsBackend = TextToSpeechBackend.cloud.rawValue
     @ObservedObject private var auth = SupabaseBackendAuth.shared
     @AppStorage("lf.cloudTTSBaseURL") private var cloudTTSBaseURL = "https://openrouter.ai/api/v1"
-    @AppStorage("lf.cloudTTSModel") private var cloudTTSModel = "openai/gpt-4o-mini-tts-2025-12-15"
-    @AppStorage("lf.cloudTTSVoice") private var cloudTTSVoice = "nova"
+    @AppStorage("lf.cloudTTSModel") private var cloudTTSModel = "google/gemini-3.1-flash-tts-preview"
+    @AppStorage("lf.cloudTTSVoice") private var cloudTTSVoice = "Kore"
     @AppStorage("lf.cloudTTSSpeed") private var cloudTTSSpeed = 1.0
     @AppStorage("lf.cloudTTSInstructions") private var cloudTTSInstructions = ""
     @AppStorage("lf.readSelectionHotkeyEnabled") private var readSelectionHotkeyEnabled = true
@@ -269,7 +269,7 @@ struct VoiceTab: View {
                 }
 
                 if !usesSayfulCloud {
-                    helpText("Current practical default: OpenAI GPT-4o Mini TTS via OpenRouter for cost and compatibility. For richer multilingual or expressive output, try google/gemini-3.1-flash-tts-preview.")
+                    helpText("Current practical default: Gemini 3.1 Flash TTS for multilingual quality. Kokoro is much faster but not a safe Russian/Ukrainian default.")
                 }
 
             HStack {
@@ -1852,24 +1852,42 @@ private struct CuratedSpeechModel: Identifiable {
         .init(id: "bm_daniel", label: "bm_daniel - British male"),
     ]
 
+    static let grokVoices: [CloudVoiceOption] = [
+        .init(id: "Eve", label: "Eve"),
+        .init(id: "Ara", label: "Ara"),
+        .init(id: "Rex", label: "Rex"),
+        .init(id: "Sal", label: "Sal"),
+        .init(id: "Leo", label: "Leo"),
+    ]
+
+    static let microsoftVoices: [CloudVoiceOption] = [
+        .init(id: "en-US-Harper:MAI-Voice-2", label: "en-US-Harper"),
+    ]
+
     static let curated: [CuratedSpeechModel] = [
-        .init(
-            id: "openai/gpt-4o-mini-tts-2025-12-15",
-            label: "OpenAI: GPT-4o Mini TTS - $0.60/M chars",
-            note: "Best default: cheap, stable, OpenAI-compatible, supports instructions.",
-            voices: openAIVoices
-        ),
         .init(
             id: "google/gemini-3.1-flash-tts-preview",
             label: "Google: Gemini 3.1 Flash TTS Preview - $1/M input + $20/M output",
-            note: "Best quality/multilingual experiment: 70+ languages and inline audio tags.",
+            note: "Current Sayful default: strongest multilingual/Russian/Ukrainian candidate, but slower than lightweight models.",
             voices: geminiVoices
+        ),
+        .init(
+            id: "x-ai/grok-voice-tts-1.0",
+            label: "xAI: Grok Voice TTS 1.0 - $15/M chars",
+            note: "Expressive 20+ language candidate; slower and pricier than Gemini in current backend bench.",
+            voices: grokVoices
         ),
         .init(
             id: "hexgrad/kokoro-82m",
             label: "hexgrad: Kokoro 82M - $0.62/M chars",
-            note: "Tiny low-cost TTS; 8 languages, best for cheap lightweight playback.",
+            note: "Fastest low-cost experiment in bench, but not a safe Russian/Ukrainian default.",
             voices: kokoroVoices
+        ),
+        .init(
+            id: "microsoft/mai-voice-2",
+            label: "Microsoft: MAI-Voice-2 - $22/M chars",
+            note: "High-fidelity Azure Speech candidate; useful for English quality checks, not default for RU/UA.",
+            voices: microsoftVoices
         ),
     ]
 
