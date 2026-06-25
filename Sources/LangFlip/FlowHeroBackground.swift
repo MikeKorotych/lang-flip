@@ -71,13 +71,13 @@ private struct MeshAurora: View {
         }
         return [
             SIMD2(0, 0),
-            SIMD2(0.5 + osc(0.80, 0, 0.13) + px, 0),                       // top-mid (x only)
+            SIMD2(0.5 + osc(0.46, 0, 0.13) + px, 0),                       // top-mid (x only)
             SIMD2(1, 0),
-            SIMD2(0, 0.5 + osc(0.70, 1, 0.13) + py),                       // mid-left (y only)
-            SIMD2(0.5 + osc(0.95, 2, 0.18) + px, 0.5 + osc(0.78, 3, 0.18) + py), // centre
-            SIMD2(1, 0.5 + osc(0.85, 4, 0.14) + py),                       // mid-right (y only)
+            SIMD2(0, 0.5 + osc(0.40, 1, 0.13) + py),                       // mid-left (y only)
+            SIMD2(0.5 + osc(0.55, 2, 0.18) + px, 0.5 + osc(0.45, 3, 0.18) + py), // centre
+            SIMD2(1, 0.5 + osc(0.49, 4, 0.14) + py),                       // mid-right (y only)
             SIMD2(0, 1),
-            SIMD2(0.5 + osc(0.90, 5, 0.13) + px, 1),                       // bot-mid (x only)
+            SIMD2(0.5 + osc(0.52, 5, 0.13) + px, 1),                       // bot-mid (x only)
             SIMD2(1, 1),
         ]
     }
@@ -85,8 +85,8 @@ private struct MeshAurora: View {
     /// Colours breathe between two shades so the field reads as alive, not just
     /// shifting. Left column stays dark for legibility.
     private func colors(_ t: TimeInterval) -> [Color] {
-        let f = sin(t * 0.55) * 0.5 + 0.5
-        let g = sin(t * 0.73 + 1.1) * 0.5 + 0.5
+        let f = sin(t * 0.32) * 0.5 + 0.5
+        let g = sin(t * 0.42 + 1.1) * 0.5 + 0.5
         let tealBright = lerp((0.160, 0.560, 0.470), (0.270, 0.760, 0.620), g)
         let teal      = lerp((0.120, 0.470, 0.395), (0.210, 0.660, 0.545), f)
         let warm      = lerp((0.380, 0.290, 0.200), (0.560, 0.405, 0.255), g)
