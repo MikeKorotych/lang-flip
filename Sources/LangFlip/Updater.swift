@@ -53,4 +53,18 @@ extension Updater: SPUUpdaterDelegate {
     func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         return [] // empty = stable channel only (the default)
     }
+
+    /// Surface an available update through the in-app bell (alongside Sparkle's
+    /// own prompt) so it stays discoverable even if the user dismisses the prompt.
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        let version = item.displayVersionString
+        Task { @MainActor in
+            AppNotifications.shared.post(
+                id: "update",
+                kind: .update,
+                title: "Update available",
+                body: "Sayful \(version) is ready — open Check for Updates to install it."
+            )
+        }
+    }
 }
