@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Foundation
 
 /// OpenAI-compatible cloud text-to-speech backend.
@@ -11,6 +12,7 @@ final class CloudSpeechSynthesizer {
 
     private var synthesisTask: Task<Void, Never>?
     private var playbackProcess: Process?
+    private var pcmPlayback: PCMStreamPlayer?
     private(set) var lastOutputURL: URL?
 
     /// True while audio is being synthesized (before playback starts). Drives the
@@ -30,7 +32,7 @@ final class CloudSpeechSynthesizer {
     }
 
     var isSpeaking: Bool {
-        synthesisTask != nil || playbackProcess?.isRunning == true
+        synthesisTask != nil || playbackProcess?.isRunning == true || pcmPlayback != nil
     }
 
     @discardableResult
@@ -43,10 +45,25 @@ final class CloudSpeechSynthesizer {
         synthesisTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let url = try await generate(text: clean)
+                if Settings.shared.aiMode == .backend,
+                   Settings.shared.experimentalStreamingCloudTTS,
+                   Settings.shared.cloudTTSModel.localizedCaseInsensitiveContains("gemini") {
+                    try await self.streamViaBackend(clean)
+                    await MainActor.run {
+                        self.setBuffering(false)
+                        self.synthesisTask = nil
+                    }
+                } else {
+                    let url = try await generate(text: clean)
+                    await MainActor.run {
+                        self.setBuffering(false)   // audio ready → spinner off, playback starts
+                        self.play(url)
+                        self.synthesisTask = nil
+                    }
+                }
+            } catch is CancellationError {
                 await MainActor.run {
-                    self.setBuffering(false)   // audio ready → spinner off, playback starts
-                    self.play(url)
+                    self.setBuffering(false)
                     self.synthesisTask = nil
                 }
             } catch {
@@ -163,6 +180,51 @@ final class CloudSpeechSynthesizer {
         return outputURL
     }
 
+    /// Experimental Sayful Cloud streaming path. The backend returns Gemini raw
+    /// s16le PCM chunks; we feed them to AVAudioEngine as they arrive.
+    private func streamViaBackend(_ text: String) async throws {
+        let instructions = Settings.shared.cloudTTSInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        let started = DispatchTime.now()
+        var player: PCMStreamPlayer?
+        var firstAudioAt: Date?
+
+        let info = try await HTTPBackendClient.shared.ttsPCMStream(
+            BackendTTSRequest(text: text,
+                              voice: Settings.shared.cloudTTSVoice,
+                              model: Settings.shared.cloudTTSModel,
+                              speed: Settings.shared.cloudTTSSpeed,
+                              instructions: instructions.isEmpty ? nil : instructions)
+        ) { info in
+            let p = try PCMStreamPlayer(sampleRate: info.sampleRate, channels: info.channels)
+            try p.start()
+            player = p
+            pcmPlayback = p
+        } onChunk: { chunk in
+            guard let player else { return }
+            if firstAudioAt == nil {
+                firstAudioAt = Date()
+                NetworkLatency.log.info(
+                    "TTS stream firstAudio=\(String(format: "%.0f", NetworkLatency.elapsedMs(since: started)), privacy: .public)ms chunk=\(chunk.count, privacy: .public)B model=\(Settings.shared.cloudTTSModel, privacy: .public)"
+                )
+                Task { @MainActor in self.setBuffering(false) }
+            }
+            try player.append(chunk)
+        }
+
+        guard let player, info.bytes > 0 else { throw CloudSpeechError.emptyAudio }
+        let seconds = Double(info.bytes) / Double(max(info.sampleRate, 1) * max(info.channels, 1) * 2)
+        let elapsed = firstAudioAt.map { Date().timeIntervalSince($0) } ?? 0
+        let remaining = max(0, seconds - elapsed + 0.25)
+        if remaining > 0 {
+            try await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+        }
+        player.stop()
+        if pcmPlayback === player { pcmPlayback = nil }
+        NetworkLatency.log.info(
+            "TTS stream total=\(String(format: "%.0f", NetworkLatency.elapsedMs(since: started)), privacy: .public)ms audio=\(info.bytes, privacy: .public)B rate=\(info.sampleRate, privacy: .public) channels=\(info.channels, privacy: .public)"
+        )
+    }
+
     func play(_ url: URL) {
         playbackProcess?.terminate()
         let process = Process()
@@ -184,6 +246,8 @@ final class CloudSpeechSynthesizer {
             playbackProcess?.terminate()
         }
         playbackProcess = nil
+        pcmPlayback?.stop()
+        pcmPlayback = nil
     }
 
     private static func timestamp() -> String {
@@ -202,6 +266,66 @@ final class CloudSpeechSynthesizer {
         }
         return String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+}
+
+private final class PCMStreamPlayer {
+    private let engine = AVAudioEngine()
+    private let player = AVAudioPlayerNode()
+    private let format: AVAudioFormat
+    private let bytesPerFrame: Int
+    private var pending = Data()
+
+    init(sampleRate: Int, channels: Int) throws {
+        let channelCount = AVAudioChannelCount(max(channels, 1))
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: Double(max(sampleRate, 1)),
+            channels: channelCount,
+            interleaved: true
+        ) else {
+            throw CloudSpeechError.noResponse
+        }
+        self.format = format
+        self.bytesPerFrame = Int(channelCount) * MemoryLayout<Int16>.size
+        engine.attach(player)
+        engine.connect(player, to: engine.mainMixerNode, format: format)
+    }
+
+    func start() throws {
+        try engine.start()
+        player.play()
+    }
+
+    func append(_ data: Data) throws {
+        pending.append(data)
+        let usable = pending.count - (pending.count % bytesPerFrame)
+        guard usable > 0 else { return }
+        let audio = Data(pending.prefix(usable))
+        pending.removeFirst(usable)
+        try schedule(audio)
+    }
+
+    func stop() {
+        player.stop()
+        engine.stop()
+        pending.removeAll()
+    }
+
+    private func schedule(_ data: Data) throws {
+        let frames = AVAudioFrameCount(data.count / bytesPerFrame)
+        guard frames > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else {
+            return
+        }
+        buffer.frameLength = frames
+        data.withUnsafeBytes { src in
+            guard let base = src.baseAddress,
+                  let dst = buffer.mutableAudioBufferList.pointee.mBuffers.mData else { return }
+            memcpy(dst, base, data.count)
+            buffer.mutableAudioBufferList.pointee.mBuffers.mDataByteSize = UInt32(data.count)
+        }
+        player.scheduleBuffer(buffer)
     }
 }
 

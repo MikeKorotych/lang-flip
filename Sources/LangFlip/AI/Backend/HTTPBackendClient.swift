@@ -58,6 +58,17 @@ final class HTTPBackendClient: BackendClient {
         try await send("tts", jsonBody: request)
     }
 
+    func ttsPCMStream(
+        _ request: BackendTTSRequest,
+        onResponse: (BackendPCMStreamInfo) throws -> Void,
+        onChunk: (Data) throws -> Void
+    ) async throws -> BackendPCMStreamInfo {
+        var streamingRequest = request
+        streamingRequest.stream = "pcm"
+        let body = try JSONEncoder().encode(streamingRequest)
+        return try await stream("tts", rawBody: body, contentType: "application/json", onResponse: onResponse, onChunk: onChunk)
+    }
+
     // MARK: - Transport
 
     private func send<Body: Encodable>(_ path: String, jsonBody: Body) async throws -> Data {
@@ -65,8 +76,7 @@ final class HTTPBackendClient: BackendClient {
         return try await send(path, rawBody: data, contentType: "application/json")
     }
 
-    private func send(_ path: String, rawBody: Data, contentType: String, extraHeaders: [String: String] = [:], isRetry: Bool = false) async throws -> Data {
-        let token = try await auth.currentBearerToken()
+    private func makeRequest(path: String, token: String, rawBody: Data, contentType: String, extraHeaders: [String: String] = [:]) -> URLRequest {
         var req = URLRequest(url: base.appendingPathComponent(path))
         req.httpMethod = "POST"
         req.timeoutInterval = 60
@@ -77,6 +87,12 @@ final class HTTPBackendClient: BackendClient {
             req.setValue(value, forHTTPHeaderField: name)
         }
         req.httpBody = rawBody
+        return req
+    }
+
+    private func send(_ path: String, rawBody: Data, contentType: String, extraHeaders: [String: String] = [:], isRetry: Bool = false) async throws -> Data {
+        let token = try await auth.currentBearerToken()
+        let req = makeRequest(path: path, token: token, rawBody: rawBody, contentType: contentType, extraHeaders: extraHeaders)
 
         let (data, response): (Data, URLResponse)
         do {
@@ -111,6 +127,71 @@ final class HTTPBackendClient: BackendClient {
             await auth.applyQuotaHeaders(used: used, limit: limit, resetISO: reset)
         }
         return data
+    }
+
+    private func stream(
+        _ path: String,
+        rawBody: Data,
+        contentType: String,
+        isRetry: Bool = false,
+        onResponse: (BackendPCMStreamInfo) throws -> Void,
+        onChunk: (Data) throws -> Void
+    ) async throws -> BackendPCMStreamInfo {
+        let token = try await auth.currentBearerToken()
+        let req = makeRequest(path: path, token: token, rawBody: rawBody, contentType: contentType)
+
+        let bytes: URLSession.AsyncBytes
+        let response: URLResponse
+        do {
+            (bytes, response) = try await URLSession.shared.bytes(for: req)
+        } catch {
+            throw BackendError(code: .network, message: error.localizedDescription)
+        }
+        guard let http = response as? HTTPURLResponse else {
+            throw BackendError(code: .network, message: "No response")
+        }
+
+        if http.statusCode == 401 && !isRetry {
+            try await auth.refreshSession()
+            return try await stream(path, rawBody: rawBody, contentType: contentType, isRetry: true, onResponse: onResponse, onChunk: onChunk)
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            var data = Data()
+            for try await byte in bytes {
+                data.append(byte)
+                if data.count > 64 * 1024 { break }
+            }
+            throw decodeError(data, status: http.statusCode)
+        }
+
+        if let used = Int(http.value(forHTTPHeaderField: "X-Quota-Used") ?? ""),
+           let limit = Int(http.value(forHTTPHeaderField: "X-Quota-Limit") ?? "") {
+            let reset = http.value(forHTTPHeaderField: "X-Quota-Reset")
+            await auth.applyQuotaHeaders(used: used, limit: limit, resetISO: reset)
+        }
+
+        var info = BackendPCMStreamInfo(
+            sampleRate: Int(http.value(forHTTPHeaderField: "X-Audio-Sample-Rate") ?? "") ?? 24_000,
+            channels: Int(http.value(forHTTPHeaderField: "X-Audio-Channels") ?? "") ?? 1,
+            contentType: http.value(forHTTPHeaderField: "Content-Type") ?? "audio/L16"
+        )
+        try onResponse(info)
+
+        var chunk = Data()
+        chunk.reserveCapacity(8192)
+        for try await byte in bytes {
+            chunk.append(byte)
+            if chunk.count >= 8192 {
+                info.bytes += chunk.count
+                try onChunk(chunk)
+                chunk.removeAll(keepingCapacity: true)
+            }
+        }
+        if !chunk.isEmpty {
+            info.bytes += chunk.count
+            try onChunk(chunk)
+        }
+        return info
     }
 
     private func latencyLabel(for path: String) -> String {

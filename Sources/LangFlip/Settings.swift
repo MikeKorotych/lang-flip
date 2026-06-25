@@ -623,6 +623,7 @@ final class Settings {
         static let cloudTTSModel = "lf.cloudTTSModel"
         static let cloudTTSVoice = "lf.cloudTTSVoice"
         static let cloudTTSDefaultMigration = "lf.cloudTTSDefaultMigration.geminiFlashTTSV1"
+        static let experimentalStreamingCloudTTS = "lf.experimentalStreamingCloudTTS"
         static let cloudTTSSpeed = "lf.cloudTTSSpeed"
         static let cloudTTSInstructions = "lf.cloudTTSInstructions"
         static let omniVoiceLanguage = "lf.omniVoiceLanguage"
@@ -802,8 +803,8 @@ final class Settings {
 
     /// Minimum size before auto-format kicks in. Short dictations rarely need
     /// restructuring and should not pay an LLM round-trip before insertion.
-    var dictationAutoFormatMinWords: Int { 100 }
-    var dictationAutoFormatMinDuration: TimeInterval { 90 }
+    var dictationAutoFormatMinWords: Int { 60 }
+    var dictationAutoFormatMinDuration: TimeInterval { 60 }
 
     /// Plays a short system tick on every text rewrite (auto-flip, manual
     /// flip, sticky-shift fix, rollback). Off by default — sound feedback
@@ -870,6 +871,13 @@ final class Settings {
             let trimmed = newValue.trimmingCharacters(in: .whitespaces)
             defaults.set(trimmed, forKey: Keys.cloudTTSVoice)
         }
+    }
+
+    /// Hidden developer experiment. Streams Gemini PCM through Sayful Cloud and
+    /// plays it incrementally instead of waiting for a full WAV file.
+    var experimentalStreamingCloudTTS: Bool {
+        get { defaults.object(forKey: Keys.experimentalStreamingCloudTTS) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.experimentalStreamingCloudTTS) }
     }
 
     var cloudTTSSpeed: Double {

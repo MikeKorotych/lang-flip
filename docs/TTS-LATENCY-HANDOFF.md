@@ -118,3 +118,40 @@ faster, but quality/language coverage risk is too high for the core user path.
 Expected current shape for Gemini: around 3-4.5 seconds before playback starts,
 with provider spikes possible. Repeated results much above 5 seconds on short
 text are a regression worth investigating.
+
+## 2026-06-25 Streaming Prototype
+
+Added a hidden experimental streaming path for Sayful Cloud + Gemini:
+
+```bash
+defaults write com.antonpinkevych.sayful lf.experimentalStreamingCloudTTS -bool true
+```
+
+Disable:
+
+```bash
+defaults write com.antonpinkevych.sayful lf.experimentalStreamingCloudTTS -bool false
+```
+
+Backend `/tts` accepts `stream:"pcm"` for Gemini and returns raw s16le PCM:
+
+```text
+Content-Type: audio/L16; rate=24000; channels=1
+X-Audio-Sample-Rate: 24000
+X-Audio-Channels: 1
+```
+
+The app reads the response incrementally and feeds chunks into `AVAudioEngine`.
+The normal file-buffered WAV path remains the default unless the hidden flag is
+enabled.
+
+Production endpoint smoke test, short Russian phrase:
+
+| Path | TTFB | Total | Size |
+| --- | ---: | ---: | ---: |
+| Gemini PCM stream via backend | 2876 ms | 3939 ms | 215 KB |
+
+Interpretation: streaming works at the protocol level and can start playback
+roughly one second before full download on this short phrase, but Gemini still
+does not deliver the first audio chunk immediately. Real UX value depends on
+manual playback testing and longer texts.

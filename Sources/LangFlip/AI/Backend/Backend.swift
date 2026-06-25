@@ -101,6 +101,14 @@ struct BackendTTSRequest: Codable {
     var model: String?
     var speed: Double?
     var instructions: String?
+    var stream: String? = nil
+}
+
+struct BackendPCMStreamInfo {
+    let sampleRate: Int
+    let channels: Int
+    let contentType: String
+    var bytes: Int = 0
 }
 
 struct BackendOCRRequest: Codable {

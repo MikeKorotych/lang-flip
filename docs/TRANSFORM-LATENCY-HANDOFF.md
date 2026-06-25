@@ -38,6 +38,12 @@ through OpenRouter.
   strongly implied by context. It explicitly preserves slang/loanwords such as
   `полишинг`, `полішинг`, `апдейт`, `фича`, `фіча`, `баг`, `реліз`, and
   `дедлайн`.
+- Dictation auto-format now uses the same minimal-edit principles, with
+  dictation-specific constraints: format STT output, preserve speaker wording,
+  and only change words for obvious recognition artifacts strongly implied by
+  context.
+- Dictation auto-format threshold is temporarily lowered for field testing:
+  `>=60s` or `>=60 words` (was `>=90s` or `>=100 words`).
 - After a failed manual test, the prompt was tightened further for the primary
   value proposition: fast typo cleanup with minimal edits. Regression case:
   `давай я проерю как этр работакт на самом деле` must become a minimal

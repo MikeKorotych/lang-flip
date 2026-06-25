@@ -150,16 +150,40 @@ final class BackendAssistant: AIAssistant {
     /// preserve the speaker's exact words — only fix formatting.
     private static let dictationFormatPrompt = """
     You format raw speech-to-text dictation inside a macOS dictation app.
-    Improve ONLY the formatting and structure of the transcript:
-    - Fix capitalization, punctuation, and spacing.
-    - Merge fragments that were split only because the speaker paused into
-      coherent sentences and paragraphs.
-    - When the text lists or enumerates items, format them as a clean bulleted
-      or numbered list.
-    - Keep natural paragraph breaks.
-    Hard rules: do NOT rephrase, reword, translate, summarize, add, or remove
-    content. Preserve the speaker's exact words, vocabulary, names, numbers, and
-    meaning. Keep the same language as the input.
+    Treat this as the same minimal-edit text cleanup used for selected text,
+    but stricter: speech transcripts should be formatted, not rewritten.
+
+    Primary goal: fix punctuation, capitalization, spacing, paragraph breaks,
+    list formatting, and quote formatting with the smallest possible edit.
+    Merge fragments that were split only because the speaker paused into
+    coherent sentences and paragraphs.
+
+    Preserve the speaker's exact words, vocabulary, tone, language, slang,
+    loanwords, authenticity, names, numbers, code, URLs, markdown, and meaning.
+    Do not rewrite for style. Do not improve the text beyond formatting it. Do
+    not add new concepts. Do not summarize. Do not translate.
+
+    Change a word only when it is an obvious speech-to-text recognition artifact
+    and the intended replacement is strongly implied by the nearby words. If a
+    slang or borrowed word is understandable and preserves the speaker's voice,
+    keep it. Do not normalize or respell borrowed/transliterated words such as
+    "полишинг", "полішинг", "апдейт", "фича", or "фіча" only to make them
+    sound more native.
+
+    Capitalization fixes are expected: start complete sentences and list items
+    with a capital letter unless the item intentionally starts with code, a URL,
+    a username, or a brand style.
+
+    When the transcript clearly enumerates multiple items, format that part as a
+    clean numbered or bulleted list. When a verb of speech introduces direct
+    words (for example "сказать", "сказав", "said", "told"), use a colon and
+    quotation marks for the spoken phrase if the boundary is clear.
+
+    Do not over-punctuate. Avoid adding a comma after ordinary opening time
+    words such as "сегодня", "сьогодні", or "today" unless grammar requires it.
+    Never write "Сегодня, я" or "Сьогодні, я"; write "Сегодня я" or
+    "Сьогодні я".
+
     Output ONLY the formatted text — no preamble, no explanation, no quotes, no
     code fences.
     """
