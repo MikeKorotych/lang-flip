@@ -9,18 +9,30 @@ struct Transform: Identifiable, Codable, Equatable {
     var prompt: String
     /// Option+digit hotkey (1…9), or nil for no shortcut.
     var shortcut: Int?
+    /// Triggered by pressing both Shift keys at once (left+right). Optional so
+    /// older persisted transforms decode cleanly (missing → not bound).
+    var bothShift: Bool?
     var isBuiltIn: Bool
 
-    init(id: UUID = UUID(), name: String, subtitle: String, prompt: String, shortcut: Int?, isBuiltIn: Bool = false) {
+    init(id: UUID = UUID(), name: String, subtitle: String, prompt: String,
+         shortcut: Int? = nil, bothShift: Bool? = nil, isBuiltIn: Bool = false) {
         self.id = id
         self.name = name
         self.subtitle = subtitle
         self.prompt = prompt
         self.shortcut = shortcut
+        self.bothShift = bothShift
         self.isBuiltIn = isBuiltIn
     }
 
-    var shortcutLabel: String { shortcut.map { "⌥\($0)" } ?? "—" }
+    var triggersOnBothShift: Bool { bothShift == true }
+
+    /// Compact badge label for the card. "Both ⇧" (not "⇧⇧") so it reads as
+    /// left+right Shift together, not a double-tap.
+    var shortcutLabel: String {
+        if triggersOnBothShift { return "Both ⇧" }
+        return shortcut.map { "⌥\($0)" } ?? "—"
+    }
 }
 
 /// Persisted transforms + lookup. Seeds built-in presets on first run.
@@ -30,26 +42,27 @@ final class TransformStore: ObservableObject {
     @Published private(set) var transforms: [Transform] = []
 
     private let key = "lf.transforms"
+    private static let schemaKey = "lf.transformsSchema"
+    /// Bump when the built-in preset set changes meaningfully. v2: dropped the
+    /// Polish preset (≡ single-Shift) and moved Prompt Engineer to both-Shift.
+    private static let currentSchema = 2
 
     private init() {
         load()
-        if transforms.isEmpty {
+        let schema = UserDefaults.standard.integer(forKey: Self.schemaKey)
+        if transforms.isEmpty || schema < Self.currentSchema {
             transforms = Self.defaults
             save()
+            UserDefaults.standard.set(Self.currentSchema, forKey: Self.schemaKey)
         }
     }
 
     // MARK: Presets
 
-    static var defaults: [Transform] { [polish, promptEngineer] }
-
-    static let polish = Transform(
-        name: "Polish",
-        subtitle: "Improve clarity and conciseness",
-        prompt: "Rewrite the text to be clearer and more concise while keeping the original meaning, voice, and tone. Fix grammar, spelling and punctuation. Don't add new information.",
-        shortcut: 1,
-        isBuiltIn: true
-    )
+    // "Polish" used to live here on ⌥1, but it duplicates the single-Shift
+    // grammar fix (same proofread action) — so it's gone, and the single-Shift
+    // fix is the polish action. Prompt Engineer now fires on both-Shift.
+    static var defaults: [Transform] { [promptEngineer] }
 
     static let promptEngineer = Transform(
         name: "Prompt Engineer",
@@ -87,14 +100,14 @@ final class TransformStore: ObservableObject {
         **Conflict resolution**
         (only if applicable)
         """,
-        shortcut: 2,
+        bothShift: true,
         isBuiltIn: true
     )
 
     // MARK: CRUD
 
-    func add(name: String, subtitle: String, prompt: String, shortcut: Int?) {
-        let new = Transform(name: name, subtitle: subtitle, prompt: prompt, shortcut: shortcut)
+    func add(name: String, subtitle: String, prompt: String, shortcut: Int?, bothShift: Bool? = nil) {
+        let new = Transform(name: name, subtitle: subtitle, prompt: prompt, shortcut: shortcut, bothShift: bothShift)
         clearShortcutCollisions(for: new)
         transforms.append(new)
         save()
@@ -107,13 +120,19 @@ final class TransformStore: ObservableObject {
         save()
     }
 
-    /// A digit can be bound to only one transform; assigning it elsewhere
-    /// clears it from whoever held it, so `transform(forShortcut:)` is
-    /// deterministic.
+    /// A trigger (Option+digit or both-Shift) can be bound to only one
+    /// transform; assigning it elsewhere clears it from whoever held it, so
+    /// `transform(forShortcut:)` / `bothShiftTransform` stay deterministic.
     private func clearShortcutCollisions(for transform: Transform) {
-        guard let digit = transform.shortcut else { return }
-        for i in transforms.indices where transforms[i].id != transform.id && transforms[i].shortcut == digit {
-            transforms[i].shortcut = nil
+        if let digit = transform.shortcut {
+            for i in transforms.indices where transforms[i].id != transform.id && transforms[i].shortcut == digit {
+                transforms[i].shortcut = nil
+            }
+        }
+        if transform.triggersOnBothShift {
+            for i in transforms.indices where transforms[i].id != transform.id && transforms[i].triggersOnBothShift {
+                transforms[i].bothShift = nil
+            }
         }
     }
 
@@ -130,6 +149,11 @@ final class TransformStore: ObservableObject {
     /// The transform bound to a given Option+digit, if any.
     func transform(forShortcut digit: Int) -> Transform? {
         transforms.first { $0.shortcut == digit }
+    }
+
+    /// The transform fired by the both-Shift gesture (left+right Shift), if any.
+    var bothShiftTransform: Transform? {
+        transforms.first { $0.triggersOnBothShift }
     }
 
     /// Digits already taken (so the editor can avoid collisions).

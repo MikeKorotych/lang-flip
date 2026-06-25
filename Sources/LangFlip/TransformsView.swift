@@ -18,7 +18,6 @@ struct TransformsView: View {
     @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
     @AppStorage("lf.translationHotkeyPreset") private var translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
     @AppStorage("lf.translationHotkeyCustom") private var translationHotkeyCustom = ""
-    @AppStorage("lf.translationTarget") private var translationTarget = Layout.en.rawValue
     @State private var aiReady = false
 
     private let columns = [GridItem(.adaptive(minimum: 210), spacing: 16)]
@@ -65,12 +64,6 @@ struct TransformsView: View {
                     isOn: Binding(get: { aiReady && grammarOnSingleShift },
                                   set: { grammarOnSingleShift = $0 }))
                     .disabled(!aiReady)
-
-                FlowPickerRow(
-                    title: "Translate target",
-                    detail: "Used by the menu-bar Translate action. The hotkey below translates into your current keyboard layout's language.",
-                    selection: $translationTarget,
-                    options: Layout.allCases.map { (value: $0.rawValue, label: $0.displayName) })
 
                 FlowToggleRow(
                     title: "Translate selection with \(translationShortcutName)",
@@ -184,14 +177,28 @@ private struct TransformEditor: View {
     @State private var name: String
     @State private var subtitle: String
     @State private var prompt: String
-    @State private var shortcut: Int?
+    @State private var trigger: TriggerChoice
+
+    /// How a transform is fired. Modeled as one choice so the picker can show
+    /// "Both Shift" (the Prompt Engineer default) alongside the ⌥-digit slots.
+    private enum TriggerChoice: Hashable {
+        case none
+        case bothShift
+        case digit(Int)
+    }
 
     init(existing: Transform?) {
         self.existing = existing
         _name = State(initialValue: existing?.name ?? "")
         _subtitle = State(initialValue: existing?.subtitle ?? "")
         _prompt = State(initialValue: existing?.prompt ?? "")
-        _shortcut = State(initialValue: existing?.shortcut)
+        if existing?.triggersOnBothShift == true {
+            _trigger = State(initialValue: .bothShift)
+        } else if let d = existing?.shortcut {
+            _trigger = State(initialValue: .digit(d))
+        } else {
+            _trigger = State(initialValue: .none)
+        }
     }
 
     private var canSave: Bool {
@@ -207,12 +214,13 @@ private struct TransformEditor: View {
             field("SHORT DESCRIPTION") { FlowTextField(placeholder: "What it does", text: $subtitle) }
 
             field("KEYBOARD SHORTCUT") {
-                Picker("", selection: $shortcut) {
-                    Text("None").tag(Int?.none)
-                    ForEach(1...9, id: \.self) { d in Text("⌥\(d)").tag(Int?.some(d)) }
+                Picker("", selection: $trigger) {
+                    Text("None").tag(TriggerChoice.none)
+                    Text("Both Shift (left + right)").tag(TriggerChoice.bothShift)
+                    ForEach(1...9, id: \.self) { d in Text("⌥\(d)").tag(TriggerChoice.digit(d)) }
                 }
                 .labelsHidden()
-                .frame(width: 120)
+                .frame(width: 200)
             }
 
             field("PROMPT") {
@@ -257,14 +265,25 @@ private struct TransformEditor: View {
         let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !n.isEmpty else { return }
         let sub = subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let digit: Int?
+        let bothShift: Bool?
+        switch trigger {
+        case .none:          digit = nil; bothShift = nil
+        case .bothShift:     digit = nil; bothShift = true
+        case .digit(let d):  digit = d;   bothShift = nil
+        }
+
         if var existing {
             existing.name = n
             existing.subtitle = sub.isEmpty ? "Custom transform" : sub
             existing.prompt = prompt
-            existing.shortcut = shortcut
+            existing.shortcut = digit
+            existing.bothShift = bothShift
             store.update(existing)
         } else {
-            store.add(name: n, subtitle: sub.isEmpty ? "Custom transform" : sub, prompt: prompt, shortcut: shortcut)
+            store.add(name: n, subtitle: sub.isEmpty ? "Custom transform" : sub,
+                      prompt: prompt, shortcut: digit, bothShift: bothShift)
         }
     }
 }

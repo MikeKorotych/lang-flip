@@ -335,9 +335,9 @@ final class EventTap {
     }
 
     private func handleFlagsChanged(keyCode: CGKeyCode, flags: CGEventFlags) {
-        // Both-Shifts pause/resume gesture — runs regardless of hotkey
-        // preset, so users on e.g. double-right-Cmd can still freeze the
-        // app with the Shift gesture.
+        // Both-Shifts gesture (left+right Shift together) — runs the bound
+        // transform (Prompt Engineer by default), regardless of hotkey preset.
+        // Pause/resume lives in the menu-bar now.
         let isShiftKey = (keyCode == CGKeyCode(kVK_Shift) || keyCode == CGKeyCode(kVK_RightShift))
         if isShiftKey {
             updateBothShiftsGesture(flags: flags)
@@ -427,14 +427,17 @@ final class EventTap {
             // is about to be misinterpreted as a tap — disqualify it.
             hotkeyUsedAsModifier = true
             cancelPendingTaps()
-            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: both-shifts gesture → toggle Enabled\n".utf8)) }
-            DispatchQueue.main.async { [weak self] in self?.handleBothShiftsToggle() }
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: both-shifts gesture → transform\n".utf8)) }
+            DispatchQueue.main.async { [weak self] in self?.handleBothShiftsGesture() }
         }
     }
 
-    private func handleBothShiftsToggle() {
-        Settings.shared.enabled.toggle()
-        NotificationCenter.default.post(name: .langFlipEnabledChanged, object: nil)
+    /// Both-Shift now runs the transform bound to it (Prompt Engineer by
+    /// default). Pause/resume moved to the menu-bar. `applyTransformWithAI`
+    /// already gates on AI availability + a non-empty selection.
+    private func handleBothShiftsGesture() {
+        guard let transform = TransformStore.shared.bothShiftTransform else { return }
+        applyTransformWithAI(transform)
     }
 
     private func handleSpeechModifierGesture(keyCode: CGKeyCode, flags: CGEventFlags) -> Bool {
@@ -824,8 +827,10 @@ final class EventTap {
                         }
 
                         let request = AITranslateRequest(text: text, target: target)
+                        AITextProcessing.shared.begin()   // island spinner while the AI works
                         AIAssistantManager.shared.current.translateSelection(request) { [weak self] result in
                             DispatchQueue.main.async {
+                                AITextProcessing.shared.end()
                                 guard let self else { return }
                                 switch result {
                                 case .translated(let translated):
@@ -900,8 +905,10 @@ final class EventTap {
                 }
 
                 let request = AITransformRequest(text: text, instruction: transform.prompt)
+                AITextProcessing.shared.begin()   // island spinner while the AI works
                 AIAssistantManager.shared.current.applyTransform(request) { [weak self] result in
                     DispatchQueue.main.async {
+                        AITextProcessing.shared.end()
                         guard let self else { return }
                         switch result {
                         case .transformed(let out):
@@ -946,7 +953,8 @@ final class EventTap {
         let countBefore = pb.changeCount
 
         Sound.playFlip()
-        FlipOverlay.shared.show()
+        // No FlipOverlay here — the dictation island shows a spinner while TTS
+        // buffers (see CloudSpeechSynthesizer.isBuffering → island `.speaking`).
         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: speech: posting Cmd+C\n".utf8)) }
         postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_C))
 
@@ -966,7 +974,8 @@ final class EventTap {
                     Notifications.show(title: "Sayful", body: "Select text first, then press \(Settings.shared.readSelectionShortcut.displayName).")
                     return
                 }
-                Notifications.show(title: "Reading selected text", body: String(text.prefix(80)))
+                // No "Reading selected text" banner — the dictation island's
+                // spinner is the visual feedback for TTS now.
                 SpeechReader.shared.speak(text)
             }
         }
@@ -1249,8 +1258,10 @@ final class EventTap {
     private func applySingleShiftAIFixToSelection(text: String, snapshot: PasteboardSnapshot) {
         let pb = NSPasteboard.general
         let request = AIFixRequest(text: text, activeLayout: InputSource.currentLayout())
+        AITextProcessing.shared.begin()   // island spinner while the AI works
         AIAssistantManager.shared.current.fixSelection(request) { [weak self] result in
             DispatchQueue.main.async {
+                AITextProcessing.shared.end()
                 guard let self else { return }
                 self.singleShiftGrammarInFlight = false
                 switch result {
@@ -1425,8 +1436,10 @@ final class EventTap {
     ) {
         let pb = NSPasteboard.general
         let request = AIFixRequest(text: text, activeLayout: InputSource.currentLayout())
+        AITextProcessing.shared.begin()   // island spinner while the AI works
         AIAssistantManager.shared.current.fixSelection(request) { [weak self] result in
             DispatchQueue.main.async {
+                AITextProcessing.shared.end()
                 guard let self else { return }
                 self.singleShiftGrammarInFlight = false
                 switch result {
@@ -1732,8 +1745,10 @@ final class EventTap {
         snapshot: PasteboardSnapshot
     ) {
         let request = AIFixRequest(text: text, activeLayout: InputSource.currentLayout())
+        AITextProcessing.shared.begin()   // island spinner while the AI works
         AIAssistantManager.shared.current.fixSelection(request) { [weak self] result in
             DispatchQueue.main.async {
+                AITextProcessing.shared.end()
                 guard let self else { return }
                 self.singleShiftGrammarInFlight = false
                 switch result {
