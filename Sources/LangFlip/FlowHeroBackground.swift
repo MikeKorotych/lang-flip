@@ -50,43 +50,57 @@ struct FlowAuroraBackground: View {
 private struct MeshAurora: View {
     var parallax: CGSize
 
-    private let colors: [Color] = [
-        Color(red: 0.150, green: 0.135, blue: 0.120),  // top-left   (dark)
-        Color(red: 0.185, green: 0.195, blue: 0.175),  // top-mid    (dark)
-        Color(red: 0.200, green: 0.640, blue: 0.530),  // top-right  (teal bright)
-        Color(red: 0.150, green: 0.140, blue: 0.125),  // mid-left   (dark)
-        Color(red: 0.215, green: 0.335, blue: 0.285),  // centre     (green)
-        Color(red: 0.155, green: 0.545, blue: 0.460),  // mid-right  (teal)
-        Color(red: 0.180, green: 0.165, blue: 0.140),  // bot-left   (dark)
-        Color(red: 0.470, green: 0.350, blue: 0.235),  // bot-mid    (muted warm)
-        Color(red: 0.150, green: 0.520, blue: 0.440),  // bot-right  (teal)
-    ]
+    // Dark column 0 (left) stays put so the copy keeps contrast.
+    private let dark0 = Color(red: 0.150, green: 0.135, blue: 0.120)
+    private let dark1 = Color(red: 0.150, green: 0.140, blue: 0.125)
+    private let dark2 = Color(red: 0.180, green: 0.165, blue: 0.140)
+    private let green = Color(red: 0.215, green: 0.335, blue: 0.285)
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { tl in
-            MeshGradient(width: 3, height: 3,
-                         points: points(tl.date.timeIntervalSinceReferenceDate),
-                         colors: colors)
+            let t = tl.date.timeIntervalSinceReferenceDate
+            MeshGradient(width: 3, height: 3, points: points(t), colors: colors(t))
         }
     }
 
     private func points(_ t: TimeInterval) -> [SIMD2<Float>] {
-        let px = Float(parallax.width) * 0.05
-        let py = Float(parallax.height) * 0.05
+        let px = Float(parallax.width) * 0.06
+        let py = Float(parallax.height) * 0.06
         func osc(_ speed: Double, _ phase: Double, _ amp: Float) -> Float {
             Float(sin(t * speed + phase)) * amp
         }
         return [
             SIMD2(0, 0),
-            SIMD2(0.5 + osc(0.50, 0, 0.06) + px, 0),                       // top-mid (x only)
+            SIMD2(0.5 + osc(0.80, 0, 0.13) + px, 0),                       // top-mid (x only)
             SIMD2(1, 0),
-            SIMD2(0, 0.5 + osc(0.40, 1, 0.06) + py),                       // mid-left (y only)
-            SIMD2(0.5 + osc(0.60, 2, 0.08) + px, 0.5 + osc(0.45, 3, 0.08) + py), // centre
-            SIMD2(1, 0.5 + osc(0.50, 4, 0.06) + py),                       // mid-right (y only)
+            SIMD2(0, 0.5 + osc(0.70, 1, 0.13) + py),                       // mid-left (y only)
+            SIMD2(0.5 + osc(0.95, 2, 0.18) + px, 0.5 + osc(0.78, 3, 0.18) + py), // centre
+            SIMD2(1, 0.5 + osc(0.85, 4, 0.14) + py),                       // mid-right (y only)
             SIMD2(0, 1),
-            SIMD2(0.5 + osc(0.55, 5, 0.06) + px, 1),                       // bot-mid (x only)
+            SIMD2(0.5 + osc(0.90, 5, 0.13) + px, 1),                       // bot-mid (x only)
             SIMD2(1, 1),
         ]
+    }
+
+    /// Colours breathe between two shades so the field reads as alive, not just
+    /// shifting. Left column stays dark for legibility.
+    private func colors(_ t: TimeInterval) -> [Color] {
+        let f = sin(t * 0.55) * 0.5 + 0.5
+        let g = sin(t * 0.73 + 1.1) * 0.5 + 0.5
+        let tealBright = lerp((0.160, 0.560, 0.470), (0.270, 0.760, 0.620), g)
+        let teal      = lerp((0.120, 0.470, 0.395), (0.210, 0.660, 0.545), f)
+        let warm      = lerp((0.380, 0.290, 0.200), (0.560, 0.405, 0.255), g)
+        return [
+            dark0, dark1, tealBright,  // top
+            dark1, green, teal,        // mid
+            dark2, warm, teal,         // bottom
+        ]
+    }
+
+    private func lerp(_ a: (Double, Double, Double), _ b: (Double, Double, Double), _ f: Double) -> Color {
+        Color(red: a.0 + (b.0 - a.0) * f,
+              green: a.1 + (b.1 - a.1) * f,
+              blue: a.2 + (b.2 - a.2) * f)
     }
 }
 
