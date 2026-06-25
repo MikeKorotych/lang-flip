@@ -54,7 +54,9 @@ final class ThemeManager: ObservableObject {
     @Published var isDark: Bool {
         didSet {
             UserDefaults.standard.set(isDark, forKey: "lf.darkMode")
-            applyToWindows()
+            // User-driven toggles cross-fade; the initial value set in init has
+            // no windows yet, so it's a silent no-op there.
+            applyToWindows(animated: true)
         }
     }
 
@@ -71,9 +73,22 @@ final class ThemeManager: ObservableObject {
         NSAppearance(named: isDark ? .darkAqua : .aqua)
     }
 
-    func applyToWindows() {
+    func applyToWindows(animated: Bool = false) {
         let appearance = self.appearance
         for window in NSApp.windows {
+            // Cross-fade the whole window between light/dark. We fade the frame
+            // view (contentView's superview = the private NSThemeFrame) rather
+            // than just the content view, so the title-bar — traffic lights and
+            // our bell/theme/profile accessories — cross-fades in sync with the
+            // body instead of flipping instantly. Falls back to the content view.
+            if animated, let fadeView = window.contentView?.superview ?? window.contentView {
+                fadeView.wantsLayer = true
+                let fade = CATransition()
+                fade.type = .fade
+                fade.duration = 0.32
+                fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                fadeView.layer?.add(fade, forKey: "themeFade")
+            }
             window.appearance = appearance
         }
     }
@@ -119,6 +134,7 @@ struct FlowCard<Content: View>: View {
                 RoundedRectangle(cornerRadius: FlowTheme.cornerRadius, style: .continuous)
                     .fill(FlowTheme.card)
             )
+            .clipShape(RoundedRectangle(cornerRadius: FlowTheme.cornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: FlowTheme.cornerRadius, style: .continuous)
                     .stroke(FlowTheme.cardStroke, lineWidth: 1)
@@ -399,6 +415,47 @@ struct AppearStagger: ViewModifier {
             .opacity(appeared ? 1 : 0)
             .offset(y: appeared ? 0 : 16)
             .animation(.easeOut(duration: 0.5).delay(Double(index) * 0.09), value: appeared)
+    }
+}
+
+/// App-styled segmented control (replaces the system blue `.pickerStyle(.segmented)`).
+/// A dark rounded track with the selected segment as an accent-filled pill that
+/// slides between options. Matches the Flow design system instead of the macOS
+/// system accent.
+struct FlowSegmented<T: Hashable>: View {
+    let items: [(value: T, label: String)]
+    @Binding var selection: T
+    @Namespace private var ns
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(items, id: \.value) { item in
+                let selected = item.value == selection
+                Text(item.label)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(selected ? .white : FlowTheme.inkSecondary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity)
+                    .background {
+                        if selected {
+                            Capsule()
+                                .fill(FlowTheme.accent)
+                                .matchedGeometryEffect(id: "flowSegSelection", in: ns)
+                        }
+                    }
+                    .contentShape(Capsule())
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                            selection = item.value
+                        }
+                    }
+            }
+        }
+        .padding(4)
+        .background(Capsule().fill(FlowTheme.card))
+        .overlay(Capsule().stroke(FlowTheme.cardStroke, lineWidth: 1))
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
