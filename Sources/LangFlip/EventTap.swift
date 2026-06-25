@@ -1221,28 +1221,12 @@ final class EventTap {
                     return
                 }
 
-                if Settings.shared.fixLastSentenceOnSingleShift,
-                   let context = self.focusedTextContext(),
-                   context.selectedRange.length == 0,
-                   let sentence = self.lastSentenceBeforeCursor(in: context.value, cursorUTF16: context.selectedRange.location) {
-                    AppLog.write("single-shift grammar using focused last sentence len=\(sentence.text.count)")
-                    self.singleShiftGrammarInFlight = true
-                    self.applySingleShiftAIFixToFocusedRange(
-                        context: context,
-                        range: sentence.range,
-                        text: sentence.text,
-                        snapshot: snapshot
-                    )
-                    return
-                }
-
-                if Settings.shared.fixLastSentenceOnSingleShift {
-                    AppLog.write("single-shift grammar falling back to keyboard line selection")
-                    self.tryKeyboardLineSingleShiftFallback(snapshot: snapshot)
-                    return
-                }
-
-                AppLog.write("single-shift grammar found no selection and focused fallback is off; skipped")
+                // Selection-only. With nothing selected, Single Shift does
+                // nothing: the old no-selection paths (Accessibility "last
+                // sentence" + keyboard-line fallback) were unreliable across apps
+                // (web/Electron/terminals, heuristic sentence boundaries), so we
+                // dropped them. Select the text you want fixed, like Transforms.
+                AppLog.write("single-shift grammar: no selection — skipped (selection-only)")
                 snapshot.restore(to: pb)
             }
         }
@@ -1294,45 +1278,6 @@ final class EventTap {
         }
     }
 
-    private func tryKeyboardLineSingleShiftFallback(snapshot: PasteboardSnapshot) {
-        let pb = NSPasteboard.general
-        let countBefore = pb.changeCount
-
-        // Many browser/Electron text fields do not expose AXValue. As a
-        // pragmatic fallback, select from the cursor to the start of the
-        // current visual line, copy it, then collapse the selection. Once
-        // the model replies we replace from the cursor with backspaces, so
-        // the user only sees this one short selection flash.
-        postKey(virtualKey: CGKeyCode(kVK_LeftArrow), flags: [.maskCommand, .maskShift])
-        tryCopyAfterKeyboardSelection(countBefore: countBefore) { [weak self] selectedLine in
-            guard let self else { return }
-            self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
-
-            guard let selectedLine,
-                  let sentence = self.lastSentenceBeforeCursor(in: selectedLine, cursorUTF16: selectedLine.utf16.count)
-            else {
-                AppLog.write("single-shift keyboard fallback found no usable line sentence")
-                snapshot.restore(to: pb)
-                return
-            }
-
-            AppLog.write("single-shift grammar using keyboard line fallback len=\(sentence.text.count)")
-            let nsLine = selectedLine as NSString
-            let sentenceEnd = sentence.range.location + sentence.range.length
-            let suffixLength = max(0, nsLine.length - sentenceEnd)
-            let suffix = suffixLength > 0
-                ? nsLine.substring(with: NSRange(location: sentenceEnd, length: suffixLength))
-                : ""
-            let replaceLength = nsLine.length - sentence.range.location
-            self.singleShiftGrammarInFlight = true
-            self.applySingleShiftAIFixToKeyboardSuffix(
-                text: sentence.text,
-                suffix: suffix,
-                replaceLength: replaceLength,
-                snapshot: snapshot
-            )
-        }
-    }
 
     private func tryKeyboardLineDoubleShiftFallback(targetNonEnglish: Layout) -> Bool {
         let pb = NSPasteboard.general
@@ -1428,47 +1373,6 @@ final class EventTap {
         }
     }
 
-    private func applySingleShiftAIFixToKeyboardSuffix(
-        text: String,
-        suffix: String,
-        replaceLength: Int,
-        snapshot: PasteboardSnapshot
-    ) {
-        let pb = NSPasteboard.general
-        let request = AIFixRequest(text: text, activeLayout: InputSource.currentLayout())
-        AITextProcessing.shared.begin()   // island spinner while the AI works
-        AIAssistantManager.shared.current.fixSelection(request) { [weak self] result in
-            DispatchQueue.main.async {
-                AITextProcessing.shared.end()
-                guard let self else { return }
-                self.singleShiftGrammarInFlight = false
-                switch result {
-                case .fixed(let corrected):
-                    AppLog.write("single-shift keyboard suffix fixed \(text.count)->\(corrected.count)")
-                    let replacement = corrected.trimmingCharacters(in: .whitespacesAndNewlines) + suffix
-                    self.postBackspaces(replaceLength)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-                        pb.clearContents()
-                        pb.setString(replacement, forType: .string)
-                        self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
-                        self.playRewriteFeedback()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
-                            snapshot.restore(to: pb)
-                        }
-                    }
-                case .unchanged:
-                    AppLog.write("single-shift keyboard suffix unchanged")
-                    snapshot.restore(to: pb)
-                case .unsupported:
-                    AppLog.write("single-shift keyboard suffix unsupported")
-                    snapshot.restore(to: pb)
-                case .failed(let reason):
-                    AppLog.write("single-shift keyboard suffix failed: \(reason)")
-                    snapshot.restore(to: pb)
-                }
-            }
-        }
-    }
 
     private func playRewriteFeedback() {
         Sound.playFlip()
@@ -1642,33 +1546,6 @@ final class EventTap {
         return true
     }
 
-    private func lastSentenceBeforeCursor(in value: String, cursorUTF16: Int) -> FocusedTextSlice? {
-        guard !value.isEmpty else { return nil }
-        let ns = value as NSString
-        var end = min(max(cursorUTF16, 0), ns.length)
-        while end > 0, isWhitespaceOrNewline(ns.character(at: end - 1)) {
-            end -= 1
-        }
-        guard end > 0 else { return nil }
-
-        var start = 0
-        let searchFrom = end > 0 && isSentenceBoundary(ns.character(at: end - 1)) ? end - 2 : end - 1
-        if searchFrom >= 0 {
-            for index in stride(from: searchFrom, through: 0, by: -1) where isSentenceBoundary(ns.character(at: index)) {
-                start = index + 1
-                break
-            }
-        }
-        while start < end, isWhitespaceOrNewline(ns.character(at: start)) {
-            start += 1
-        }
-
-        let range = NSRange(location: start, length: end - start)
-        guard range.length >= 2 else { return nil }
-        let text = ns.substring(with: range)
-        guard text.rangeOfCharacter(from: .letters) != nil else { return nil }
-        return FocusedTextSlice(range: CFRange(location: range.location, length: range.length), text: text)
-    }
 
     private func lastWrongLayoutRunBeforeCursor(
         in value: String,
@@ -1738,48 +1615,6 @@ final class EventTap {
         return true
     }
 
-    private func applySingleShiftAIFixToFocusedRange(
-        context: FocusedTextContext,
-        range: CFRange,
-        text: String,
-        snapshot: PasteboardSnapshot
-    ) {
-        let request = AIFixRequest(text: text, activeLayout: InputSource.currentLayout())
-        AITextProcessing.shared.begin()   // island spinner while the AI works
-        AIAssistantManager.shared.current.fixSelection(request) { [weak self] result in
-            DispatchQueue.main.async {
-                AITextProcessing.shared.end()
-                guard let self else { return }
-                self.singleShiftGrammarInFlight = false
-                switch result {
-                case .fixed(let corrected):
-                    AppLog.write("single-shift focused sentence fixed \(text.count)->\(corrected.count)")
-                    if !self.typeFocusedReplacementFromCursor(
-                        original: text,
-                        replacement: corrected,
-                        range: range,
-                        context: context,
-                        snapshot: snapshot
-                    ) {
-                        self.pasteFocusedReplacement(corrected, range: range, context: context, snapshot: snapshot)
-                    }
-                case .unchanged:
-                    AppLog.write("single-shift focused sentence unchanged")
-                    snapshot.restore()
-                case .unsupported:
-                    AppLog.write("single-shift focused sentence unsupported")
-                    snapshot.restore()
-                case .failed(let reason):
-                    AppLog.write("single-shift focused sentence failed: \(reason)")
-                    snapshot.restore()
-                }
-            }
-        }
-    }
-
-    private func isSentenceBoundary(_ utf16: unichar) -> Bool {
-        utf16 == 10 || utf16 == 13 || utf16 == 46 || utf16 == 33 || utf16 == 63 || utf16 == 8230
-    }
 
     private func isWhitespaceOrNewline(_ utf16: unichar) -> Bool {
         guard let scalar = UnicodeScalar(Int(utf16)) else { return false }

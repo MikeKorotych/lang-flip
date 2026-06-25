@@ -11,7 +11,6 @@ struct LangFlipView: View {
     @AppStorage("lf.crossLayoutFix") private var crossLayoutFix = true
     @AppStorage("lf.suppressInFullscreen") private var suppressInFullscreen = false
     @AppStorage("lf.showOverlay") private var showOverlay = true
-    @AppStorage("lf.fixLastSentenceOnSingleShift") private var fixLastSentenceOnSingleShift = true
     @AppStorage("lf.flipLastWordsOnDoubleShift") private var flipLastWordsOnDoubleShift = true
     @AppStorage("lf.hotkeyPreset") private var hotkeyPreset = HotkeyPreset.doubleShift.rawValue
 
@@ -73,7 +72,6 @@ struct LangFlipView: View {
             .appearStagger(4, appeared)
 
             FlowSettingsGroup("No-selection actions") {
-                FlowToggleRow(title: "Single Shift fixes last sentence", isOn: $fixLastSentenceOnSingleShift)
                 FlowToggleRow(title: "Double Shift flips last words",
                               detail: "When no text is selected, Sayful reads the focused text field through Accessibility and rewrites only the text before the cursor. Turn this off if a specific app behaves unpredictably.",
                               isOn: $flipLastWordsOnDoubleShift)
