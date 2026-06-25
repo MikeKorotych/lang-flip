@@ -13,6 +13,11 @@ final class VoiceRecorder: NSObject {
     private let engine = AVAudioEngine()
     private var audioFile: AVAudioFile?
     private var converter: AVAudioConverter?
+    /// Guards `audioFile` / `converter` / the power levels, which are touched by
+    /// the audio render thread (the input tap) and the main thread (stop/teardown
+    /// + the VU-meter reads). Prevents a use-after-free when teardown releases the
+    /// file while a buffer is still in flight.
+    private let renderLock = NSLock()
 
     private var lastAveragePower: Float = -160
     private var lastPeakPower: Float = -160
@@ -32,10 +37,14 @@ final class VoiceRecorder: NSObject {
         return Date().timeIntervalSince(startedAt)
     }
 
-    var averagePower: Float { lastAveragePower }
-    var peakPower: Float { lastPeakPower }
-    var normalizedAveragePower: Double { Self.normalizedPower(lastAveragePower) }
-    var normalizedPeakPower: Double { Self.normalizedPower(lastPeakPower) }
+    private var levels: (avg: Float, peak: Float) {
+        renderLock.lock(); defer { renderLock.unlock() }
+        return (lastAveragePower, lastPeakPower)
+    }
+    var averagePower: Float { levels.avg }
+    var peakPower: Float { levels.peak }
+    var normalizedAveragePower: Double { Self.normalizedPower(levels.avg) }
+    var normalizedPeakPower: Double { Self.normalizedPower(levels.peak) }
 
     static var inputDevices: [AVCaptureDevice] {
         let deviceTypes: [AVCaptureDevice.DeviceType]
@@ -112,6 +121,9 @@ final class VoiceRecorder: NSObject {
             }
             audioFile = file
             converter = conv
+            // Initialise the meter before the tap starts firing on the render thread.
+            lastAveragePower = -160
+            lastPeakPower = -160
 
             input.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) { [weak self] buffer, _ in
                 self?.process(buffer)
@@ -124,8 +136,6 @@ final class VoiceRecorder: NSObject {
             lastError = nil
             startedAt = Date()
             activeInputName = Self.selectedInputDeviceName()
-            lastAveragePower = -160
-            lastPeakPower = -160
             notify()
             return true
         } catch {
@@ -140,24 +150,33 @@ final class VoiceRecorder: NSObject {
         guard engine.isRunning || audioFile != nil else { return }
         teardown()
         startedAt = nil
-        lastAveragePower = -160
-        lastPeakPower = -160
         notify()
     }
 
-    /// Stop the engine, remove the tap, and close the file. Closing the
-    /// `AVAudioFile` (releasing it) finalizes the WAV header synchronously, so
-    /// callers can read `lastRecordingURL` immediately after `stop()`.
+    /// Stop recording and close the file. Order matters: remove the tap first so
+    /// no new buffers are delivered, stop the engine, then release the file +
+    /// converter UNDER the lock — so a buffer already in flight on the render
+    /// thread can't write to a freed file, and the last write completes before we
+    /// drop the file (which finalizes the WAV header for the caller).
     private func teardown() {
+        engine.inputNode.removeTap(onBus: 0)
         if engine.isRunning {
             engine.stop()
         }
-        engine.inputNode.removeTap(onBus: 0)
+        renderLock.lock()
         audioFile = nil
         converter = nil
+        lastAveragePower = -160
+        lastPeakPower = -160
+        renderLock.unlock()
     }
 
+    /// Runs on the audio render thread. The lock pairs with `teardown()` so the
+    /// file/converter can't be freed mid-write.
     private func process(_ buffer: AVAudioPCMBuffer) {
+        renderLock.lock()
+        defer { renderLock.unlock() }
+
         meter(buffer)
         guard let converter, let audioFile else { return }
 
