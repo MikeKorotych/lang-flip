@@ -276,7 +276,7 @@ final class DictationIslandController {
     private func setLiftOffset(_ value: CGFloat, animated: Bool) {
         currentLiftOffset = value
         if animated {
-            withAnimation(.easeInOut(duration: 0.5)) { state.liftOffset = value }
+            withAnimation(.easeInOut(duration: 0.25)) { state.liftOffset = value }
         } else {
             state.liftOffset = value
         }
