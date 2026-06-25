@@ -113,7 +113,7 @@ struct VoiceTab: View {
     @AppStorage("lf.dictationNotifications") private var dictationNotifications = false
     @AppStorage("lf.dictationAutoFormat") private var dictationAutoFormat = true
     @AppStorage("lf.cloudSTTBaseURL") private var cloudSTTBaseURL = "https://openrouter.ai/api/v1"
-    @AppStorage("lf.cloudSTTModel") private var cloudSTTModel = "qwen/qwen3-asr-flash-2026-02-10"
+    @AppStorage("lf.cloudSTTModel") private var cloudSTTModel = "groq/whisper-large-v3"
 
     @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
     @State private var recorderIsRecording = VoiceRecorder.shared.isRecording
@@ -641,11 +641,15 @@ struct VoiceTab: View {
             guard SupabaseBackendAuth.shared.isSignedIn else {
                 throw CloudTranscriptionError.notSignedIn
             }
-            let data = try Data(contentsOf: audioURL)
+            let upload = try STTAudioUploadPreparer.prepareBackendUpload(from: audioURL)
+            defer { upload.cleanup() }
+            let modelOverride = showAdvancedAI && cloudSTTModel != "groq/whisper-large-v3"
+                ? cloudSTTModel
+                : nil
             let result = try await HTTPBackendClient.shared.transcribe(
-                BackendTranscribeRequest(audio: data, filename: audioURL.lastPathComponent,
+                BackendTranscribeRequest(audio: upload.data, filename: upload.filename,
                                          language: nil,
-                                         model: showAdvancedAI ? cloudSTTModel : nil))
+                                         model: modelOverride))
             return result.text
         }
         return try await CloudTranscriber.transcribe(audioURL: audioURL)
@@ -674,8 +678,8 @@ struct ModelsTab: View {
     @AppStorage("lf.cloudProvider") private var cloudProvider = AICloudProvider.openRouter.rawValue
     @AppStorage("lf.openaiModel") private var openaiModel = "gpt-5-nano"
     @AppStorage("lf.openaiBaseURL") private var openaiBaseURL = "https://api.openai.com/v1"
-    @AppStorage("lf.cloudOCRModel") private var cloudOCRModel = "google/gemini-3.1-flash-lite"
-    @AppStorage("lf.cloudSTTModel") private var cloudSTTModel = "qwen/qwen3-asr-flash-2026-02-10"
+    @AppStorage("lf.cloudOCRModel") private var cloudOCRModel = "groq/meta-llama/llama-4-scout-17b-16e-instruct"
+    @AppStorage("lf.cloudSTTModel") private var cloudSTTModel = "groq/whisper-large-v3"
 
     /// API key kept in Keychain (NOT @AppStorage). Mirror it through
     /// @State so SwiftUI re-renders the SecureField properly. We
@@ -1094,7 +1098,7 @@ private struct AIOCRTestView: View {
                 } label: {
                     Image(systemName: isRunning ? "hourglass" : "viewfinder")
                 }
-                .help("Test copy text from screenshot with the selected Ollama model")
+                .help("Test copy text from screenshot with the selected OCR model")
                 .disabled(isRunning)
             }
 
@@ -1116,7 +1120,7 @@ private struct AIOCRTestView: View {
     private var statusText: some View {
         switch state {
         case .idle:
-            Text("Checks that the selected Ollama model can read text from screenshots.")
+            Text("Checks that the selected OCR model can read text from screenshots.")
         case .running:
             Text("Running screenshot text test...")
         case .success(_, let seconds):
@@ -1900,23 +1904,23 @@ private struct CuratedTranscriptionModel: Identifiable {
     let label: String
     let note: String
 
-    static let defaultID = "qwen/qwen3-asr-flash-2026-02-10"
+    static let defaultID = "groq/whisper-large-v3"
 
     static let curated: [CuratedTranscriptionModel] = [
         .init(
+            id: "groq/whisper-large-v3",
+            label: "Sayful default: Groq Whisper Large v3 (direct) - fast + accurate",
+            note: "Current production default. Routed direct to Groq, not OpenRouter; best speed/quality balance in recent UK/RU field tests."
+        ),
+        .init(
             id: "qwen/qwen3-asr-flash-2026-02-10",
             label: "Qwen: Qwen3 ASR Flash - $0.000035/sec (~$0.0021/min)",
-            note: "Best default: strongest Cyrillic / Ukrainian / Russian in field use, cheap, robust to noise and mixed languages."
+            note: "Often better punctuation and Cyrillic text polish, but currently slower through OpenRouter. Use for A/B quality tests."
         ),
         .init(
             id: "groq/whisper-large-v3-turbo",
             label: "Groq: Whisper Large v3 Turbo (direct) - fastest",
-            note: "~3× faster than Qwen (≈0.4s). Routed direct to Groq, not OpenRouter. Fastest option but weaker on Ukrainian in A/B — verify on real dictation."
-        ),
-        .init(
-            id: "groq/whisper-large-v3",
-            label: "Groq: Whisper Large v3 (direct) - fast + accurate",
-            note: "~2× faster than Qwen (≈0.6s), accurate on UK/RU in A/B. Routed direct to Groq. Good speed/accuracy balance for Cyrillic."
+            note: "Fastest direct Groq option, but weaker on Ukrainian in A/B. Kept for speed experiments."
         ),
         .init(
             id: "nvidia/parakeet-tdt-0.6b-v3",
@@ -1989,9 +1993,19 @@ private struct CuratedOCRModel: Identifiable {
 
     static let curated: [CuratedOCRModel] = [
         .init(
+            id: "groq/meta-llama/llama-4-scout-17b-16e-instruct",
+            label: "Groq: Llama 4 Scout - fastest OCR default",
+            note: "New speed default: fastest production backend OCR in bench, with clean mixed English / Russian / Ukrainian output."
+        ),
+        .init(
+            id: "groq/qwen/qwen3.6-27b",
+            label: "Groq: Qwen 3.6 27B - fast OCR candidate",
+            note: "Very fast Groq vision route and strong mixed Cyrillic OCR; reasoning is hidden server-side."
+        ),
+        .init(
             id: "google/gemini-3.1-flash-lite",
             label: "Google: Gemini 3.1 Flash Lite - $0.25 / $1.50 per 1M",
-            note: "Best default: fast, strong OCR, image input, low cost; OpenRouter also lists image input at $0.25/M."
+            note: "Previous default: still stable and strong OCR through OpenRouter, but slower than Groq Qwen in current bench."
         ),
         .init(
             id: "qwen/qwen3.6-flash",

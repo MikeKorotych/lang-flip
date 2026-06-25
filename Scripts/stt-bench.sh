@@ -17,6 +17,7 @@
 #
 # Presets (transport × provider):
 #   backend               REAL production path: multipart → Sayful Cloud backend  (counts against quota!)
+#   backend-reserved      backend path with a pre-created STT reservation       (counts against quota!)
 #   openrouter-json       app's BYOK shape: base64 inside JSON → OpenRouter        (default)
 #   openrouter-multipart  standard multipart file upload → OpenRouter
 #   groq                  multipart → Groq whisper-large-v3-turbo  (needs GROQ_API_KEY)
@@ -57,15 +58,19 @@ keychain_openrouter_key() {
 EP_PATH="audio/transcriptions"   # endpoint path under BASE_URL
 FILE_FIELD="file"                # multipart field name for the audio
 EXTRA_HEADERS=()                 # extra -H headers (e.g. supabase apikey)
+RESERVE_ENDPOINT=""              # for backend-reserved
 
 # ---- Resolve preset → (base url, model, key, transport mode) ----------------
 case "$PRESET" in
-  backend)
+  backend|backend-reserved)
     SUPA="https://bpxsmfdpmbfsvdckndpw.supabase.co"
     ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJweHNtZmRwbWJmc3ZkY2tuZHB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMDI5NDAsImV4cCI6MjA5Nzg3ODk0MH0.FzxlUqw7iH0PhmSVrHKOfd6MMhoEL_tyhaSqXf6-VHY"
     BASE_URL="$SUPA/functions/v1"; EP_PATH="transcribe"; FILE_FIELD="audio"
     MODEL="${STT_MODEL:-}"; MODE="multipart"
     EXTRA_HEADERS=(-H "apikey: $ANON")
+    if [[ "$PRESET" == "backend-reserved" ]]; then
+      RESERVE_ENDPOINT="$SUPA/functions/v1/stt-reserve"
+    fi
     API_KEY="${STT_API_KEY:-$(security find-generic-password -s com.antonpinkevych.lang-flip -a backend-access-token -w 2>/dev/null || true)}" ;;
   openrouter-json)
     BASE_URL="https://openrouter.ai/api/v1"; MODEL="openai/whisper-large-v3"; MODE="json"
@@ -124,6 +129,25 @@ printf "\n %-4s %7s %7s %7s %8s %9s %7s %5s\n" "run" "dns" "tcp" "tls" "ttfb" "t
 printf " %s\n" "────────────────────────────────────────────────────────────"
 
 for i in $(seq 1 "$RUNS"); do
+  RESERVE_HEADER=()
+  if [[ -n "$RESERVE_ENDPOINT" ]]; then
+    RESERVE_BODY="$(mktemp)"
+    if [[ -n "$MODEL" ]]; then
+      printf '{"model":"%s"}' "$MODEL" > "$RESERVE_BODY"
+    else
+      printf '{}' > "$RESERVE_BODY"
+    fi
+    RID=$(curl -s -X POST "$RESERVE_ENDPOINT" \
+      -H "Authorization: Bearer $API_KEY" \
+      ${EXTRA_HEADERS[@]+"${EXTRA_HEADERS[@]}"} \
+      -H "Content-Type: application/json" \
+      --data @"$RESERVE_BODY" | jq -r '.reservation.id // empty')
+    rm -f "$RESERVE_BODY"
+    if [[ -n "$RID" ]]; then
+      RESERVE_HEADER=(-H "X-Stt-Reservation: $RID")
+    fi
+  fi
+
   # Only send `model` when one is set (backend default = empty → server picks).
   MODEL_FIELD=()
   if [[ -n "$MODEL" ]]; then MODEL_FIELD=(-F "model=$MODEL"); fi
@@ -134,6 +158,7 @@ for i in $(seq 1 "$RUNS"); do
       -H "Authorization: Bearer $API_KEY" \
       -H "Content-Type: application/json" \
       ${EXTRA_HEADERS[@]+"${EXTRA_HEADERS[@]}"} \
+      ${RESERVE_HEADER[@]+"${RESERVE_HEADER[@]}"} \
       -H "X-Title: Sayful" -H "HTTP-Referer: https://github.com/MikeKorotych/lang-flip" \
       --data @"$PAYLOAD")
   else
@@ -141,6 +166,7 @@ for i in $(seq 1 "$RUNS"); do
       -X POST "$ENDPOINT" \
       -H "Authorization: Bearer $API_KEY" \
       ${EXTRA_HEADERS[@]+"${EXTRA_HEADERS[@]}"} \
+      ${RESERVE_HEADER[@]+"${RESERVE_HEADER[@]}"} \
       -H "X-Title: Sayful" -H "HTTP-Referer: https://github.com/MikeKorotych/lang-flip" \
       -F "$FILE_FIELD=@$FIXTURE" ${MODEL_FIELD[@]+"${MODEL_FIELD[@]}"})
   fi

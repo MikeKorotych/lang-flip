@@ -18,6 +18,11 @@ final class HTTPBackendClient: BackendClient {
         return try BackendJSON.decoder.decode(BackendTextResult.self, from: data)
     }
 
+    func reserveSTT(_ request: BackendSTTReserveRequest) async throws -> BackendSTTReserveResult {
+        let data = try await send("stt-reserve", jsonBody: request)
+        return try BackendJSON.decoder.decode(BackendSTTReserveResult.self, from: data)
+    }
+
     func ocr(_ request: BackendOCRRequest) async throws -> BackendTextResult {
         let data = try await send("ocr", jsonBody: request)
         return try BackendJSON.decoder.decode(BackendTextResult.self, from: data)
@@ -39,8 +44,13 @@ final class HTTPBackendClient: BackendClient {
         if let model = request.model { field("model", model) }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
 
+        var headers: [String: String] = [:]
+        if let reservationID = request.reservationID, !reservationID.isEmpty {
+            headers["X-Stt-Reservation"] = reservationID
+        }
         let data = try await send("transcribe", rawBody: body,
-                                  contentType: "multipart/form-data; boundary=\(boundary)")
+                                  contentType: "multipart/form-data; boundary=\(boundary)",
+                                  extraHeaders: headers)
         return try BackendJSON.decoder.decode(BackendTextResult.self, from: data)
     }
 
@@ -55,7 +65,7 @@ final class HTTPBackendClient: BackendClient {
         return try await send(path, rawBody: data, contentType: "application/json")
     }
 
-    private func send(_ path: String, rawBody: Data, contentType: String, isRetry: Bool = false) async throws -> Data {
+    private func send(_ path: String, rawBody: Data, contentType: String, extraHeaders: [String: String] = [:], isRetry: Bool = false) async throws -> Data {
         let token = try await auth.currentBearerToken()
         var req = URLRequest(url: base.appendingPathComponent(path))
         req.httpMethod = "POST"
@@ -63,11 +73,14 @@ final class HTTPBackendClient: BackendClient {
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue(BackendConfig.anonKey, forHTTPHeaderField: "apikey")
         req.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        for (name, value) in extraHeaders {
+            req.setValue(value, forHTTPHeaderField: name)
+        }
         req.httpBody = rawBody
 
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await URLSession.shared.data(for: req)
+            (data, response) = try await URLSession.shared.measuredData(for: req, label: latencyLabel(for: path))
         } catch {
             throw BackendError(code: .network, message: error.localizedDescription)
         }
@@ -77,7 +90,7 @@ final class HTTPBackendClient: BackendClient {
 
         if http.statusCode == 401 && !isRetry {
             try await auth.refreshSession()
-            return try await send(path, rawBody: rawBody, contentType: contentType, isRetry: true)
+            return try await send(path, rawBody: rawBody, contentType: contentType, extraHeaders: extraHeaders, isRetry: true)
         }
         guard (200..<300).contains(http.statusCode) else {
             let err = decodeError(data, status: http.statusCode)
@@ -98,6 +111,17 @@ final class HTTPBackendClient: BackendClient {
             await auth.applyQuotaHeaders(used: used, limit: limit, resetISO: reset)
         }
         return data
+    }
+
+    private func latencyLabel(for path: String) -> String {
+        switch path {
+        case "transcribe": return "STT"
+        case "stt-reserve": return "STT reserve"
+        case "chat": return "AI"
+        case "ocr": return "OCR"
+        case "tts": return "TTS"
+        default: return "Backend \(path)"
+        }
     }
 
     private func decodeError(_ data: Data, status: Int) -> BackendError {

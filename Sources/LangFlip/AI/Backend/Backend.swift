@@ -108,12 +108,27 @@ struct BackendOCRRequest: Codable {
     var model: String?
 }
 
+struct BackendSTTReserveRequest: Codable {
+    var model: String?
+}
+
+struct BackendSTTReservation: Codable {
+    let id: String
+    let expiresAt: Date
+}
+
+struct BackendSTTReserveResult: Codable {
+    let reservation: BackendSTTReservation
+    let model: String
+}
+
 /// A transcription upload (sent as multipart/form-data, not JSON).
 struct BackendTranscribeRequest {
     let audio: Data
     let filename: String
     var language: String?
     var model: String?
+    var reservationID: String? = nil
 }
 
 // MARK: - Errors (spec §5 error envelope + §5.4 codes)
@@ -172,6 +187,7 @@ protocol BackendAuth: AnyObject {
 
 protocol BackendClient: AnyObject {
     func chat(_ request: BackendChatRequest) async throws -> BackendTextResult
+    func reserveSTT(_ request: BackendSTTReserveRequest) async throws -> BackendSTTReserveResult
     func transcribe(_ request: BackendTranscribeRequest) async throws -> BackendTextResult
     func tts(_ request: BackendTTSRequest) async throws -> Data
     func ocr(_ request: BackendOCRRequest) async throws -> BackendTextResult

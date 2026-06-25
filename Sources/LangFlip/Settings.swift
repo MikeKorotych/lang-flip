@@ -650,10 +650,28 @@ final class Settings {
         static let microphoneDeviceID = "lf.microphoneDeviceID"
         static let cloudSTTBaseURL = "lf.cloudSTTBaseURL"
         static let cloudSTTModel = "lf.cloudSTTModel"
+        static let cloudSTTDefaultMigration = "lf.cloudSTTDefaultMigration.groqWhisperV1"
         static let dictationPushToTalkEnabled = "lf.dictationPushToTalkEnabled"
         static let dictationPushToTalkShortcut = "lf.dictationPushToTalkShortcut"
         static let dictationHandsFreeEnabled = "lf.dictationHandsFreeEnabled"
         static let dictationHandsFreeShortcut = "lf.dictationHandsFreeShortcut"
+    }
+
+    private static let defaultCloudSTTModel = "groq/whisper-large-v3"
+    private static let legacyQwenCloudSTTModel = "qwen/qwen3-asr-flash-2026-02-10"
+
+    private init() {
+        migrateLegacyCloudSTTDefault()
+    }
+
+    private func migrateLegacyCloudSTTDefault() {
+        guard !defaults.bool(forKey: Keys.cloudSTTDefaultMigration) else { return }
+        let raw = defaults.string(forKey: Keys.cloudSTTModel)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw == nil || raw == Self.legacyQwenCloudSTTModel {
+            defaults.set(Self.defaultCloudSTTModel, forKey: Keys.cloudSTTModel)
+        }
+        defaults.set(true, forKey: Keys.cloudSTTDefaultMigration)
     }
 
     var enabled: Bool {
@@ -766,9 +784,10 @@ final class Settings {
         set { defaults.set(newValue, forKey: Keys.dictationAutoFormat) }
     }
 
-    /// Minimum transcript length (characters) before auto-format kicks in —
-    /// short dictations rarely need restructuring and shouldn't pay the latency.
-    var dictationAutoFormatMinChars: Int { 100 }
+    /// Minimum size before auto-format kicks in. Short dictations rarely need
+    /// restructuring and should not pay an LLM round-trip before insertion.
+    var dictationAutoFormatMinWords: Int { 100 }
+    var dictationAutoFormatMinDuration: TimeInterval { 90 }
 
     /// Plays a short system tick on every text rewrite (auto-flip, manual
     /// flip, sticky-shift fix, rollback). Off by default — sound feedback
@@ -1033,11 +1052,11 @@ final class Settings {
     var cloudSTTModel: String {
         get {
             let raw = defaults.string(forKey: Keys.cloudSTTModel)?.trimmingCharacters(in: .whitespaces)
-            guard let raw, !raw.isEmpty else { return "qwen/qwen3-asr-flash-2026-02-10" }
+            guard let raw, !raw.isEmpty else { return Self.defaultCloudSTTModel }
             switch raw {
             case "openai/whisper-large-v3":
                 // Not available on OpenRouter — fall back to the default.
-                return "qwen/qwen3-asr-flash-2026-02-10"
+                return Self.defaultCloudSTTModel
             default:
                 return raw
             }
@@ -1091,8 +1110,6 @@ final class Settings {
         }
         set { defaults.set(newValue.rawValue, forKey: Keys.aiMode) }
     }
-
-    private init() {}
 
     /// When true, a single clean Shift tap (no other key in between, no
     /// second tap within the window) fires an AI grammar / typo pass on
@@ -1265,7 +1282,7 @@ final class Settings {
     var cloudOCRModel: String {
         get {
             let raw = defaults.string(forKey: Keys.cloudOCRModel)?.trimmingCharacters(in: .whitespaces)
-            return (raw?.isEmpty == false) ? raw! : "google/gemini-3.1-flash-lite"
+            return (raw?.isEmpty == false) ? raw! : "groq/meta-llama/llama-4-scout-17b-16e-instruct"
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespaces)
