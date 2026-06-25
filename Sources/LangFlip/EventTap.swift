@@ -95,6 +95,12 @@ final class EventTap {
     private var handsFreeToggleCandidate: DictationHandsFreeShortcut?
 
     func start() throws {
+        // Initialize dictionaries before the first real word boundary. If the
+        // singleton is first touched only after the user completes a word, that
+        // first word can miss dictionary-scored auto-flip while the background
+        // load is starting.
+        _ = AutoFlip.shared
+
         let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.flagsChanged.rawValue)
         let opaque = Unmanaged.passUnretained(self).toOpaque()
 
@@ -245,7 +251,8 @@ final class EventTap {
                 let suppression = AppContext.suppressionCause()
 
                 if let completed = buffer.feedReturningCompleted(s) {
-                    var word = completed
+                    var word = completed.word
+                    let boundary = completed.boundary
 
                     // Sticky-shift correction first — its result feeds
                     // the cross-layout / auto-flip stages so a fix
@@ -254,7 +261,7 @@ final class EventTap {
                        suppression == nil,
                        let fixed = DoubleCapsFix.correction(for: word) {
                         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: double-caps fix '\(word)' → '\(fixed)'\n".utf8)) }
-                        rewriteCompletedWord(originalLength: word.count, replacement: fixed)
+                        rewriteCompletedWord(originalLength: word.count, replacement: fixed, boundary: boundary)
                         FlipOverlay.shared.show()
                         word = fixed
                     }
@@ -267,7 +274,7 @@ final class EventTap {
                        !BackspaceLearner.shared.isExcluded(word),
                        let cross = CrossLayoutFix.correction(for: word, recentContext: buffer.recentHistory) {
                         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: cross-layout fix '\(word)' → '\(cross.corrected)' (\(cross.target))\n".utf8)) }
-                        applyCrossLayoutFix(original: word, fix: cross)
+                        applyCrossLayoutFix(original: word, fix: cross, boundary: boundary)
                         word = cross.corrected
                     }
 
@@ -283,7 +290,7 @@ final class EventTap {
                                 FileHandle.standardError.write(Data("lang-flip[debug]: auto-flip suppressed: \(reason); word='\(word)'\n".utf8))
                             }
                         } else {
-                            autoFlipIfNeeded(completedWord: word)
+                            autoFlipIfNeeded(completedWord: word, boundary: boundary)
                         }
                     }
                 }
@@ -294,29 +301,28 @@ final class EventTap {
     }
 
     /// Replace the just-completed word in the focused app with `replacement`,
-    /// preserving the boundary char (assumed to be a space — same simplifying
-    /// assumption auto-flip uses). Used by the double-caps fix.
-    private func rewriteCompletedWord(originalLength: Int, replacement: String) {
-        let eraseCount = originalLength + 1
+    /// preserving the real boundary char the user typed.
+    private func rewriteCompletedWord(originalLength: Int, replacement: String, boundary: String) {
+        let eraseCount = originalLength + boundary.count
         postBackspaces(eraseCount)
-        postUnicode(replacement + " ")
+        postUnicode(replacement + boundary)
         Sound.playFlip()
     }
 
     /// Apply a cross-layout single-letter fix: rewrite the word, switch
     /// the system input source, and arm the BackspaceLearner so the user
     /// can hit Backspace to undo + permanently exclude the word.
-    private func applyCrossLayoutFix(original: String, fix: CrossLayoutFix.Correction) {
-        let eraseCount = original.count + 1
+    private func applyCrossLayoutFix(original: String, fix: CrossLayoutFix.Correction, boundary: String) {
+        let eraseCount = original.count + boundary.count
         postBackspaces(eraseCount)
-        postUnicode(fix.corrected + " ")
+        postUnicode(fix.corrected + boundary)
 
         // Treat as a layout flip from the user's perspective: capture the
         // pre-fix layout (best effort — we use the *opposite* of the
         // target since the wrong-letter side of the pair effectively
         // implies that layout was active).
         let source: Layout = (fix.target == .uk) ? .ru : .uk
-        finishRewriteAfterEventBurst(source: source, target: fix.target, original: original, converted: fix.corrected)
+        finishRewriteAfterEventBurst(source: source, target: fix.target, original: original, converted: fix.corrected, boundary: boundary)
     }
 
     /// Physically undo an auto-flip the user just rejected. We're called from
@@ -325,7 +331,7 @@ final class EventTap {
     private func performRollback(_ req: BackspaceLearner.RollbackRequest) {
         if debug { FileHandle.standardError.write(Data("lang-flip[debug]: rollback to '\(req.originalWord)' (\(req.sourceLayout))\n".utf8)) }
         InputSource.switchTo(req.sourceLayout)
-        postUnicode(req.originalWord + " ")
+        postUnicode(req.originalWord + req.boundary)
         Sound.playFlip()
         FlipOverlay.shared.show()
         // Rebuild buffer to reflect the just-typed word so a subsequent
@@ -1077,7 +1083,7 @@ final class EventTap {
 
     // MARK: - Auto-flip on word boundary
 
-    private func autoFlipIfNeeded(completedWord: String) {
+    private func autoFlipIfNeeded(completedWord: String, boundary: String) {
         guard let current = InputSource.currentLayout() else { return }
         guard let target = AutoFlip.shared.suggestedFlip(for: completedWord, currentLayout: current) else { return }
         let converted = convert(completedWord, from: current, to: target)
@@ -1091,6 +1097,7 @@ final class EventTap {
         applyAutoFlip(
             original: completedWord,
             converted: converted,
+            boundary: boundary,
             source: current,
             target: target
         )
@@ -1104,6 +1111,7 @@ final class EventTap {
     private func consultAIThenApplyFlip(
         original: String,
         converted: String,
+        boundary: String,
         source: Layout,
         target: Layout
     ) {
@@ -1126,6 +1134,7 @@ final class EventTap {
                     self.applyAutoFlip(
                         original: original,
                         converted: converted,
+                        boundary: boundary,
                         source: source,
                         target: target
                     )
@@ -1147,17 +1156,18 @@ final class EventTap {
     private func applyAutoFlip(
         original: String,
         converted: String,
+        boundary: String,
         source: Layout,
         target: Layout
     ) {
         AppLog.write("auto-flip apply original='\(original)' converted='\(converted)' \(source)→\(target)")
-        let eraseCount = original.count + 1
+        let eraseCount = original.count + boundary.count
         postBackspaces(eraseCount)
-        postUnicode(converted + " ")
-        finishRewriteAfterEventBurst(source: source, target: target, original: original, converted: converted)
+        postUnicode(converted + boundary)
+        finishRewriteAfterEventBurst(source: source, target: target, original: original, converted: converted, boundary: boundary)
     }
 
-    private func finishRewriteAfterEventBurst(source: Layout, target: Layout, original: String, converted: String) {
+    private func finishRewriteAfterEventBurst(source: Layout, target: Layout, original: String, converted: String, boundary: String = " ") {
         // Open the disagreement-watch window so the user can backspace this
         // away and have us learn from it.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
@@ -1166,6 +1176,7 @@ final class EventTap {
             BackspaceLearner.shared.recordFlip(
                 original: original,
                 converted: converted,
+                boundary: boundary,
                 source: source,
                 target: target
             )
@@ -1392,6 +1403,12 @@ final class EventTap {
         let text: String
     }
 
+    private struct ManualFlipCandidate {
+        let source: Layout
+        let target: Layout
+        let converted: String
+    }
+
     private enum FocusedSelectionState {
         case none
         case selected
@@ -1564,20 +1581,74 @@ final class EventTap {
         guard lastTokenRange.length > 0 else { return nil }
 
         let lastToken = ns.substring(with: lastTokenRange)
-        guard let source = detectLayout(lastToken) else { return nil }
-        let target = resolveTarget(source: source, configured: targetNonEnglish)
-        let convertedLastToken = convert(lastToken, from: source, to: target)
-        guard convertedLastToken != lastToken else { return nil }
+        guard let last = manualFlipCandidate(for: lastToken, targetNonEnglish: targetNonEnglish, requireConfidence: false) else { return nil }
+
+        var runStart = lastTokenRange.location
+        let runEnd = lastTokenRange.location + lastTokenRange.length
+        var tokensIncluded = 1
+
+        while tokensIncluded < 8,
+              let previousRange = whitespaceTokenRangeBefore(runStart, in: ns) {
+            let token = ns.substring(with: previousRange)
+            guard let previous = manualFlipCandidate(for: token, targetNonEnglish: targetNonEnglish, requireConfidence: true),
+                  previous.source == last.source,
+                  previous.target == last.target
+            else {
+                break
+            }
+            runStart = previousRange.location
+            tokensIncluded += 1
+        }
 
         // Manual no-selection double/triple Shift is an explicit layout
-        // conversion, not dictionary auto-flip. Always convert the last
-        // whitespace-delimited token:
+        // conversion, not dictionary auto-flip. Convert the last
+        // whitespace-delimited wrong-layout run:
         //   - English source: double -> primary, triple -> secondary.
         //   - Non-English source: always -> English.
+        let runRange = NSRange(location: runStart, length: runEnd - runStart)
+        let originalRun = ns.substring(with: runRange)
+        let convertedRun = convert(originalRun, from: last.source, to: last.target)
+        guard convertedRun != originalRun else { return nil }
         return FocusedTextSlice(
-            range: CFRange(location: lastTokenRange.location, length: lastTokenRange.length),
-            text: convertedLastToken
+            range: CFRange(location: runRange.location, length: runRange.length),
+            text: convertedRun
         )
+    }
+
+    private func manualFlipCandidate(for token: String, targetNonEnglish: Layout, requireConfidence: Bool) -> ManualFlipCandidate? {
+        guard let source = detectLayout(token) else { return nil }
+        let target = resolveTarget(source: source, configured: targetNonEnglish)
+        let converted = convert(token, from: source, to: target)
+        guard converted != token else { return nil }
+        if requireConfidence,
+           !isConfidentManualRunToken(original: token, source: source, converted: converted, target: target) {
+            return nil
+        }
+        return ManualFlipCandidate(source: source, target: target, converted: converted)
+    }
+
+    private func isConfidentManualRunToken(original: String, source: Layout, converted: String, target: Layout) -> Bool {
+        guard AutoFlip.shared.isReady else { return false }
+        let originalLexeme = dictionaryLexeme(original)
+        let convertedLexeme = dictionaryLexeme(converted)
+        guard !convertedLexeme.isEmpty else { return false }
+        if AutoFlip.shared.isKnown(convertedLexeme, in: target) { return true }
+        // If the source token is not a real word in the detected source layout,
+        // it is likely wrong-layout gibberish next to the already-flipped tail.
+        if !originalLexeme.isEmpty,
+           !AutoFlip.shared.isKnown(originalLexeme, in: source) {
+            return true
+        }
+        return false
+    }
+
+    private func dictionaryLexeme(_ token: String) -> String {
+        let allowed = CharacterSet.letters.union(CharacterSet(charactersIn: "'-"))
+        return token.unicodeScalars
+            .filter { allowed.contains($0) }
+            .map(String.init)
+            .joined()
+            .lowercased()
     }
 
     private func whitespaceTokenRangeEnding(at end: Int, in ns: NSString) -> NSRange {
@@ -1586,6 +1657,18 @@ final class EventTap {
             start -= 1
         }
         return NSRange(location: start, length: end - start)
+    }
+
+    private func whitespaceTokenRangeBefore(_ location: Int, in ns: NSString) -> NSRange? {
+        var end = min(max(location, 0), ns.length)
+        var crossedNewline = false
+        while end > 0, isWhitespaceOrNewline(ns.character(at: end - 1)) {
+            crossedNewline = crossedNewline || isNewline(ns.character(at: end - 1))
+            end -= 1
+        }
+        guard !crossedNewline, end > 0 else { return nil }
+        let range = whitespaceTokenRangeEnding(at: end, in: ns)
+        return range.length > 0 ? range : nil
     }
 
     private func flipFocusedLastWords(targetNonEnglish: Layout) -> Bool {
@@ -1619,6 +1702,11 @@ final class EventTap {
     private func isWhitespaceOrNewline(_ utf16: unichar) -> Bool {
         guard let scalar = UnicodeScalar(Int(utf16)) else { return false }
         return CharacterSet.whitespacesAndNewlines.contains(scalar)
+    }
+
+    private func isNewline(_ utf16: unichar) -> Bool {
+        guard let scalar = UnicodeScalar(Int(utf16)) else { return false }
+        return CharacterSet.newlines.contains(scalar)
     }
 
     // MARK: - Posting synthesized events

@@ -261,6 +261,15 @@ final class AutoFlip {
         return set.contains(lowercased)
     }
 
+    func isKnown(_ lowercased: String, in layout: Layout) -> Bool {
+        let (en, uk, ru) = dictSnapshot()
+        switch layout {
+        case .en: return en.contains(lowercased)
+        case .uk: return uk.contains(lowercased)
+        case .ru: return ru.contains(lowercased)
+        }
+    }
+
     /// 2 = in dictionary, 1 = plausibly word-shaped, 0 = noise.
     private func score(_ word: String, in layout: Layout) -> Int {
         let (en, uk, ru) = dictSnapshot()

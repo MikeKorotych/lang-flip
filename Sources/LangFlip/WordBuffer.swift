@@ -7,6 +7,11 @@ import Foundation
 /// actually intended as Ukrainian/Russian.
 /// Brackets stay inside for the same reason: "[" / "]" are physical "х" / "ї|ъ".
 final class WordBuffer {
+    struct CompletedWord {
+        let word: String
+        let boundary: String
+    }
+
     private(set) var current: String = ""
 
     /// Most recent completed words, oldest → newest. Used by the AI
@@ -36,13 +41,13 @@ final class WordBuffer {
     /// was just completed (the buffer's contents before the boundary).
     /// Useful for auto-flip checks at word boundaries. Completed words
     /// also accumulate in `recentHistory` (capped) for AI context.
-    func feedReturningCompleted(_ s: String) -> String? {
-        var completed: String?
+    func feedReturningCompleted(_ s: String) -> CompletedWord? {
+        var completed: CompletedWord?
         for ch in s {
             if Self.boundary.contains(ch) {
                 if !current.isEmpty {
                     if completed == nil {
-                        completed = current
+                        completed = CompletedWord(word: current, boundary: String(ch))
                     }
                     appendToHistory(current)
                 }

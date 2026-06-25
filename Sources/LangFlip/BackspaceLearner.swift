@@ -24,6 +24,7 @@ final class BackspaceLearner {
     private struct PendingFlip {
         let originalWord: String
         let convertedWord: String
+        let boundary: String
         let sourceLayout: Layout
         let targetLayout: Layout
         let timestamp: Date
@@ -34,6 +35,7 @@ final class BackspaceLearner {
     /// Where the rollback handler will need to act.
     struct RollbackRequest {
         let originalWord: String
+        let boundary: String
         let sourceLayout: Layout
     }
 
@@ -48,10 +50,11 @@ final class BackspaceLearner {
 
     /// Called from EventTap right after a successful auto-flip — starts
     /// the disagreement-watch window.
-    func recordFlip(original: String, converted: String, source: Layout, target: Layout) {
+    func recordFlip(original: String, converted: String, boundary: String = " ", source: Layout, target: Layout) {
         pending = PendingFlip(
             originalWord: original,
             convertedWord: converted,
+            boundary: boundary,
             sourceLayout: source,
             targetLayout: target,
             timestamp: Date(),
@@ -81,12 +84,13 @@ final class BackspaceLearner {
             p.addedException = true
         }
 
-        // Strong signal: erased the entire converted word plus the trailing
-        // space we added → roll the flip back physically.
-        if p.backspaceCount >= p.convertedWord.count + 1 {
+        // Strong signal: erased the entire converted word plus the boundary
+        // we reinserted → roll the flip back physically.
+        if p.backspaceCount >= p.convertedWord.count + p.boundary.count {
             pending = nil
             return RollbackRequest(
                 originalWord: p.originalWord,
+                boundary: p.boundary,
                 sourceLayout: p.sourceLayout
             )
         }
