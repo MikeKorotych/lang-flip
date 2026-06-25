@@ -593,6 +593,7 @@ final class Settings {
         static let showOverlay = "lf.showOverlay"
         static let showDictationIsland = "lf.showDictationIsland"
         static let dictationNotifications = "lf.dictationNotifications"
+        static let dictationAutoFormat = "lf.dictationAutoFormat"
         static let crossLayoutFix = "lf.crossLayoutFix"
         static let hotkeyPreset = "lf.hotkeyPreset"
         static let aiMode = "lf.aiMode"
@@ -607,6 +608,10 @@ final class Settings {
         static let screenTextCaptureHotkeyPreset = "lf.screenTextCaptureHotkeyPreset"
         static let screenTextCaptureHotkeyCustom = "lf.screenTextCaptureHotkeyCustom"
         static let translationTarget = "lf.translationTarget"
+        static let preferredInputDeviceUID = "lf.preferredInputDeviceUID"
+        static let accountFirstName = "lf.accountFirstName"
+        static let accountLastName = "lf.accountLastName"
+        static let accountAvatarPath = "lf.accountAvatarPath"
         static let ollamaModel = "lf.ollamaModel"
         static let openaiModel = "lf.openaiModel"
         static let openaiBaseURL = "lf.openaiBaseURL"
@@ -720,6 +725,30 @@ final class Settings {
         set { defaults.set(newValue, forKey: Keys.showDictationIsland) }
     }
 
+    /// Preferred microphone, stored as the device's stable `uniqueID`. Empty =
+    /// follow the macOS system default input. App-scoped: recording uses this
+    /// device without changing the system-wide default.
+    var preferredInputDeviceUID: String {
+        get { defaults.string(forKey: Keys.preferredInputDeviceUID) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.preferredInputDeviceUID) }
+    }
+
+    // Account profile — stored locally for now (the backend `/me` only returns
+    // email/role/quota). When WS1 adds profile + avatar endpoints, these move
+    // server-side. The avatar path points at a copy in Application Support.
+    var accountFirstName: String {
+        get { defaults.string(forKey: Keys.accountFirstName) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.accountFirstName) }
+    }
+    var accountLastName: String {
+        get { defaults.string(forKey: Keys.accountLastName) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.accountLastName) }
+    }
+    var accountAvatarPath: String {
+        get { defaults.string(forKey: Keys.accountAvatarPath) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.accountAvatarPath) }
+    }
+
     /// Routine dictation banners (recording started / transcribing / inserted).
     /// Off by default — the island already shows live state, so the banners are
     /// just noise; users who want them can opt in. Error banners ignore this.
@@ -727,6 +756,19 @@ final class Settings {
         get { defaults.object(forKey: Keys.dictationNotifications) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.dictationNotifications) }
     }
+
+    /// Auto-tidy the FORMATTING of long dictations (punctuation, merging
+    /// pause-split fragments, bulleting lists) via the cloud LLM, without
+    /// changing the words. On by default; only runs for transcripts longer than
+    /// `dictationAutoFormatMinChars` and when cloud AI is available (signed in).
+    var dictationAutoFormat: Bool {
+        get { defaults.object(forKey: Keys.dictationAutoFormat) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.dictationAutoFormat) }
+    }
+
+    /// Minimum transcript length (characters) before auto-format kicks in —
+    /// short dictations rarely need restructuring and shouldn't pay the latency.
+    var dictationAutoFormatMinChars: Int { 100 }
 
     /// Plays a short system tick on every text rewrite (auto-flip, manual
     /// flip, sticky-shift fix, rollback). Off by default — sound feedback
@@ -740,7 +782,7 @@ final class Settings {
         get {
             guard let raw = defaults.string(forKey: Keys.ttsBackend),
                   let backend = TextToSpeechBackend(rawValue: raw)
-            else { return .system }
+            else { return .cloud }   // TTS is a cloud feature (login + quota)
             return backend
         }
         set { defaults.set(newValue.rawValue, forKey: Keys.ttsBackend) }
@@ -1030,7 +1072,7 @@ final class Settings {
         get {
             guard let raw = defaults.string(forKey: Keys.dictationHandsFreeShortcut),
                   let shortcut = DictationHandsFreeShortcut(rawValue: raw)
-            else { return .fnOption }
+            else { return .leftOption }
             return shortcut
         }
         set { defaults.set(newValue.rawValue, forKey: Keys.dictationHandsFreeShortcut) }

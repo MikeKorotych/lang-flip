@@ -129,6 +129,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in _ = try? await SupabaseBackendAuth.shared.refreshUser() }
         }
 
+        // Auto-fill the profile (name + avatar) from the Google sign-in, and keep
+        // watching for sign-in so it fills right after the user logs in.
+        Task { @MainActor in AccountProfileSync.shared.start() }
+
         // Diagnostic: surface the AI assistant's readiness at launch
         // so users can tell why grammar / fix / translate features stay
         // silent. Foundation Models reports `.unavailable(reason)` for

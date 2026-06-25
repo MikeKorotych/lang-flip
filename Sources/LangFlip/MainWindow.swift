@@ -124,6 +124,8 @@ final class MainNavigation: ObservableObject {
     static let shared = MainNavigation()
     @Published var section: MainSection = .home
     @Published var sidebarCollapsed = false
+    /// Drives the "Manage account" modal (opened from the profile popover).
+    @Published var showAccount = false
     private init() {}
 }
 
@@ -144,6 +146,7 @@ struct MainView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(FlowTheme.paper)
+        .sheet(isPresented: $nav.showAccount) { AccountSheet() }
     }
 
     @ViewBuilder
@@ -307,13 +310,87 @@ private struct TitlebarTrailingControls: View {
     @ObservedObject private var theme = ThemeManager.shared
     var body: some View {
         HStack(spacing: 2) {
-            TopIconButton(icon: "bell") {}
+            NotificationsButton()
             TopIconButton(icon: theme.isDark ? "sun.max" : "moon") {
                 theme.isDark.toggle()
             }
             ProfileButton()
         }
         .padding(.trailing, 8)
+    }
+}
+
+/// Title-bar bell — opens the in-app notification center, with an unread badge.
+private struct NotificationsButton: View {
+    @ObservedObject private var center = AppNotifications.shared
+    @State private var show = false
+
+    var body: some View {
+        TopIconButton(icon: center.unreadCount > 0 ? "bell.badge" : "bell") {
+            show.toggle()
+            if show { center.markAllRead() }
+        }
+        .overlay(alignment: .topTrailing) {
+            if center.unreadCount > 0 {
+                Text("\(min(center.unreadCount, 9))")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(minWidth: 14, minHeight: 14)
+                    .background(Circle().fill(Color.red))
+                    .offset(x: 2, y: -2)
+            }
+        }
+        .popover(isPresented: $show, arrowEdge: .bottom) {
+            popover.frame(width: 300).padding(14)
+        }
+    }
+
+    @ViewBuilder private var popover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Notifications")
+                    .font(.system(size: 14, weight: .semibold, design: .serif))
+                    .foregroundColor(FlowTheme.ink)
+                Spacer()
+                if !center.items.isEmpty {
+                    Button("Clear") { center.clear() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12))
+                        .foregroundColor(FlowTheme.inkSecondary)
+                }
+            }
+
+            if center.items.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "bell.slash").foregroundColor(FlowTheme.inkSecondary)
+                    Text("You're all caught up.")
+                        .font(.system(size: 12)).foregroundColor(FlowTheme.inkSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 8)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(center.items) { note in
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: note.icon)
+                                .font(.system(size: 14))
+                                .foregroundColor(note.kind == .warning ? .orange : FlowTheme.accent)
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(note.title)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(FlowTheme.ink)
+                                Text(note.body)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(FlowTheme.inkSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -379,7 +456,7 @@ private struct ProfileButton: View {
             HStack {
                 FlowSmallButton(title: "Manage account") {
                     show = false
-                    MainNavigation.shared.section = .settings
+                    MainNavigation.shared.showAccount = true
                 }
                 Spacer()
                 FlowSmallButton(title: "Sign out") { auth.signOut() }
@@ -444,38 +521,38 @@ private struct TopIconButton: View {
 private struct SettingsHostView: View {
     enum Tab: String, CaseIterable, Identifiable {
         case general = "General"
-        case ai = "AI"
         case voice = "Voice"
-        case apps = "Apps"
         case about = "About"
+        case developer = "Developer"
 
         var id: Self { self }
     }
 
     @State private var tab: Tab = .general
-    // The AI tab only configures local / self-host models. Normal users use
-    // Sayful Cloud (account in the profile menu) and never see it — it's
-    // revealed by the "Self-host / local AI" toggle in General.
+    // The Developer tab holds engineering-only knobs (self-host / local models,
+    // STT model override). End users never see it — it's revealed by the
+    // "Self-host / local AI" toggle in General, so everything else in Settings
+    // is exactly the end-user view.
     @AppStorage("lf.showAdvancedAI") private var showAdvancedAI = false
 
     private var visibleTabs: [Tab] {
-        showAdvancedAI ? Tab.allCases : Tab.allCases.filter { $0 != .ai }
+        showAdvancedAI ? Tab.allCases : Tab.allCases.filter { $0 != .developer }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 14) {
                 DisplayText("Settings", size: 26)
-                Picker("", selection: $tab) {
-                    ForEach(visibleTabs) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .onChange(of: showAdvancedAI) { advanced in
-                    // If Advanced is turned off while the AI tab is open, fall
-                    // back to General so we don't show a tab that's gone.
-                    if !advanced, tab == .ai { tab = .general }
-                }
+                FlowSegmented(items: visibleTabs.map { (value: $0, label: $0.rawValue) },
+                              selection: $tab)
+                    // Centre the tab row in the available width instead of pinning
+                    // it to the left edge.
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .onChange(of: showAdvancedAI) { advanced in
+                        // If Advanced is turned off while the Developer tab is open,
+                        // fall back to General so we don't show a tab that's gone.
+                        if !advanced, tab == .developer { tab = .general }
+                    }
             }
             // Cap + center the header column so it tracks the tab content
             // (which is capped at 820) instead of stretching the segmented
@@ -491,10 +568,9 @@ private struct SettingsHostView: View {
             Group {
                 switch tab {
                 case .general:   GeneralTab()
-                case .ai:        ModelsTab()
                 case .voice:     VoiceTab()
-                case .apps:      AppsTab()
                 case .about:     AboutTab()
+                case .developer: ModelsTab()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

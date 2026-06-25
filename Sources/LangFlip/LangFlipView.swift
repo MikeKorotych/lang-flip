@@ -102,7 +102,7 @@ struct LangFlipView: View {
                 gestureHint("1.circle", "Single Shift fixes selected text or the last sentence.")
                 gestureHint("2.circle", "Double-tap Shift flips selected text or the last words.")
                 gestureHint("3.circle", "Triple-tap Shift uses the secondary language.")
-                gestureHint("pause.circle", "Press both Shift keys to pause or resume.")
+                gestureHint("wand.and.stars", "Press both Shift keys to run the Prompt Engineer transform. Pause/resume moved to the menu bar.")
                 helpText("Single, double, and triple Shift depend on press timing, so they stay as fixed gestures for now.")
             }
             .appearStagger(8, appeared)

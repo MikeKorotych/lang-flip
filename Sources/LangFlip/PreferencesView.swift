@@ -13,12 +13,18 @@ import UniformTypeIdentifiers
 
 struct GeneralTab: View {
     @AppStorage("lf.soundEnabled") private var soundEnabled = false
-    @AppStorage("lf.showAdvancedAI") private var showAdvancedAI = false
+    @AppStorage("lf.preferredInputDeviceUID") private var preferredInputDeviceUID = ""
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var hasScreenRecording = PermissionStatus.hasScreenRecording()
     @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
+    @State private var inputDevices = VoiceRecorder.inputDevices
 
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+
+    private var microphoneOptions: [(value: String, label: String)] {
+        [(value: "", label: "System default")]
+            + inputDevices.map { (value: $0.uniqueID, label: $0.localizedName) }
+    }
 
     var body: some View {
         ScrollView {
@@ -33,6 +39,14 @@ struct GeneralTab: View {
                         }
                     ))
                     FlowToggleRow(title: "Sound feedback", isOn: $soundEnabled)
+                }
+
+                FlowSettingsGroup("Microphone") {
+                    FlowPickerRow(
+                        title: "Input device",
+                        detail: "Which microphone dictation records from. Sayful uses it only for itself — your macOS system default is left unchanged.",
+                        selection: $preferredInputDeviceUID,
+                        options: microphoneOptions)
                 }
 
                 FlowSettingsGroup("Optional permissions") {
@@ -60,6 +74,7 @@ struct GeneralTab: View {
             hasScreenRecording = PermissionStatus.hasScreenRecording()
             microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
             launchAtLogin = LaunchAtLogin.isEnabled
+            inputDevices = VoiceRecorder.inputDevices
         }
     }
 
@@ -82,34 +97,15 @@ struct GeneralTab: View {
 struct VoiceTab: View {
     @AppStorage("lf.aiMode") private var aiMode = AIMode.backend.rawValue
     @AppStorage("lf.showAdvancedAI") private var showAdvancedAI = false
-    @AppStorage("lf.ttsBackend") private var ttsBackend = TextToSpeechBackend.system.rawValue
-    @AppStorage("lf.speechVoiceIdentifier") private var speechVoiceIdentifier = ""
-    @AppStorage("lf.speechRate") private var speechRate = 190.0
+    // Text-to-speech is a cloud feature now (login + quota). The backend picker
+    // was removed, so this stays `.cloud`.
+    @AppStorage("lf.ttsBackend") private var ttsBackend = TextToSpeechBackend.cloud.rawValue
+    @ObservedObject private var auth = SupabaseBackendAuth.shared
     @AppStorage("lf.cloudTTSBaseURL") private var cloudTTSBaseURL = "https://openrouter.ai/api/v1"
     @AppStorage("lf.cloudTTSModel") private var cloudTTSModel = "openai/gpt-4o-mini-tts-2025-12-15"
     @AppStorage("lf.cloudTTSVoice") private var cloudTTSVoice = "nova"
     @AppStorage("lf.cloudTTSSpeed") private var cloudTTSSpeed = 1.0
     @AppStorage("lf.cloudTTSInstructions") private var cloudTTSInstructions = ""
-    @AppStorage("lf.omniVoiceLanguage") private var omniVoiceLanguage = OmniVoiceLanguage.auto.rawValue
-    @AppStorage("lf.omniVoiceGender") private var omniVoiceGender = OmniVoiceGenderStyle.none.rawValue
-    @AppStorage("lf.omniVoiceAge") private var omniVoiceAge = OmniVoiceAgeStyle.none.rawValue
-    @AppStorage("lf.omniVoicePitch") private var omniVoicePitch = OmniVoicePitchStyle.none.rawValue
-    @AppStorage("lf.omniVoiceAccent") private var omniVoiceAccent = OmniVoiceAccentStyle.none.rawValue
-    @AppStorage("lf.omniVoiceWhisper") private var omniVoiceWhisper = false
-    @AppStorage("lf.omniVoiceSpeed") private var omniVoiceSpeed = 1.0
-    @AppStorage("lf.omniVoiceDuration") private var omniVoiceDuration = 0.0
-    @AppStorage("lf.omniVoiceSentencePause") private var omniVoiceSentencePause = 0.35
-    @AppStorage("lf.omniVoiceLinePause") private var omniVoiceLinePause = 0.75
-    @AppStorage("lf.omniVoiceNumSteps") private var omniVoiceNumSteps = 32
-    @AppStorage("lf.omniVoiceGuidanceScale") private var omniVoiceGuidanceScale = 2.0
-    @AppStorage("lf.omniVoiceDenoise") private var omniVoiceDenoise = true
-    @AppStorage("lf.omniVoicePostprocessOutput") private var omniVoicePostprocessOutput = true
-    @AppStorage("lf.omniVoiceTShift") private var omniVoiceTShift = 0.1
-    @AppStorage("lf.omniVoiceLayerPenaltyFactor") private var omniVoiceLayerPenaltyFactor = 5.0
-    @AppStorage("lf.omniVoicePositionTemperature") private var omniVoicePositionTemperature = 5.0
-    @AppStorage("lf.omniVoiceClassTemperature") private var omniVoiceClassTemperature = 0.0
-    @AppStorage("lf.omniVoiceReferenceAudioPath") private var omniVoiceReferenceAudioPath = ""
-    @AppStorage("lf.omniVoiceReferenceText") private var omniVoiceReferenceText = ""
     @AppStorage("lf.readSelectionHotkeyEnabled") private var readSelectionHotkeyEnabled = true
     @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.controlOptionX.rawValue
     @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
@@ -118,12 +114,12 @@ struct VoiceTab: View {
     @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = false
     @AppStorage("lf.showDictationIsland") private var showDictationIsland = true
     @AppStorage("lf.dictationNotifications") private var dictationNotifications = false
-    @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.fnOption.rawValue
+    @AppStorage("lf.dictationAutoFormat") private var dictationAutoFormat = true
+    @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.leftOption.rawValue
     @AppStorage("lf.cloudSTTBaseURL") private var cloudSTTBaseURL = "https://openrouter.ai/api/v1"
     @AppStorage("lf.cloudSTTModel") private var cloudSTTModel = "qwen/qwen3-asr-flash-2026-02-10"
 
     @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
-    @State private var voices = SpeechReader.availableVoices
     @State private var recorderIsRecording = VoiceRecorder.shared.isRecording
     @State private var recorderElapsed = VoiceRecorder.shared.elapsed
     @State private var recorderAverageLevel = VoiceRecorder.shared.normalizedAveragePower
@@ -135,10 +131,6 @@ struct VoiceTab: View {
     @State private var isTranscribing = false
     @State private var transcriptionText = ""
     @State private var transcriptionError: String?
-    @State private var omniVoiceAvailability = OmniVoiceSynthesizer.availability()
-    @State private var isGeneratingOmniVoice = false
-    @State private var omniVoiceOutputURL = OmniVoiceSynthesizer.shared.lastOutputURL
-    @State private var omniVoiceMessage: String?
     @State private var cloudTTSKeyDraft: String = KeychainStore.getString(account: KeychainStore.openAIAPIKey) ?? ""
     @State private var isGeneratingCloudTTS = false
     @State private var cloudTTSOutputURL = CloudSpeechSynthesizer.shared.lastOutputURL
@@ -155,14 +147,10 @@ struct VoiceTab: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $voiceTab) {
-                ForEach(VoiceSubTab.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
+            FlowSegmented(items: VoiceSubTab.allCases.map { (value: $0, label: $0.rawValue) },
+                          selection: $voiceTab)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
@@ -177,18 +165,20 @@ struct VoiceTab: View {
                 .frame(maxWidth: .infinity, alignment: .top)
             }
             .onAppear {
-                voices = SpeechReader.availableVoices
+                // TTS is cloud-only now — migrate any legacy system/OmniVoice
+                // selection so read-aloud routes through Sayful Cloud.
+                if ttsBackend != TextToSpeechBackend.cloud.rawValue {
+                    ttsBackend = TextToSpeechBackend.cloud.rawValue
+                }
                 cloudTTSKeyDraft = KeychainStore.getString(account: KeychainStore.openAIAPIKey) ?? ""
                 syncCloudTTSVoiceForModel()
                 microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
                 refreshRecorderState()
-                refreshOmniVoiceState()
                 refreshCloudTTSState()
             }
             .onReceive(timer) { _ in
                 microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
                 refreshRecorderState()
-                refreshOmniVoiceState()
                 refreshCloudTTSState()
             }
             .onReceive(NotificationCenter.default.publisher(for: .langFlipVoiceRecorderChanged)) { _ in
@@ -200,38 +190,16 @@ struct VoiceTab: View {
     @ViewBuilder
     private var ttsContent: some View {
         FlowSettingsGroup("Text to speech") {
-            FlowPickerRow(
-                title: "Backend",
-                detail: "System voices start instantly. OmniVoice runs locally and gives more voice controls, but takes longer to generate audio.",
-                selection: $ttsBackend,
-                options: TextToSpeechBackend.allCases.map { (value: $0.rawValue, label: $0.displayName) }
-            )
-
-            if activeTTSBackend == .system {
-                FlowPickerRow(
-                    title: "Voice",
-                    detail: "Pick which macOS voice reads selected text aloud.",
-                    selection: $speechVoiceIdentifier,
-                    options: [(value: "", label: "System default")] + voices.map { (value: $0, label: SpeechReader.displayName(for: $0)) }
-                )
-                .onChange(of: speechVoiceIdentifier) { _ in
-                    SpeechReader.shared.applySettings()
-                }
-
-                FlowSliderRow(
-                    title: "Speed",
-                    detail: "Move right to read faster, left to read slower.",
-                    value: $speechRate,
-                    range: 120...260,
-                    step: 5,
-                    valueLabel: "\(Int(speechRate))"
-                )
-                .onChange(of: speechRate) { _ in
-                    SpeechReader.shared.applySettings()
-                }
-            } else if activeTTSBackend == .cloud {
-                if usesSayfulCloud {
-                    helpText("Using Sayful Cloud — no API key needed. The server holds the provider key and picks the TTS model. Voice, speed, and instructions below still apply.")
+            // Text-to-speech is cloud-only (Sayful Cloud → login + quota). No
+            // provider/backend choice; the user only picks voice, speed, and
+            // optional instructions below. (`ttsBackend` is forced to `.cloud`
+            // on appear, so only the cloud branch ever renders.)
+            if usesSayfulCloud {
+                    if auth.isSignedIn {
+                        helpText("Using Sayful Cloud — no API key needed. Reads selected text aloud; usage counts toward your weekly word quota (read-aloud words cost more than dictated words). Pick a voice, speed, and optional instructions below.")
+                    } else {
+                        helpText("Sign in to Sayful Cloud (profile menu, top-right) to use text-to-speech.")
+                    }
                 } else {
                     SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
                         .textFieldStyle(.roundedBorder)
@@ -307,190 +275,6 @@ struct VoiceTab: View {
                 if !usesSayfulCloud {
                     helpText("Current practical default: OpenAI GPT-4o Mini TTS via OpenRouter for cost and compatibility. For richer multilingual or expressive output, try google/gemini-3.1-flash-tts-preview.")
                 }
-            } else {
-                FlowPickerRow(
-                    title: "Language",
-                    detail: "Leave Auto for normal use. Choose a language manually if pronunciation sounds wrong.",
-                    selection: $omniVoiceLanguage,
-                    options: OmniVoiceLanguage.allCases.map { (value: $0.rawValue, label: $0.displayName) }
-                )
-
-                HStack {
-                    Text("OmniVoice").foregroundColor(FlowTheme.ink)
-                    Spacer()
-                    Text(omniVoiceStatusLabel)
-                        .foregroundColor(omniVoiceAvailability.isReady ? FlowTheme.accent : .orange)
-                        .lineLimit(1)
-                }
-                helpText("Shows whether the local voice model is ready on this Mac.")
-
-                FlowPickerRow(
-                    title: "Voice",
-                    detail: "Choose a more feminine or masculine voice character. Default lets the model decide.",
-                    selection: $omniVoiceGender,
-                    options: OmniVoiceGenderStyle.allCases.map { (value: $0.rawValue, label: $0.displayName) }
-                )
-
-                FlowPickerRow(
-                    title: "Age",
-                    detail: "Changes the age character of the voice: younger, older, or neutral.",
-                    selection: $omniVoiceAge,
-                    options: OmniVoiceAgeStyle.allCases.map { (value: $0.rawValue, label: $0.displayName) }
-                )
-
-                FlowPickerRow(
-                    title: "Pitch",
-                    detail: "Move toward Low for a deeper voice, High for a brighter voice.",
-                    selection: $omniVoicePitch,
-                    options: OmniVoicePitchStyle.allCases.map { (value: $0.rawValue, label: $0.displayName) }
-                )
-
-                FlowPickerRow(
-                    title: "Accent",
-                    detail: "Adds an accent flavor. It usually works best with English text.",
-                    selection: $omniVoiceAccent,
-                    options: OmniVoiceAccentStyle.allCases.map { (value: $0.rawValue, label: $0.displayName) }
-                )
-
-                FlowToggleRow(
-                    title: "Whispered voice",
-                    detail: "Makes the voice sound quieter and breathier, like a whisper.",
-                    isOn: $omniVoiceWhisper
-                )
-
-                Divider().overlay(FlowTheme.cardStroke)
-
-                HStack {
-                    Text("Reference voice").foregroundColor(FlowTheme.ink)
-                    Spacer()
-                    Text(omniVoiceReferenceAudioLabel)
-                        .foregroundColor(FlowTheme.inkSecondary)
-                        .lineLimit(1)
-                    FlowSmallButton(title: "Choose Audio") {
-                        chooseOmniVoiceReferenceAudio()
-                    }
-                    FlowSmallButton(title: "Clear") {
-                        omniVoiceReferenceAudioPath = ""
-                        omniVoiceReferenceText = ""
-                    }
-                    .disabled(omniVoiceReferenceAudioPath.isEmpty)
-                }
-                helpText("Optional voice sample. Add a short clean recording and OmniVoice will try to speak with a similar voice.")
-
-                TextField("Reference transcript (optional)", text: $omniVoiceReferenceText)
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.small)
-                    .disabled(omniVoiceReferenceAudioPath.isEmpty)
-                    .help("Optional: type what is said in the reference audio. This can make voice cloning more accurate.")
-
-                Divider().overlay(FlowTheme.cardStroke)
-
-                FlowSliderRow(
-                    title: "Speed",
-                    detail: "Move right to speak faster, left to speak slower. Fixed Duration turns this off.",
-                    value: $omniVoiceSpeed,
-                    range: 0.5...1.5,
-                    step: 0.05,
-                    valueLabel: String(format: "%.2fx", omniVoiceSpeed)
-                )
-                .disabled(omniVoiceDuration > 0)
-
-                FlowSliderRow(
-                    title: "Duration",
-                    detail: "Keep Auto for natural timing. Set a number only when the audio must fit a fixed length.",
-                    value: $omniVoiceDuration,
-                    range: 0...60,
-                    step: 0.5,
-                    valueLabel: omniVoiceDuration > 0 ? String(format: "%.1fs", omniVoiceDuration) : "Auto"
-                )
-
-                FlowSliderRow(
-                    title: "Sentence pause",
-                    detail: "Adds a real pause after '.', '!', '?' and similar sentence endings. Increase it for jokes, stories, and dramatic reading.",
-                    value: $omniVoiceSentencePause,
-                    range: 0...2,
-                    step: 0.05,
-                    valueLabel: String(format: "%.2fs", omniVoiceSentencePause)
-                )
-
-                FlowSliderRow(
-                    title: "Line pause",
-                    detail: "Adds a longer pause after line breaks. Increase it when reading lists, poems, chat messages, or multi-line jokes.",
-                    value: $omniVoiceLinePause,
-                    range: 0...3,
-                    step: 0.05,
-                    valueLabel: String(format: "%.2fs", omniVoiceLinePause)
-                )
-
-                FlowSliderRow(
-                    title: "Quality",
-                    detail: "Move left for faster generation, right for better quality. 32 is a good everyday balance.",
-                    value: Binding(
-                        get: { Double(omniVoiceNumSteps) },
-                        set: { omniVoiceNumSteps = Int($0.rounded()) }
-                    ),
-                    range: 4...64,
-                    step: 1,
-                    valueLabel: "\(omniVoiceNumSteps)"
-                )
-
-                FlowSliderRow(
-                    title: "Style strength",
-                    detail: "Move right if the selected voice/style is too subtle. Move left if the result sounds forced or less natural.",
-                    value: $omniVoiceGuidanceScale,
-                    range: 0...4,
-                    step: 0.1,
-                    valueLabel: String(format: "%.1f", omniVoiceGuidanceScale)
-                )
-
-                DisclosureGroup("Advanced generation") {
-                    VStack(alignment: .leading, spacing: 14) {
-                        FlowToggleRow(
-                            title: "Cleaner voice",
-                            detail: "Usually keep this on. Turn it off only if the voice starts sounding too processed.",
-                            isOn: $omniVoiceDenoise
-                        )
-                        FlowToggleRow(
-                            title: "Trim awkward silence",
-                            detail: "Usually keep this on. It removes overly long silent parts from the generated audio.",
-                            isOn: $omniVoicePostprocessOutput
-                        )
-                        advancedOmniVoiceSlider("Timing stability", value: $omniVoiceTShift, range: 0...2, step: 0.05, help: "Leave near the default unless speech timing sounds strange. Moving it can change rhythm and stability.")
-                        advancedOmniVoiceSlider("Voice smoothness", value: $omniVoiceLayerPenaltyFactor, range: 0...10, step: 0.5, help: "Higher can make the voice more controlled. Lower can make it looser, but sometimes less stable.")
-                        advancedOmniVoiceSlider("Rhythm variety", value: $omniVoicePositionTemperature, range: 0...10, step: 0.5, help: "Higher adds more variation to rhythm. Lower is more predictable.")
-                        advancedOmniVoiceSlider("Voice variety", value: $omniVoiceClassTemperature, range: 0...2, step: 0.05, help: "0 is safest and most stable. Increase only if you want more variation and can accept occasional odd results.")
-                        FlowSmallButton(title: "Reset generation settings") {
-                            Settings.shared.resetOmniVoiceGenerationSettings()
-                            syncOmniVoiceGenerationSettingsFromDefaults()
-                        }
-                        .help("Restore speed, pauses, quality, and advanced generation settings to Sayful defaults.")
-                    }
-                    .padding(.top, 6)
-                }
-
-                if let omniVoiceMessage {
-                    Text(omniVoiceMessage)
-                        .font(.caption)
-                        .foregroundColor(FlowTheme.inkSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if let omniVoiceOutputURL {
-                    HStack {
-                        Text("Last OmniVoice output").foregroundColor(FlowTheme.ink)
-                        Spacer()
-                        Text(omniVoiceOutputURL.lastPathComponent)
-                            .foregroundColor(FlowTheme.inkSecondary)
-                            .lineLimit(1)
-                        FlowSmallButton(title: "Play") {
-                            OmniVoiceSynthesizer.shared.play(omniVoiceOutputURL)
-                        }
-                        FlowSmallButton(title: "Reveal") {
-                            NSWorkspace.shared.activateFileViewerSelecting([omniVoiceOutputURL])
-                        }
-                    }
-                }
-            }
 
             HStack {
                 FlowSmallButton(title: ttsSampleButtonTitle, prominent: true) {
@@ -499,16 +283,13 @@ struct VoiceTab: View {
                 .disabled(ttsSampleDisabled)
 
                 FlowSmallButton(title: "Stop") {
-                    SpeechReader.shared.stop()
-                    OmniVoiceSynthesizer.shared.stop()
                     CloudSpeechSynthesizer.shared.stop()
-                    isGeneratingOmniVoice = false
                     isGeneratingCloudTTS = false
                 }
                 Spacer()
             }
 
-            helpText("Use the menu bar action to read the current text selection aloud. System voices are instant; OmniVoice is local and heavier; Cloud TTS sends selected text to your chosen API provider.")
+            helpText("Use the menu bar action (or the read-aloud shortcut) to read the current text selection aloud through Sayful Cloud. Requires sign-in and counts toward your weekly quota.")
         }
 
         FlowSettingsGroup("Read aloud shortcut") {
@@ -559,6 +340,12 @@ struct VoiceTab: View {
                 title: "Dictation notifications",
                 detail: "Show a banner when recording starts, while transcribing, and when text is inserted. Off by default — the island already shows live state. Errors always notify.",
                 isOn: $dictationNotifications
+            )
+
+            FlowToggleRow(
+                title: "Auto-format long dictations",
+                detail: "After transcribing, tidy the formatting of longer dictations — punctuation, merging fragments split by pauses, bulleting lists — without changing your words. Uses Sayful Cloud (counts toward your weekly quota) and adds a brief delay; short dictations are left as-is.",
+                isOn: $dictationAutoFormat
             )
 
             Divider().overlay(FlowTheme.cardStroke)
@@ -672,14 +459,8 @@ struct VoiceTab: View {
             // endpoint. Audio is sent to the provider; nothing is stored.
             if usesSayfulCloud {
                 helpText("Dictation uses Sayful Cloud — no API key needed. The server holds the provider key and picks the STT model. Only your recorded dictation audio is sent; sign in from the profile menu.")
-
-                // Developer override (Advanced): pin the STT model the backend
-                // uses for your account, for testing. Normal users never see
-                // this and get the server default.
-                if showAdvancedAI {
-                    OpenRouterTranscriptionModelPicker(selectedModel: $cloudSTTModel)
-                    helpText("Developer: overrides the STT model the backend runs for your account. The backend honors this per request; other users keep the server default.")
-                }
+                // The developer STT-model override now lives in the Developer tab,
+                // so this Voice tab stays a clean end-user view.
             } else {
                 SecureField("OpenRouter or OpenAI API key", text: $cloudTTSKeyDraft)
                     .textFieldStyle(.roundedBorder)
@@ -779,10 +560,6 @@ struct VoiceTab: View {
         return String(format: "%d:%02d", total / 60, total % 60)
     }
 
-    private var activeTTSBackend: TextToSpeechBackend {
-        TextToSpeechBackend(rawValue: ttsBackend) ?? .system
-    }
-
     private var readSelectionShortcutName: String {
         GlobalShortcut.decode(readSelectionHotkeyCustom)?.displayName
             ?? (GlobalShortcutPreset(rawValue: readSelectionHotkeyPreset) ?? .controlOptionX).displayName
@@ -794,18 +571,6 @@ struct VoiceTab: View {
 
     private var dictationHandsFreeName: String {
         (DictationHandsFreeShortcut(rawValue: dictationHandsFreeShortcut) ?? .fnOption).displayName
-    }
-
-    private var omniVoiceStatusLabel: String {
-        if omniVoiceAvailability.executableURL == nil { return "Runtime missing" }
-        if omniVoiceAvailability.ffmpegURL == nil { return "ffmpeg missing" }
-        if !omniVoiceAvailability.modelCacheExists { return "Model will download on first use" }
-        return "Ready"
-    }
-
-    private var omniVoiceReferenceAudioLabel: String {
-        guard !omniVoiceReferenceAudioPath.isEmpty else { return "None" }
-        return URL(fileURLWithPath: omniVoiceReferenceAudioPath).lastPathComponent
     }
 
     private var cloudTTSUsesOpenRouter: Bool {
@@ -828,34 +593,22 @@ struct VoiceTab: View {
     }
 
     private var ttsSampleButtonTitle: String {
-        if activeTTSBackend == .omniVoice && isGeneratingOmniVoice { return "Generating…" }
-        if activeTTSBackend == .cloud && isGeneratingCloudTTS { return "Generating…" }
-        return "Read sample"
+        isGeneratingCloudTTS ? "Generating…" : "Read sample"
     }
 
     private var ttsSampleDisabled: Bool {
-        switch activeTTSBackend {
-        case .system:
-            return false
-        case .omniVoice:
-            return !omniVoiceAvailability.isReady || isGeneratingOmniVoice
-        case .cloud:
-            return !hasCloudTTSKey ||
-                cloudTTSModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                cloudTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                isGeneratingCloudTTS
-        }
+        if isGeneratingCloudTTS { return true }
+        // Sayful Cloud: needs sign-in, no key. Advanced/BYOK: needs a key + model.
+        if usesSayfulCloud { return !auth.isSignedIn }
+        return !hasCloudTTSKey ||
+            cloudTTSModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            cloudTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var testTranscriptionDisabled: Bool {
         if isTranscribing || lastRecordingURL == nil { return true }
         if usesSayfulCloud { return !SupabaseBackendAuth.shared.isSignedIn }
         return !hasCloudTTSKey || cloudSTTModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private func refreshOmniVoiceState() {
-        omniVoiceAvailability = OmniVoiceSynthesizer.availability()
-        omniVoiceOutputURL = OmniVoiceSynthesizer.shared.lastOutputURL
     }
 
     private func refreshCloudTTSState() {
@@ -870,100 +623,29 @@ struct VoiceTab: View {
         }
     }
 
-    private func chooseOmniVoiceReferenceAudio() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowedContentTypes = [.audio]
-        if panel.runModal() == .OK, let url = panel.url {
-            omniVoiceReferenceAudioPath = url.path
-        }
-    }
-
     private func readTTSSample() {
         let sample = """
         Sayful can read selected text aloud. Sentence pauses make stories easier to follow.
         A new line can pause a little longer.
         """
-        if activeTTSBackend == .system {
-            SpeechReader.shared.speak(sample)
-            return
-        }
-
-        if activeTTSBackend == .cloud {
-            isGeneratingCloudTTS = true
-            cloudTTSMessage = "Generating cloud TTS sample..."
-            Task {
-                do {
-                    let url = try await CloudSpeechSynthesizer.shared.generate(text: sample)
-                    await MainActor.run {
-                        isGeneratingCloudTTS = false
-                        cloudTTSOutputURL = url
-                        cloudTTSMessage = "Generated \(url.lastPathComponent)."
-                        CloudSpeechSynthesizer.shared.play(url)
-                    }
-                } catch {
-                    await MainActor.run {
-                        isGeneratingCloudTTS = false
-                        cloudTTSMessage = "Cloud TTS failed: \(error.localizedDescription)"
-                    }
-                }
-            }
-            return
-        }
-
-        isGeneratingOmniVoice = true
-        omniVoiceMessage = "Generating OmniVoice sample..."
+        isGeneratingCloudTTS = true
+        cloudTTSMessage = "Generating cloud TTS sample..."
         Task {
             do {
-                let url = try await OmniVoiceSynthesizer.shared.generate(text: sample)
+                let url = try await CloudSpeechSynthesizer.shared.generate(text: sample)
                 await MainActor.run {
-                    isGeneratingOmniVoice = false
-                    omniVoiceOutputURL = url
-                    omniVoiceMessage = "Generated \(url.lastPathComponent)."
-                    OmniVoiceSynthesizer.shared.play(url)
+                    isGeneratingCloudTTS = false
+                    cloudTTSOutputURL = url
+                    cloudTTSMessage = "Generated \(url.lastPathComponent)."
+                    CloudSpeechSynthesizer.shared.play(url)
                 }
             } catch {
                 await MainActor.run {
-                    isGeneratingOmniVoice = false
-                    omniVoiceMessage = "OmniVoice failed: \(error.localizedDescription)"
+                    isGeneratingCloudTTS = false
+                    cloudTTSMessage = "Cloud TTS failed: \(error.localizedDescription)"
                 }
             }
         }
-    }
-
-    private func syncOmniVoiceGenerationSettingsFromDefaults() {
-        omniVoiceSpeed = Settings.shared.omniVoiceSpeed
-        omniVoiceDuration = Settings.shared.omniVoiceDuration
-        omniVoiceSentencePause = Settings.shared.omniVoiceSentencePause
-        omniVoiceLinePause = Settings.shared.omniVoiceLinePause
-        omniVoiceNumSteps = Settings.shared.omniVoiceNumSteps
-        omniVoiceGuidanceScale = Settings.shared.omniVoiceGuidanceScale
-        omniVoiceDenoise = Settings.shared.omniVoiceDenoise
-        omniVoicePostprocessOutput = Settings.shared.omniVoicePostprocessOutput
-        omniVoiceTShift = Settings.shared.omniVoiceTShift
-        omniVoiceLayerPenaltyFactor = Settings.shared.omniVoiceLayerPenaltyFactor
-        omniVoicePositionTemperature = Settings.shared.omniVoicePositionTemperature
-        omniVoiceClassTemperature = Settings.shared.omniVoiceClassTemperature
-    }
-
-    @ViewBuilder
-    private func advancedOmniVoiceSlider(
-        _ title: String,
-        value: Binding<Double>,
-        range: ClosedRange<Double>,
-        step: Double,
-        help: String
-    ) -> some View {
-        FlowSliderRow(
-            title: title,
-            detail: help,
-            value: value,
-            range: range,
-            step: step,
-            valueLabel: String(format: "%.2f", value.wrappedValue)
-        )
     }
 
     private func transcribeLastRecording() {
@@ -1028,6 +710,7 @@ struct ModelsTab: View {
     @AppStorage("lf.openaiModel") private var openaiModel = "gpt-5-nano"
     @AppStorage("lf.openaiBaseURL") private var openaiBaseURL = "https://api.openai.com/v1"
     @AppStorage("lf.cloudOCRModel") private var cloudOCRModel = "google/gemini-3.1-flash-lite"
+    @AppStorage("lf.cloudSTTModel") private var cloudSTTModel = "qwen/qwen3-asr-flash-2026-02-10"
 
     /// API key kept in Keychain (NOT @AppStorage). Mirror it through
     /// @State so SwiftUI re-renders the SecureField properly. We
@@ -1036,6 +719,16 @@ struct ModelsTab: View {
 
     var body: some View {
         Form {
+            // This whole tab is the developer-only surface (hidden unless the
+            // "Self-host / local AI" toggle in General is on). The banner makes
+            // that explicit so everything else in Settings can be judged as the
+            // real end-user view.
+            Section {
+                Label("Developer-only — end users never see this tab.", systemImage: "hammer.fill")
+                    .font(.callout.weight(.semibold))
+                helpText("Shown only while “Self-host / local AI” is on in General. Every other Settings tab is exactly what end users see — use this tab for engineering knobs (self-host models, STT override) without leaking them into the normal UI.")
+            }
+
             // Sayful Cloud account is the default AI for everyone — sign in, see
             // your plan + weekly quota. No API-key setup.
             if AIMode(rawValue: aiMode) == .backend {
@@ -1055,6 +748,16 @@ struct ModelsTab: View {
                     }
                 }
                     helpText("Choose Sayful Cloud (recommended), a local model (Ollama / Apple Intelligence), or bring your own OpenAI-compatible key.")
+            }
+
+            // STT model override for Sayful Cloud dictation. Lives here (not in
+            // Voice) so the Voice tab stays a clean end-user view; the backend
+            // honors this per request, end users get the server default.
+            if AIMode(rawValue: aiMode) == .backend {
+                Section("Speech-to-text model (dictation)") {
+                    OpenRouterTranscriptionModelPicker(selectedModel: $cloudSTTModel)
+                    helpText("Overrides the STT model the backend runs for your account, per request — for testing/comparing models. End users keep the server default.")
+                }
             }
 
             // Backend-specific config sits directly under Mode — that's
@@ -2433,61 +2136,13 @@ private struct OpenRouterModel: Decodable, Identifiable {
     }
 }
 
-// MARK: - Apps
-
-struct AppsTab: View {
-    @State private var userBlocked = Array(Settings.shared.userBlacklist).sorted()
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                FlowSettingsGroup("App exclusions") {
-                    if userBlocked.isEmpty {
-                        Text("No apps are excluded. Sayful automatically avoids sensitive app types like terminals and password managers.")
-                            .font(.system(size: 13))
-                            .foregroundColor(FlowTheme.inkSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } else {
-                        ForEach(userBlocked, id: \.self) { bundleID in
-                            HStack {
-                                Text(bundleID)
-                                    .font(.system(size: 13, design: .monospaced))
-                                    .foregroundColor(FlowTheme.ink)
-                                Spacer(minLength: 12)
-                                FlowSmallButton(title: "Remove") { remove(bundleID) }
-                            }
-                        }
-                    }
-                }
-
-                FlowSettingsGroup("Built-in blocks") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Auto-flip stays off in apps where automatic rewriting could damage commands or credentials.")
-                        Text("Terminals: Terminal, iTerm2, Warp, Ghostty, Alacritty, Kitty, Hyper, Tabby")
-                        Text("Password managers: 1Password, LastPass, Dashlane, Bitwarden, KeePassXC, and similar apps.")
-                    }
-                    .font(.system(size: 13))
-                    .foregroundColor(FlowTheme.inkSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(28)
-            .frame(maxWidth: 820, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .top)
-        }
-    }
-
-    private func remove(_ bundleID: String) {
-        var set = Settings.shared.userBlacklist
-        set.remove(bundleID)
-        Settings.shared.userBlacklist = set
-        userBlocked = Array(set).sorted()
-    }
-}
-
 // MARK: - About
 
 struct AboutTab: View {
+    /// App-exclusion list (merged in from the former Apps tab). Shown small and
+    /// quiet at the bottom of About — it's a power-user detail, not a main knob.
+    @State private var userBlocked = Array(Settings.shared.userBlacklist).sorted()
+
     private var version: String {
         let info = Bundle.main.infoDictionary
         let v = info?["CFBundleShortVersionString"] as? String ?? "?"
@@ -2526,10 +2181,70 @@ struct AboutTab: View {
                     }
                 }
                 .padding(.top, 2)
+
+                // Separator pulled out as a sibling with symmetric vertical
+                // padding so it sits equidistant from the buttons above and the
+                // exclusions below (the parent VStack spacing adds evenly).
+                Divider()
+                    .overlay(FlowTheme.cardStroke)
+                    .frame(maxWidth: 460)
+                    .padding(.vertical, 22)
+
+                appExclusions
             }
             .padding(.top, 40)
             .padding(.horizontal, 28)
+            .padding(.bottom, 28)
             .frame(maxWidth: .infinity)
         }
+    }
+
+    /// Former "Apps" tab, folded in below About — capped and centered like the
+    /// rest of the panel, a couple of sizes quieter so it stays a footnote
+    /// rather than a feature. (The separator above is a sibling in `body`.)
+    private var appExclusions: some View {
+        VStack(spacing: 10) {
+            Text("APP EXCLUSIONS")
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.8)
+                .foregroundColor(FlowTheme.inkSecondary)
+
+            if userBlocked.isEmpty {
+                Text("No apps are excluded. Sayful automatically avoids sensitive app types like terminals and password managers.")
+                    .font(.system(size: 11))
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ForEach(userBlocked, id: \.self) { bundleID in
+                    HStack(spacing: 8) {
+                        Text(bundleID)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(FlowTheme.inkSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        FlowSmallButton(title: "Remove") { remove(bundleID) }
+                    }
+                }
+            }
+
+            VStack(spacing: 4) {
+                Text("Auto-flip stays off in apps where automatic rewriting could damage commands or credentials.")
+                Text("Terminals: Terminal, iTerm2, Warp, Ghostty, Alacritty, Kitty, Hyper, Tabby")
+                Text("Password managers: 1Password, LastPass, Dashlane, Bitwarden, KeePassXC, and similar apps.")
+            }
+            .font(.system(size: 11))
+            .foregroundColor(FlowTheme.inkSecondary.opacity(0.85))
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: 460)
+        .multilineTextAlignment(.center)
+    }
+
+    private func remove(_ bundleID: String) {
+        var set = Settings.shared.userBlacklist
+        set.remove(bundleID)
+        Settings.shared.userBlacklist = set
+        userBlocked = Array(set).sorted()
     }
 }
