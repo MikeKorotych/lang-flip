@@ -50,11 +50,30 @@ final class TransformStore: ObservableObject {
     private init() {
         load()
         let schema = UserDefaults.standard.integer(forKey: Self.schemaKey)
-        if transforms.isEmpty || schema < Self.currentSchema {
+        if transforms.isEmpty {
             transforms = Self.defaults
             save()
             UserDefaults.standard.set(Self.currentSchema, forKey: Self.schemaKey)
+        } else if schema < Self.currentSchema {
+            migrateToSchema2()
+            UserDefaults.standard.set(Self.currentSchema, forKey: Self.schemaKey)
         }
+    }
+
+    /// v1→v2: drop the built-in Polish preset (it duplicated the single-Shift
+    /// fix) and move the built-in Prompt Engineer to the both-Shift trigger —
+    /// WITHOUT destroying the user's own custom transforms.
+    private func migrateToSchema2() {
+        transforms.removeAll { $0.isBuiltIn && $0.name == "Polish" }
+        if let i = transforms.firstIndex(where: { $0.isBuiltIn && $0.name == "Prompt Engineer" }) {
+            transforms[i].bothShift = true
+            transforms[i].shortcut = nil
+        } else if !transforms.contains(where: { $0.triggersOnBothShift }) {
+            // Prompt Engineer was deleted by the user and no other both-Shift
+            // transform exists — re-seed it so the gesture isn't left dangling.
+            transforms.append(Self.promptEngineer)
+        }
+        save()
     }
 
     // MARK: Presets
