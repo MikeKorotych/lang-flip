@@ -376,11 +376,12 @@ private struct SuperpowersCard: View {
 
     private var powers: [Power] {
         [
-            Power(icon: "wand.and.stars", title: "Fix grammar", shortcut: compactShortcut("Shift")),
-            Power(icon: "arrow.2.squarepath", title: "Flip layout", shortcut: compactShortcut("Shift Shift")),
-            Power(icon: "globe", title: "Translate", shortcut: compactShortcut(Settings.shared.translationShortcut.displayName)),
-            Power(icon: "viewfinder", title: "Capture screen text", shortcut: compactShortcut(Settings.shared.screenTextCaptureShortcut.displayName)),
-            Power(icon: "speaker.wave.2", title: "Read aloud", shortcut: compactShortcut(Settings.shared.readSelectionShortcut.displayName)),
+            Power(icon: "mic.fill", title: "Start Dictation", shortcut: compactShortcut(Settings.shared.dictationHandsFreeShortcut.displayName)),
+            Power(icon: "wand.and.stars", title: "Fix Selected Text", shortcut: compactShortcut("Shift")),
+            Power(icon: "arrow.2.squarepath", title: "Flip Layout", shortcut: compactShortcut("Shift Shift")),
+            Power(icon: "globe", title: "Translate Selected Text", shortcut: compactShortcut(Settings.shared.translationShortcut.displayName)),
+            Power(icon: "viewfinder", title: "Capture Screen Text", shortcut: compactShortcut(Settings.shared.screenTextCaptureShortcut.displayName)),
+            Power(icon: "speaker.wave.2", title: "Read Selected Text", shortcut: compactShortcut(Settings.shared.readSelectionShortcut.displayName)),
         ]
     }
 
@@ -404,6 +405,8 @@ private struct SuperpowersCard: View {
                             .frame(width: 22)
                         Text(power.title)
                             .font(.system(size: 13))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.9)
                             .foregroundColor(FlowTheme.ink)
                         Spacer()
                         Text(power.shortcut)
