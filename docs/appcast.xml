@@ -26,6 +26,34 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.5.0</title>
+      <pubDate>Thu, 25 Jun 2026 09:52:22 +0000</pubDate>
+      <sparkle:version>0.5.0</sparkle:version>
+      <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Sayful Cloud — sign in and dictate, no API key</h2>
+        <ul>
+          <li>LangFlip is now <b>Sayful</b>, with a new name and icon.</li>
+          <li>Added Sayful Cloud: sign in with Google and dictation, grammar fixes, translation, transforms, and screenshot text all work out of the box — no API key to set up. A profile menu in the title bar shows your plan and weekly word usage.</li>
+          <li>Added auto-format for longer dictations: punctuation, casing, merging sentences split by pauses, and bulleting lists — without changing your words. Toggle it in Voice → Dictation.</li>
+          <li>Added read-aloud (text-to-speech) through the cloud with a choice of voice, speed, and instructions.</li>
+          <li>Added screenshot-to-text: select a region of the screen and copy the recognized text.</li>
+          <li>Added a Manage Account window and an in-app notification center.</li>
+          <li>Polished the dictation island: springier open/close, controls that cascade in, sound waves that ramp up, and a smoother spinner.</li>
+          <li>Refreshed Settings: app-styled tabs, an animated light/dark switch, a per-app microphone picker, and a Dictation-first Voice tab. Engineering options now live behind an Advanced/Developer view.</li>
+          <li>Single Shift now fixes the selected text only; the hands-free dictation default is Left Option.</li>
+          <li>Faster Insights and a dictation history that loads as you scroll.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.5.0/Sayful-0.5.0.dmg"
+        length="6380715"
+        type="application/octet-stream"
+        sparkle:edSignature="taeinaw0P2G/jt7kra37YiPN/l1dHzETg6/8txOt21NI/xfe1iQZBuZBFqa9U3jPQ6SEbhspqJgzWD3TjZ89Dg==" />
+    </item>
+
+    <item>
       <title>v0.4.0</title>
       <pubDate>Wed, 24 Jun 2026 11:30:24 +0000</pubDate>
       <sparkle:version>0.4.0</sparkle:version>
