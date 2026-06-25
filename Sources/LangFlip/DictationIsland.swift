@@ -83,6 +83,9 @@ final class DictationIslandController {
             self, selector: #selector(dictationStateChanged),
             name: .langFlipDictationStateChanged, object: nil)
         NotificationCenter.default.addObserver(
+            self, selector: #selector(dictationStateChanged),
+            name: .langFlipTTSStateChanged, object: nil)
+        NotificationCenter.default.addObserver(
             self, selector: #selector(recorderChanged),
             name: .langFlipVoiceRecorderChanged, object: nil)
         NotificationCenter.default.addObserver(
@@ -134,6 +137,11 @@ final class DictationIslandController {
             } else if ctrl.isRecording {
                 state.phase = .recording
                 startLevelTimer()
+            } else if CloudSpeechSynthesizer.shared.isBuffering || AITextProcessing.shared.isActive {
+                // Spinner: TTS buffering OR AI text processing (fix / transform / translate).
+                state.phase = .speaking
+                stopLevelTimer()
+                state.level = 0
             } else {
                 state.phase = .idle
                 stopLevelTimer()
@@ -213,7 +221,7 @@ final class DictationIslandController {
 // MARK: - State
 
 final class DictationIslandState: ObservableObject {
-    enum Phase: Equatable { case idle, recording, transcribing }
+    enum Phase: Equatable { case idle, recording, transcribing, speaking }
 
     @Published var phase: Phase = .idle
     @Published var hovering = false
@@ -256,6 +264,8 @@ enum IslandMetrics {
                 : CGSize(width: idleWidth, height: idleHeight)
         case .recording:    return CGSize(width: recordingWidth, height: pillHeight)
         case .transcribing: return CGSize(width: transcribingWidth, height: pillHeight)
+        // TTS buffering: collapse to a circle holding a spinner.
+        case .speaking:     return CGSize(width: pillHeight, height: pillHeight)
         }
     }
 
@@ -354,6 +364,38 @@ struct DictationIslandView: View {
                     .padding(.bottom, 0)
                     .opacity(state.showCancelledToast ? 1 : 0)
             }
+            // Transcribing label as a persistent, centred overlay: its scale +
+            // opacity are driven straight from the phase, so on finish it shrinks
+            // into the pill's centre and fades (no transition, no reflow drift).
+            .overlay {
+                transcribingContent
+                    .fixedSize()
+                    .scaleEffect(state.phase == .transcribing ? 1 : 0.3, anchor: .center)
+                    .opacity(state.phase == .transcribing ? 1 : 0)
+                    .animation(pillSpring, value: state.phase)
+                    .allowsHitTesting(false)
+            }
+            // TTS buffering spinner — same persistent-overlay trick so it scales
+            // in/out from the pill's centre (no off-centre pop on enter/exit).
+            .overlay {
+                speakingContent
+                    .scaleEffect(state.phase == .speaking ? 1 : 0.3, anchor: .center)
+                    .opacity(state.phase == .speaking ? 1 : 0)
+                    .animation(pillSpring, value: state.phase)
+                    .allowsHitTesting(false)
+            }
+            // "Transcript cancelled" toast — persistent overlay so on dismiss it
+            // shrinks into the centre + fades (not slides out). Fixed width keeps
+            // its spread layout stable; hit-testing is on only while it's shown so
+            // the Undo button stays tappable.
+            .overlay {
+                toastContent
+                    .frame(width: IslandMetrics.toastWidth)
+                    .scaleEffect(state.showCancelledToast ? 1 : 0.3, anchor: .center)
+                    .opacity(state.showCancelledToast ? 1 : 0)
+                    .animation(pillSpring, value: state.showCancelledToast)
+                    .allowsHitTesting(state.showCancelledToast)
+            }
             .scaleEffect(pillPop, anchor: .center)
             .contentShape(Capsule())
             .onTapGesture {
@@ -366,7 +408,10 @@ struct DictationIslandView: View {
     @ViewBuilder
     private var innerContent: some View {
         if state.showCancelledToast {
-            toastContent
+            // Toast lives in a persistent overlay (see `pill`) so it shrinks into
+            // the pill's centre on dismiss instead of sliding out down-right as
+            // the pill collapses.
+            EmptyView()
         } else {
             switch state.phase {
             case .idle:
@@ -376,9 +421,21 @@ struct DictationIslandView: View {
                     .foregroundColor(IslandColor.text)
                     .opacity(state.hovering ? 1 : 0)
             case .recording:    recordingContent
-            case .transcribing: transcribingContent
+            // Transcribing content lives in a persistent overlay (see `pill`) so
+            // it can scale straight into the centre on exit instead of being
+            // reflowed by the collapsing frame.
+            case .transcribing: EmptyView()
+            // Speaking spinner lives in a persistent overlay (see `pill`) so it
+            // scales in/out from the pill's centre instead of popping off-centre.
+            case .speaking:     EmptyView()
             }
         }
+    }
+
+    /// TTS buffering: a small circular spinner spinning in place inside the
+    /// circle pill — the "preparing audio" indicator for read-aloud.
+    private var speakingContent: some View {
+        IslandSpinner(size: 16, lineWidth: 2)
     }
 
     private var recordingContent: some View {
@@ -405,18 +462,13 @@ struct DictationIslandView: View {
 
     private var transcribingContent: some View {
         HStack(spacing: 8) {
-            ProgressView().progressViewStyle(.circular).controlSize(.small).tint(IslandColor.text)
+            IslandSpinner(size: 14, lineWidth: 2)
             Text("Transcribing…")
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundColor(IslandColor.text.opacity(0.4))
                 .modifier(ShimmerText())
         }
         .padding(.horizontal, 12)
-        // Keep intrinsic size (don't reflow as the pill collapses), and on the
-        // way out shrink straight into the centre + fade — so the spinner and
-        // label dissolve into the pill instead of sliding off to the corner.
-        .fixedSize()
-        .transition(.scale(scale: 0.3, anchor: .center).combined(with: .opacity))
     }
 
     private var toastContent: some View {
@@ -543,6 +595,32 @@ private struct StaggerIn: ViewModifier {
             .scaleEffect(shown ? 1 : 0.4, anchor: .center)
             .opacity(shown ? 1 : 0)
             .animation(.spring(response: 0.40, dampingFraction: 0.56).delay(delay), value: shown)
+    }
+}
+
+// MARK: - Spinner
+
+/// A continuous circular spinner driven by a `TimelineView` clock rather than
+/// the system `NSProgressIndicator`. Because its rotation is derived from wall
+/// time every frame, it never "restarts" when the hosting view re-renders or is
+/// scaled in (the system indicator visibly resets its spin under a `scaleEffect`
+/// animation — that caused the TTS spinner to stutter for ~1s on appear).
+private struct IslandSpinner: View {
+    var size: CGFloat = 16
+    var lineWidth: CGFloat = 2
+    var period: Double = 0.9   // seconds per revolution
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let angle = (t.truncatingRemainder(dividingBy: period) / period) * 360.0
+            Circle()
+                .trim(from: 0, to: 0.72)
+                .stroke(IslandColor.text,
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .frame(width: size, height: size)
+                .rotationEffect(.degrees(angle))
+        }
     }
 }
 

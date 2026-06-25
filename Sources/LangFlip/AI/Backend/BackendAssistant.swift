@@ -73,6 +73,19 @@ final class BackendAssistant: AIAssistant {
         }
     }
 
+    func formatDictation(_ input: AIDictationFormatRequest, completion: @escaping (AIDictationFormatResult) -> Void) {
+        chat(system: Self.dictationFormatPrompt, input: input.text) { res in
+            switch res {
+            case .success(let text):
+                if text.isEmpty { completion(.failed(reason: "empty response")) }
+                else if text == input.text { completion(.unchanged) }
+                else { completion(.formatted(text)) }
+            case .failure(let reason):
+                completion(.failed(reason: reason))
+            }
+        }
+    }
+
     func extractTextFromImage(_ input: AIOcrRequest, completion: @escaping (AIOcrResult) -> Void) {
         Task {
             do {
@@ -109,6 +122,24 @@ final class BackendAssistant: AIAssistant {
         default:               return be.message
         }
     }
+
+    /// Structure-only cleanup of a dictation transcript. The hard rule is to
+    /// preserve the speaker's exact words — only fix formatting.
+    private static let dictationFormatPrompt = """
+    You format raw speech-to-text dictation inside a macOS dictation app.
+    Improve ONLY the formatting and structure of the transcript:
+    - Fix capitalization, punctuation, and spacing.
+    - Merge fragments that were split only because the speaker paused into
+      coherent sentences and paragraphs.
+    - When the text lists or enumerates items, format them as a clean bulleted
+      or numbered list.
+    - Keep natural paragraph breaks.
+    Hard rules: do NOT rephrase, reword, translate, summarize, add, or remove
+    content. Preserve the speaker's exact words, vocabulary, names, numbers, and
+    meaning. Keep the same language as the input.
+    Output ONLY the formatted text — no preamble, no explanation, no quotes, no
+    code fences.
+    """
 
     private static func rewritePrompt(language: String, allowLayoutRepair: Bool) -> String {
         let layoutRule = allowLayoutRepair

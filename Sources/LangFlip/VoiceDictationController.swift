@@ -88,7 +88,12 @@ final class VoiceDictationController {
 
         Task {
             do {
-                let text = try await Self.transcribe(audioURL: audioURL)
+                let raw = try await Self.transcribe(audioURL: audioURL)
+                // Tidy formatting on longer dictations (punctuation, merging
+                // pause-split fragments, lists) without changing the words. Stays
+                // in the transcribing state so the island keeps its spinner; falls
+                // back to the raw transcript on any failure / when unavailable.
+                let text = await Self.autoFormat(raw)
                 await MainActor.run {
                     self.isTranscribing = false
                     self.insert(text, duration: duration, app: app)
@@ -147,6 +152,37 @@ final class VoiceDictationController {
             return result.text
         }
         return try await CloudTranscriber.transcribe(audioURL: audioURL)
+    }
+
+    /// Reformat a transcript through the AI assistant (structure only, words
+    /// preserved). Returns the original on any failure / when disabled / when
+    /// the assistant isn't available, so dictation never breaks.
+    private static func autoFormat(_ raw: String) async -> String {
+        guard Settings.shared.dictationAutoFormat else { return raw }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= Settings.shared.dictationAutoFormatMinChars else { return raw }
+
+        let formatted: String? = await withCheckedContinuation { cont in
+            Task { @MainActor in
+                let assistant = AIAssistantManager.shared.current
+                guard assistant.isReady else { cont.resume(returning: nil); return }
+                assistant.formatDictation(AIDictationFormatRequest(text: trimmed)) { result in
+                    if case .formatted(let t) = result { cont.resume(returning: t) }
+                    else { cont.resume(returning: nil) }
+                }
+            }
+        }
+        guard let formatted, !formatted.isEmpty else { return raw }
+
+        // Guard against the model rewriting/summarizing instead of just
+        // reformatting: formatting barely changes the word count, so a large
+        // deviation means it altered content — keep the raw transcript then.
+        let rawWords = trimmed.split(whereSeparator: \.isWhitespace).count
+        let fmtWords = formatted.split(whereSeparator: \.isWhitespace).count
+        if rawWords > 0, abs(Double(fmtWords - rawWords)) / Double(rawWords) > 0.35 {
+            return raw
+        }
+        return formatted
     }
 
     private func insert(_ text: String, duration: Double? = nil, app: String? = nil) {

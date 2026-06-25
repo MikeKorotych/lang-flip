@@ -60,6 +60,11 @@ protocol AIAssistant: AnyObject {
     /// (the transform's prompt). Used by the Transforms feature.
     func applyTransform(_ input: AITransformRequest, completion: @escaping (AITransformResult) -> Void)
 
+    /// Tidy the FORMATTING of a dictation transcript — punctuation, casing,
+    /// merging pause-split fragments, bulleting enumerations — without changing
+    /// the words or meaning. Used by auto-format-on-dictation.
+    func formatDictation(_ input: AIDictationFormatRequest, completion: @escaping (AIDictationFormatResult) -> Void)
+
     /// Optional cold-start warm-up. Backends with a local runtime can use
     /// this to load the model before the user's first real request.
     func warmUp()
@@ -81,7 +86,24 @@ extension AIAssistant {
     func applyTransform(_ input: AITransformRequest, completion: @escaping (AITransformResult) -> Void) {
         completion(.unsupported)
     }
+    func formatDictation(_ input: AIDictationFormatRequest, completion: @escaping (AIDictationFormatResult) -> Void) {
+        completion(.unsupported)
+    }
     func warmUp() {}
+}
+
+// MARK: - Dictation formatting (structure-only cleanup)
+
+struct AIDictationFormatRequest {
+    /// The raw speech-to-text transcript to reformat.
+    let text: String
+}
+
+enum AIDictationFormatResult {
+    case formatted(String)   // applied as-is, replaces the transcript
+    case unchanged           // already clean
+    case unsupported         // assistant doesn't implement this
+    case failed(reason: String)
 }
 
 // MARK: - Transform (custom-prompt rewrite)

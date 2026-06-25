@@ -29,4 +29,8 @@ extension Notification.Name {
     /// Posted when an in-progress dictation is cancelled (discarded without
     /// transcribing). The island shows a "Transcript cancelled" toast.
     static let langFlipDictationCancelled = Notification.Name("LangFlipDictationCancelled")
+
+    /// Posted when text-to-speech buffering (synthesis) starts/stops. Drives the
+    /// island's `.speaking` spinner while audio is being prepared.
+    static let langFlipTTSStateChanged = Notification.Name("LangFlipTTSStateChanged")
 }

@@ -13,7 +13,17 @@ final class CloudSpeechSynthesizer {
     private var playbackProcess: Process?
     private(set) var lastOutputURL: URL?
 
+    /// True while audio is being synthesized (before playback starts). Drives the
+    /// dictation island's `.speaking` spinner — the "preparing audio" indicator.
+    private(set) var isBuffering = false
+
     private init() {}
+
+    private func setBuffering(_ value: Bool) {
+        guard isBuffering != value else { return }
+        isBuffering = value
+        NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
+    }
 
     static var outputDirectory: URL {
         URL(fileURLWithPath: "\(NSHomeDirectory())/Library/Application Support/Sayful/TTS", isDirectory: true)
@@ -28,17 +38,20 @@ final class CloudSpeechSynthesizer {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return false }
         stop()
+        setBuffering(true)
 
         synthesisTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let url = try await generate(text: clean)
                 await MainActor.run {
+                    self.setBuffering(false)   // audio ready → spinner off, playback starts
                     self.play(url)
                     self.synthesisTask = nil
                 }
             } catch {
                 await MainActor.run {
+                    self.setBuffering(false)
                     self.synthesisTask = nil
                     Notifications.show(title: "Cloud TTS failed", body: error.localizedDescription)
                 }
@@ -51,8 +64,11 @@ final class CloudSpeechSynthesizer {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw CloudSpeechError.emptyText }
 
-        // Sayful Cloud (signed in) → backend proxy, no provider key needed.
-        if Settings.shared.aiMode == .backend, SupabaseBackendAuth.shared.isSignedIn {
+        // Sayful Cloud → backend proxy (no provider key); requires sign-in.
+        if Settings.shared.aiMode == .backend {
+            guard SupabaseBackendAuth.shared.isSignedIn else {
+                throw CloudSpeechError.notSignedIn
+            }
             return try await generateViaBackend(clean)
         }
 
@@ -151,6 +167,7 @@ final class CloudSpeechSynthesizer {
     }
 
     func stop() {
+        setBuffering(false)
         synthesisTask?.cancel()
         synthesisTask = nil
         if playbackProcess?.isRunning == true {
@@ -180,6 +197,7 @@ final class CloudSpeechSynthesizer {
 
 enum CloudSpeechError: LocalizedError {
     case emptyText
+    case notSignedIn
     case missingAPIKey
     case invalidBaseURL(String)
     case noResponse
@@ -190,6 +208,8 @@ enum CloudSpeechError: LocalizedError {
         switch self {
         case .emptyText:
             return "No text to read."
+        case .notSignedIn:
+            return "Sign in to Sayful Cloud to use text-to-speech (profile menu, top-right)."
         case .missingAPIKey:
             return "Add an OpenRouter or OpenAI API key in Voice settings."
         case .invalidBaseURL(let value):
