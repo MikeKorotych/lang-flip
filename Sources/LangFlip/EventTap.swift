@@ -159,6 +159,8 @@ final class EventTap {
             return Unmanaged.passUnretained(event)
         }
 
+        DictationCorrectionLearner.shared.noteUserKey(keyCode: keyCode, flags: flags)
+
         // Screen text capture hotkey: Shift+Command+S. Only intercept it
         // when the selected local model can actually handle images; this
         // avoids stealing Save As / Duplicate shortcuts when screen text capture is not

@@ -153,8 +153,11 @@ private struct DictionaryPacks: View {
 // MARK: - Learning pane (moved from General settings)
 
 private struct LearningPane: View {
+    @ObservedObject private var personalDictionary = PersonalDictionaryStore.shared
     @State private var learnedExceptions = LearningPane.sortedExceptions()
     @State private var alwaysFlipRules = LearningPane.sortedAlwaysFlipRules()
+    @State private var newPersonalCanonical = ""
+    @State private var newPersonalVariant = ""
     @State private var newException = ""
     @State private var newAlwaysFlipWord = ""
     @State private var newAlwaysFlipTarget = Layout.uk.rawValue
@@ -163,6 +166,61 @@ private struct LearningPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
+            FlowSettingsGroup("Personal dictation words", spacing: 16) {
+                HStack {
+                    Text("Spellings Sayful should preserve after dictation").font(.system(size: 13)).foregroundColor(FlowTheme.inkSecondary)
+                    Spacer()
+                    Text("\(personalDictionary.entries.count)").font(.system(size: 13)).foregroundColor(FlowTheme.inkSecondary)
+                    FlowSmallButton(title: "Clear auto") {
+                        personalDictionary.clearAutomatic()
+                    }
+                    .disabled(!personalDictionary.entries.contains { $0.source == .automatic })
+                    .opacity(personalDictionary.entries.contains { $0.source == .automatic } ? 1 : 0.5)
+                }
+
+                HStack(spacing: 8) {
+                    FlowTextField(placeholder: "Correct spelling, e.g. Wispr Flow", text: $newPersonalCanonical)
+                    FlowTextField(placeholder: "Optional spoken/STT variant", text: $newPersonalVariant)
+                    FlowSmallButton(title: "Add", prominent: true) {
+                        personalDictionary.addManual(
+                            canonical: newPersonalCanonical,
+                            variant: newPersonalVariant.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : newPersonalVariant
+                        )
+                        newPersonalCanonical = ""
+                        newPersonalVariant = ""
+                    }
+                    .disabled(newPersonalCanonical.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .opacity(newPersonalCanonical.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1)
+                }
+
+                if personalDictionary.entries.isEmpty {
+                    hint("No personal dictation words yet. If you correct a freshly inserted transcript, Sayful will try to learn that spelling automatically.")
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(personalDictionary.entries.sorted(by: { $0.updatedAt > $1.updatedAt })) { entry in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack(spacing: 5) {
+                                        Text(entry.canonical).font(.system(size: 13, weight: .medium)).foregroundColor(FlowTheme.ink).lineLimit(1)
+                                        if entry.source == .automatic {
+                                            Text("auto").font(.system(size: 10, weight: .semibold)).foregroundColor(FlowTheme.accent)
+                                        }
+                                    }
+                                    if !entry.variants.isEmpty {
+                                        Text(entry.variants.joined(separator: ", "))
+                                            .font(.system(size: 12))
+                                            .foregroundColor(FlowTheme.inkSecondary)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                Spacer()
+                                removeButton { personalDictionary.remove(entry) }
+                            }
+                        }
+                    }
+                }
+            }
+
             FlowSettingsGroup("Always flip", spacing: 16) {
                 HStack {
                     Text("Words always rewritten to a layout").font(.system(size: 13)).foregroundColor(FlowTheme.inkSecondary)

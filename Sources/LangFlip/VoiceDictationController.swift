@@ -99,11 +99,17 @@ final class VoiceDictationController {
         Task {
             do {
                 let raw = try await self.transcribe(audioURL: audioURL, reservationID: reservationID)
+                let personalizedRaw = await MainActor.run {
+                    PersonalDictionaryStore.shared.apply(to: raw)
+                }
                 // Tidy formatting on longer dictations (punctuation, merging
                 // pause-split fragments, lists) without changing the words. Stays
                 // in the transcribing state so the island keeps its spinner; falls
                 // back to the raw transcript on any failure / when unavailable.
-                let text = await Self.autoFormat(raw, duration: duration)
+                let formatted = await Self.autoFormat(personalizedRaw, duration: duration)
+                let text = await MainActor.run {
+                    PersonalDictionaryStore.shared.apply(to: formatted)
+                }
                 await MainActor.run {
                     self.isTranscribing = false
                     self.insert(text, duration: duration, app: app)
@@ -279,12 +285,19 @@ final class VoiceDictationController {
 
         // Expand any snippet triggers automatically before inserting.
         let cleaned = SnippetStore.shared.expand(trimmed)
+        let beforeContext = FocusedTextReader.current()
+        let appBundleID = AppContext.frontmostBundleID()
 
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(cleaned, forType: .string)
         postCommandV()
         Sound.playFlip()
+        DictationCorrectionLearner.shared.recordInsertion(
+            text: cleaned,
+            beforeContext: beforeContext,
+            appBundleID: appBundleID
+        )
         DictationHistory.shared.add(cleaned, duration: duration, app: app)
         // The text appears at the cursor and the sound confirms it — the "inserted"
         // banner is opt-in (off by default) to keep dictation quiet.
