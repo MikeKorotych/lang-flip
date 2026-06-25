@@ -21,7 +21,13 @@ final class AccountProfileSync {
     func start() {
         SupabaseBackendAuth.shared.$currentUser
             .sink { [weak self] user in
-                if user != nil { self?.syncIfNeeded() }
+                if user != nil {
+                    self?.syncIfNeeded()
+                } else {
+                    // Signed out — re-arm so the next sign-in (possibly a
+                    // different account) syncs its profile again.
+                    self?.didSync = false
+                }
             }
             .store(in: &cancellables)
         // Already signed in from a previous launch? The token is on disk before
