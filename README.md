@@ -151,10 +151,9 @@ low-cost Qwen, Gemma, and Perceptron vision options.
 
 ## 🛠️ Current Status
 
-Sayful is usable as a daily writing helper. The current release candidate is
-focused on opt-in cloud provider flexibility: Cloud TTS, Cloud STT, Cloud OCR,
-and faster OpenRouter-powered text fixes, while keeping local mode as the safe
-default.
+Sayful is usable as a daily writing helper. The current release focuses on
+personal dictation spellings: Sayful can preserve words, names, product terms,
+and jargon you add manually or correct right after dictation.
 
 Planned improvements include:
 

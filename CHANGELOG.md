@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.0 - Personal Dictation Dictionary
+
+This release teaches Sayful how you spell product names, people, jargon, and
+other personal terms after dictation.
+
+### Added
+
+- Added Personal dictation words in Dictionary > Learning, with manual entries
+  and automatically learned spellings.
+- Added a post-dictation correction learner that watches short edits after a
+  transcript is inserted and stores safe `recognized phrase -> preferred
+  spelling` pairs.
+- Applied personal dictionary replacements before and after dictation
+  auto-formatting, so saved spellings survive the cleanup pass.
+
+### Improved
+
+- Cached Insights usage and heatmap snapshots to reduce repeated history
+  calculations while the tab renders.
+- Made the dictation island lift animation quicker.
+
 ## 0.2.9 - Cloud Speech and AI Providers
 
 This release makes LangFlip's AI features more flexible while keeping every
