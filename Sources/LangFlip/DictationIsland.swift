@@ -135,6 +135,10 @@ final class DictationIslandController {
                 state.phase = .transcribing
                 stopLevelTimer()
             } else if ctrl.isRecording {
+                // A new recording (e.g. via hotkey) supersedes any lingering
+                // "Transcript cancelled" toast — clear it so the island shows the
+                // recording controls, not a stale toast with a live Undo.
+                if state.showCancelledToast { dismissToast() }
                 state.phase = .recording
                 startLevelTimer()
             } else if CloudSpeechSynthesizer.shared.isBuffering || AITextProcessing.shared.isActive {
@@ -435,7 +439,7 @@ struct DictationIslandView: View {
     /// TTS buffering: a small circular spinner spinning in place inside the
     /// circle pill — the "preparing audio" indicator for read-aloud.
     private var speakingContent: some View {
-        IslandSpinner(size: 16, lineWidth: 2)
+        IslandSpinner(size: 16)
     }
 
     private var recordingContent: some View {
@@ -462,7 +466,9 @@ struct DictationIslandView: View {
 
     private var transcribingContent: some View {
         HStack(spacing: 8) {
-            IslandSpinner(size: 14, lineWidth: 2)
+            // Custom spinner everywhere now (the system one glitched on scale-in
+            // for TTS; trying the custom one in all states to confirm it's clean).
+            IslandSpinner(size: 14)
             Text("Transcribing…")
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundColor(IslandColor.text.opacity(0.4))
@@ -600,26 +606,38 @@ private struct StaggerIn: ViewModifier {
 
 // MARK: - Spinner
 
-/// A continuous circular spinner driven by a `TimelineView` clock rather than
-/// the system `NSProgressIndicator`. Because its rotation is derived from wall
-/// time every frame, it never "restarts" when the hosting view re-renders or is
-/// scaled in (the system indicator visibly resets its spin under a `scaleEffect`
-/// animation — that caused the TTS spinner to stutter for ~1s on appear).
+/// A faithful copy of the macOS system spinner (`NSProgressIndicator.spinning`):
+/// a ring of tapered "spokes" whose brightness fades from a leading head around
+/// the circle, advancing in discrete steps. Unlike the real one, its motion is
+/// derived from a `TimelineView` clock every frame, so it never restarts when
+/// the hosting view re-renders or is scaled in (that reset caused the TTS
+/// spinner to stutter for ~1s on appear). Used where the system spinner glitches
+/// (TTS buffering); the real `ProgressView` is kept elsewhere.
 private struct IslandSpinner: View {
     var size: CGFloat = 16
-    var lineWidth: CGFloat = 2
-    var period: Double = 0.9   // seconds per revolution
+    var spokeCount: Int = 8    // the system indicator uses 8 spokes
+    var period: Double = 1.0   // one revolution per second, like the system one
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
-            let angle = (t.truncatingRemainder(dividingBy: period) / period) * 360.0
-            Circle()
-                .trim(from: 0, to: 0.72)
-                .stroke(IslandColor.text,
-                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                .frame(width: size, height: size)
-                .rotationEffect(.degrees(angle))
+            // Discrete head position (the system indicator steps spoke-by-spoke).
+            let head = Int((t / period * Double(spokeCount)).rounded(.down)) % spokeCount
+            ZStack {
+                ForEach(0..<spokeCount, id: \.self) { i in
+                    let behind = Double((head - i + spokeCount) % spokeCount)
+                    // Dimmer than full white — the system spokes are a soft grey
+                    // (head ~0.55 → tail ~0.12), not bright.
+                    let opacity = 0.12 + 0.43 * (1.0 - behind / Double(spokeCount))
+                    Capsule()
+                        .fill(IslandColor.text)
+                        .frame(width: size * 0.12, height: size * 0.30)
+                        .offset(y: -size * 0.33)
+                        .rotationEffect(.degrees(Double(i) / Double(spokeCount) * 360.0))
+                        .opacity(opacity)
+                }
+            }
+            .frame(width: size, height: size)
         }
     }
 }
