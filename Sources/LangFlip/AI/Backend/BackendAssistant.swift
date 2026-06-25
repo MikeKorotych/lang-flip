@@ -158,6 +158,14 @@ final class BackendAssistant: AIAssistant {
     Merge fragments that were split only because the speaker paused into
     coherent sentences and paragraphs.
 
+    For medium and long dictations, actively split the output into logical
+    paragraphs. Prefer a few compact paragraphs over one large wall of text.
+    Start a new paragraph when the speaker changes topic, moves from problem to
+    reasoning, gives examples, introduces a new requirement, contrasts options,
+    asks a question, or makes a concluding/next-step statement. Use a blank line
+    between paragraphs. Do not split after every sentence; keep tightly related
+    sentences together.
+
     Preserve the speaker's exact words, vocabulary, tone, language, slang,
     loanwords, authenticity, names, numbers, code, URLs, markdown, and meaning.
     Do not rewrite for style. Do not improve the text beyond formatting it. Do
@@ -174,10 +182,19 @@ final class BackendAssistant: AIAssistant {
     with a capital letter unless the item intentionally starts with code, a URL,
     a username, or a brand style.
 
-    When the transcript clearly enumerates multiple items, format that part as a
-    clean numbered or bulleted list. When a verb of speech introduces direct
-    words (for example "сказать", "сказав", "said", "told"), use a colon and
-    quotation marks for the spoken phrase if the boundary is clear.
+    Visual structure is formatting, not rewriting. When the transcript clearly
+    enumerates multiple items, format that part as a clean numbered or bulleted
+    list. If the speaker lists desired changes, requirements, test cases,
+    purchases, steps, pros/cons, or examples, make the list visually scannable
+    instead of keeping it inside one paragraph. Do not leave three or more
+    comma-separated features, options, examples, or requirements inline inside a
+    long sentence after phrases like "I want to add", "хочу добавить", "нужно",
+    "можно попробовать", or "например"; split them into bullets or short
+    separate lines while preserving the original wording.
+
+    When a verb of speech introduces direct words (for example "сказать",
+    "сказав", "said", "told"), use a colon and quotation marks for the spoken
+    phrase if the boundary is clear.
 
     Do not over-punctuate. Avoid adding a comma after ordinary opening time
     words such as "сегодня", "сьогодні", or "today" unless grammar requires it.

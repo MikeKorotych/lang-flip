@@ -42,6 +42,9 @@ through OpenRouter.
   dictation-specific constraints: format STT output, preserve speaker wording,
   and only change words for obvious recognition artifacts strongly implied by
   context.
+- Dictation auto-format now explicitly prefers logical paragraphs for medium and
+  long monologues: new paragraphs on topic changes, reasoning/examples,
+  requirements, contrasts, questions, and next-step/conclusion statements.
 - Dictation auto-format threshold is temporarily lowered for field testing:
   `>=60s` or `>=60 words` (was `>=90s` or `>=100 words`).
 - After a failed manual test, the prompt was tightened further for the primary
