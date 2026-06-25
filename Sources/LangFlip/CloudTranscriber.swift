@@ -14,10 +14,19 @@ enum CloudTranscriber {
         let format = audioURL.pathExtension.lowercased().isEmpty ? "wav" : audioURL.pathExtension.lowercased()
         let endpoint = baseURL.appendingPathComponent("audio/transcriptions")
 
+        // Local pre-flight cost: reading the WAV + base64-encoding it into JSON.
+        // base64 inflates the payload ~33% over a raw multipart upload — worth
+        // knowing how much of the STT latency is spent here vs on the network.
+        let encodeStart = DispatchTime.now()
+        let encoded = data.base64EncodedString()
+        NetworkLatency.log.info(
+            "STT encode=\(String(format: "%.0f", NetworkLatency.elapsedMs(since: encodeStart)), privacy: .public)ms audio=\(data.count, privacy: .public)B b64=\(encoded.count, privacy: .public)B model=\(Settings.shared.cloudSTTModel, privacy: .public)"
+        )
+
         let body: [String: Any] = [
             "model": Settings.shared.cloudSTTModel,
             "input_audio": [
-                "data": data.base64EncodedString(),
+                "data": encoded,
                 "format": format,
             ]
         ]
@@ -33,7 +42,7 @@ enum CloudTranscriber {
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (responseData, response) = try await URLSession.shared.data(for: request)
+        let (responseData, response) = try await URLSession.shared.measuredData(for: request, label: "STT")
         guard let http = response as? HTTPURLResponse else {
             throw CloudTranscriptionError.noResponse
         }

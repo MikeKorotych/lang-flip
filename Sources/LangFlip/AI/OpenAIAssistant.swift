@@ -78,6 +78,7 @@ final class OpenAIAssistant: AIAssistant {
     func rewriteSentence(_ input: AIRewriteRequest, completion: @escaping (AIRewriteResult) -> Void) {
         let lang = input.preferredLayout?.displayName ?? "input language"
         chatCompletion(
+            label: "rewrite",
             messages: [
                 ["role": "system", "content": Self.rewriteSystemPrompt(language: lang, allowLayoutRepair: false)],
                 ["role": "user",   "content": input.text],
@@ -101,6 +102,7 @@ final class OpenAIAssistant: AIAssistant {
     func fixSelection(_ input: AIFixRequest, completion: @escaping (AIFixResult) -> Void) {
         let lang = input.activeLayout?.displayName ?? "user's language"
         chatCompletion(
+            label: "fix",
             messages: [
                 ["role": "system", "content": Self.rewriteSystemPrompt(language: lang, allowLayoutRepair: true)],
                 ["role": "user",   "content": input.text],
@@ -126,6 +128,7 @@ final class OpenAIAssistant: AIAssistant {
     func translateSelection(_ input: AITranslateRequest, completion: @escaping (AITranslateResult) -> Void) {
         let target = input.target.displayName
         chatCompletion(
+            label: "translate",
             messages: [
                 ["role": "system", "content": "Translate the user's text into \(target). Do not answer, explain, or continue the text. Preserve meaning and formatting. Output ONLY the translation, no quotes."],
                 ["role": "user",   "content": input.text],
@@ -155,6 +158,7 @@ final class OpenAIAssistant: AIAssistant {
         Output ONLY the transformed text — no preamble, no explanation, no quotes, no markdown fences.
         """
         chatCompletion(
+            label: "transform",
             messages: [
                 ["role": "system", "content": system],
                 ["role": "user",   "content": input.text],
@@ -252,6 +256,7 @@ final class OpenAIAssistant: AIAssistant {
     /// JSON, refusal-style empty content.
     private func chatCompletion(
         modelOverride: String? = nil,
+        label: String = "chat",
         messages: [[String: Any]],
         options: [String: Any],
         completion: @escaping (InferenceResult) -> Void
@@ -288,7 +293,12 @@ final class OpenAIAssistant: AIAssistant {
         }
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
-        URLSession.shared.dataTask(with: req) { data, response, error in
+        let metricsRecorder = URLSessionMetricsRecorder(label: label)
+        let started = DispatchTime.now()
+        let task = URLSession.shared.dataTask(with: req) { data, response, error in
+            NetworkLatency.log.info(
+                "\(label, privacy: .public) wall=\(String(format: "%.0f", NetworkLatency.elapsedMs(since: started)), privacy: .public)ms resp=\(data?.count ?? 0, privacy: .public)B"
+            )
             if let error {
                 completion(.failure("network: \(error.localizedDescription)"))
                 return
@@ -321,7 +331,11 @@ final class OpenAIAssistant: AIAssistant {
                 return
             }
             completion(.success(content))
-        }.resume()
+        }
+        // Per-task delegate captures the timing breakdown; the task retains it
+        // until completion. Works on the shared session (macOS 12+).
+        task.delegate = metricsRecorder
+        task.resume()
     }
 
     /// Strip code fences and surrounding quotes — same logic as the

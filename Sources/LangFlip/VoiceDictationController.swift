@@ -34,6 +34,9 @@ final class VoiceDictationController {
         self.mode = mode
         isRecording = true
         recordingStartedAt = Date()
+        // Recording runs for seconds while the network sits idle — warm the STT
+        // connection now so the upload-after-stop reuses a hot TLS connection.
+        Self.prewarmSTTConnection()
         // Frontmost app now is the dictation target (global hotkeys don't focus
         // LangFlip). Captured here for the usage-by-app breakdown in Insights.
         recordingApp = NSWorkspace.shared.frontmostApplication?.localizedName
@@ -132,6 +135,18 @@ final class VoiceDictationController {
 
     private func notifyStateChanged() {
         NotificationCenter.default.post(name: .langFlipDictationStateChanged, object: nil)
+    }
+
+    /// Warm the TLS connection for whichever STT path is active, so the POST
+    /// after the user stops talking reuses it instead of paying a cold
+    /// DNS+TCP+TLS handshake. Mirrors the routing in `transcribe(audioURL:)`.
+    private static func prewarmSTTConnection() {
+        if Settings.shared.aiMode == .backend {
+            guard SupabaseBackendAuth.shared.isSignedIn else { return }
+            ConnectionWarmer.warm(BackendConfig.functionsBaseURL, label: "STT")
+        } else if let url = URL(string: Settings.shared.cloudSTTBaseURL) {
+            ConnectionWarmer.warm(url, label: "STT")
+        }
     }
 
     private static func transcribe(audioURL: URL) async throws -> String {

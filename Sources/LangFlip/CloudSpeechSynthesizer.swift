@@ -119,7 +119,7 @@ final class CloudSpeechSynthesizer {
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.measuredData(for: request, label: "TTS")
         guard let http = response as? HTTPURLResponse else {
             throw CloudSpeechError.noResponse
         }
@@ -128,7 +128,13 @@ final class CloudSpeechSynthesizer {
         }
         guard !data.isEmpty else { throw CloudSpeechError.emptyAudio }
 
+        // Disk write sits between "audio downloaded" and "afplay can start",
+        // so it counts toward perceived time-to-first-audio.
+        let writeStart = DispatchTime.now()
         try data.write(to: outputURL, options: .atomic)
+        NetworkLatency.log.info(
+            "TTS write=\(String(format: "%.0f", NetworkLatency.elapsedMs(since: writeStart)), privacy: .public)ms audio=\(data.count, privacy: .public)B model=\(Settings.shared.cloudTTSModel, privacy: .public)"
+        )
         await MainActor.run {
             self.lastOutputURL = outputURL
         }
