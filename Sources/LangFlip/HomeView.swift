@@ -110,10 +110,7 @@ private struct DictationHeroCard: View {
     }
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: FlowTheme.cornerRadius, style: .continuous)
-                .fill(FlowTheme.heroGradient)
-
+        FlowHeroSurface {
             HStack(spacing: 18) {
                 VStack(alignment: .leading, spacing: 10) {
                     (
@@ -144,10 +141,10 @@ private struct DictationHeroCard: View {
                 }
             }
             .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Fixed height keeps the banner stable inside the page ScrollView.
+            .frame(height: 200)
         }
-        // Fixed height — the gradient background is a flexible Shape, so inside
-        // the page ScrollView a minHeight would let it stretch to fill the view.
-        .frame(height: 200)
     }
 }
 

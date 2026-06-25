@@ -153,10 +153,7 @@ struct FlowHero: View {
     var ctaAction: (() -> Void)?
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: FlowTheme.cornerRadius, style: .continuous)
-                .fill(FlowTheme.heroGradient)
-
+        FlowHeroSurface {
             VStack(alignment: .leading, spacing: 12) {
                 (
                     Text(titleLeading)
@@ -190,9 +187,8 @@ struct FlowHero: View {
                 }
             }
             .padding(28)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 150, alignment: .leading)
         }
-        .frame(minHeight: 150)
     }
 }
 
