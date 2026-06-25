@@ -76,14 +76,7 @@ enum AppContext {
     /// make the rest of the app inert) or the focused app exposes no
     /// AXFocusedWindow.
     static func frontmostWindowFrame() -> CGRect? {
-        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
-        let axApp = AXUIElementCreateApplication(app.processIdentifier)
-
-        var windowRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &windowRef) == .success,
-              let window = windowRef
-        else { return nil }
-        let axWindow = window as! AXUIElement
+        guard let axWindow = frontmostAXWindow() else { return nil }
 
         var positionRef: CFTypeRef?
         var sizeRef: CFTypeRef?
@@ -101,6 +94,39 @@ enum AppContext {
         return CGRect(origin: position, size: size)
     }
 
+    /// Fullscreen state from the focused AX window itself. This catches real
+    /// macOS fullscreen windows whose AX frame does not exactly equal the
+    /// physical screen frame during/after Space transitions.
+    static func frontmostWindowIsFullscreen() -> Bool? {
+        guard let axWindow = frontmostAXWindow() else { return nil }
+
+        if let focusedFullscreen = axFullscreenValue(axWindow) {
+            return focusedFullscreen
+        }
+
+        let windows = frontmostAXWindows()
+        var sawFullscreenAttribute = false
+        for window in windows {
+            guard let fullscreen = axFullscreenValue(window) else { continue }
+            sawFullscreenAttribute = true
+            if fullscreen { return true }
+        }
+
+        return sawFullscreenAttribute ? false : nil
+    }
+
+    /// Frame of a fullscreen window owned by the focused app. Some apps focus a
+    /// child/composer window while their main window owns fullscreen state, so
+    /// callers that place overlays should prefer this over AXFocusedWindow.
+    static func frontmostFullscreenWindowFrame() -> CGRect? {
+        for window in frontmostAXWindows() where axFullscreenValue(window) == true {
+            if let frame = frame(of: window) {
+                return frame
+            }
+        }
+        return nil
+    }
+
     /// True if the focused window's dimensions match any connected screen's
     /// — strong signal of a true fullscreen mode (game, video player, IDE
     /// in fullscreen). We compare *sizes* rather than full rects because
@@ -110,6 +136,9 @@ enum AppContext {
     /// Excludes "maximized but not fullscreen" windows (where the menu bar
     /// is still visible) — those have a slightly smaller height.
     static func isFrontmostFullscreen() -> Bool {
+        if let axFullscreen = frontmostWindowIsFullscreen() {
+            return axFullscreen
+        }
         guard let frame = frontmostWindowFrame() else { return false }
         let tolerance: CGFloat = 1
         for screen in NSScreen.screens {
@@ -119,6 +148,55 @@ enum AppContext {
             }
         }
         return false
+    }
+
+    private static func frontmostAXWindow() -> AXUIElement? {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+
+        var windowRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &windowRef) == .success,
+              let window = windowRef
+        else { return nil }
+        return (window as! AXUIElement)
+    }
+
+    private static func frontmostAXWindows() -> [AXUIElement] {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return [] }
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+
+        var windowsRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef) == .success,
+              let windows = windowsRef as? [AXUIElement]
+        else { return [] }
+
+        return windows
+    }
+
+    private static func axFullscreenValue(_ window: AXUIElement) -> Bool? {
+        var valueRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, "AXFullScreen" as CFString, &valueRef) == .success,
+              let valueRef
+        else { return nil }
+
+        return valueRef as? Bool
+    }
+
+    private static func frame(of window: AXUIElement) -> CGRect? {
+        var positionRef: CFTypeRef?
+        var sizeRef: CFTypeRef?
+        let posErr = AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &positionRef)
+        let sizeErr = AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeRef)
+        guard posErr == .success, sizeErr == .success,
+              let posVal = positionRef, let sizeVal = sizeRef
+        else { return nil }
+
+        var position = CGPoint.zero
+        var size = CGSize.zero
+        AXValueGetValue(posVal as! AXValue, .cgPoint, &position)
+        AXValueGetValue(sizeVal as! AXValue, .cgSize, &size)
+
+        return CGRect(origin: position, size: size)
     }
 
     /// Why a bundle ID is on the blocklist (if it is). nil means the app is

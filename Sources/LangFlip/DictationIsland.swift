@@ -24,6 +24,9 @@ final class DictationIslandController {
     private var levelTimer: Timer?
     private var toastTimer: Timer?
     private var mouseMonitors: [Any] = []
+    private var pendingRefresh: DispatchWorkItem?
+    private var currentLiftOffset: CGFloat = 0
+    private var dockInsetCache: [CGDirectDisplayID: CGFloat] = [:]
 
     private init() {}
 
@@ -33,14 +36,14 @@ final class DictationIslandController {
         guard Settings.shared.showDictationIsland else { return }
         DispatchQueue.main.async { [self] in
             ensurePanel()
-            positionPanel()
+            refreshPlacement(animated: false)
             panel?.orderFront(nil)
             // Display geometry can still be settling at launch (launch-at-login
             // especially), and `panel.screen` only becomes valid once the panel
             // is on screen. Re-place on the next runloop tick so we land at the
             // bottom-centre even if the first pass saw stale/placeholder metrics
             // or the wrong screen.
-            DispatchQueue.main.async { self.positionPanel() }
+            scheduleRefresh(animated: false, settle: 0.05)
         }
     }
 
@@ -59,9 +62,9 @@ final class DictationIslandController {
     private func ensurePanel() {
         guard panel == nil else { return }
 
-        let host = NSHostingController(rootView: DictationIslandView(state: state))
+        let host = NSHostingController(rootView: DictationIslandContainer(state: state))
         let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: IslandMetrics.panelSize),
+            contentRect: NSRect(origin: .zero, size: IslandMetrics.panelFullSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -94,6 +97,13 @@ final class DictationIslandController {
         NotificationCenter.default.addObserver(
             self, selector: #selector(screenChanged),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+        workspaceCenter.addObserver(
+            self, selector: #selector(activeContextChanged),
+            name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
+        workspaceCenter.addObserver(
+            self, selector: #selector(activeContextChanged),
+            name: NSWorkspace.didActivateApplicationNotification, object: nil)
 
         // Drive hover + click-through from the global mouse position (the panel
         // is interactive only while the cursor is over the pill).
@@ -118,8 +128,11 @@ final class DictationIslandController {
         let detW = (state.phase == .idle && !state.showCancelledToast
                     ? max(base, IslandMetrics.micWidth) : base) + 20
         let detH = IslandMetrics.pillSlotHeight + 16
+        // The panel frame is anchored at the fullscreen (physical-bottom)
+        // resting spot; the pill is lifted up by `currentLiftOffset` for normal
+        // Spaces, so the detection footprint must follow that lift.
         let rect = CGRect(x: panel.frame.midX - detW / 2,
-                          y: panel.frame.minY + pad - 8,
+                          y: panel.frame.minY + pad - 8 + currentLiftOffset,
                           width: detW, height: detH)
         let inside = rect.contains(mouse)
         if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
@@ -184,7 +197,17 @@ final class DictationIslandController {
     }
 
     @objc private func screenChanged() {
-        positionPanel()
+        DispatchQueue.main.async { [weak self] in self?.scheduleRefresh(animated: true, settle: 0.2) }
+    }
+
+    @objc private func activeContextChanged() {
+        // React promptly so the lift animation rides alongside macOS' own
+        // Space/Dock transition, then re-check once it settles to correct a
+        // cold Dock-inset cache (a no-op in the steady state).
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshPlacement(animated: true)
+            self?.scheduleRefresh(animated: true, settle: 0.45)
+        }
     }
 
     private func startLevelTimer() {
@@ -200,25 +223,118 @@ final class DictationIslandController {
         levelTimer = nil
     }
 
-    /// Fixed placement: bottom-centre of the screen. Never animated.
-    private func positionPanel() {
+    /// Coalesced placement pass. The panel frame is only ever hard-set (it moves
+    /// only when the active screen changes); the vertical Dock clearance is a
+    /// SwiftUI lift animation, so it never blends with macOS' Space transition.
+    private func scheduleRefresh(animated: Bool, settle: TimeInterval) {
+        pendingRefresh?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.refreshPlacement(animated: animated) }
+        pendingRefresh = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + settle, execute: work)
+    }
+
+    private func refreshPlacement(animated: Bool) {
         guard let panel else { return }
-        // Anchor to a deterministic screen. `NSScreen.main` is unreliable here:
-        // for an accessory app with no key window it resolves to whatever screen
-        // holds another app's focused window — on a multi-display setup that can
-        // place the island off the intended display (the "top-left corner" bug).
-        // Prefer the panel's own screen once it's on screen, else the menu-bar
-        // (primary) screen.
-        let screen = panel.screen ?? NSScreen.screens.first ?? NSScreen.main
-        guard let screen else { return }
-        let size = IslandMetrics.panelSize
-        // Centre within the usable area, consistently in both axes.
-        let area = screen.visibleFrame
-        let x = area.midX - size.width / 2
-        // The pill slot sits `pad` above the panel bottom; place the panel so
-        // the pill rests `bottomInset` above the Dock.
-        let y = area.minY + IslandMetrics.bottomInset - IslandMetrics.pad
-        panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
+        let placement = placementForCurrentContext(panel: panel)
+        setPanelFrame(panelFrame(on: placement.screen), for: panel)
+        setLiftOffset(liftTarget(for: placement), animated: animated)
+    }
+
+    /// Panel frame anchored with its bottom at the *physical* screen bottom (the
+    /// fullscreen resting position). Tall enough that the pill can be lifted
+    /// clear of the Dock from inside, without the window itself moving.
+    private func panelFrame(on screen: NSScreen) -> NSRect {
+        let size = IslandMetrics.panelFullSize
+        let x = screen.frame.midX - size.width / 2
+        let y = screen.frame.minY + IslandMetrics.bottomInset - IslandMetrics.pad - IslandMetrics.idleHeight
+        return NSRect(x: x, y: y, width: size.width, height: size.height)
+    }
+
+    /// How far to lift the pill above its fullscreen anchor: 0 in a fullscreen
+    /// Space, the Dock height in a normal desktop Space.
+    private func liftTarget(for placement: (screen: NSScreen, isFullscreen: Bool)) -> CGFloat {
+        let fullscreen = placement.isFullscreen || isFullscreenSpace(on: placement.screen)
+        return fullscreen ? 0 : dockInset(for: placement.screen)
+    }
+
+    /// Dock clearance for a screen, cached per display. During a Space switch
+    /// `visibleFrame` can momentarily still report the old chrome; reading the
+    /// cached value avoids animating to a wrong intermediate target (which would
+    /// itself look like a step).
+    private func dockInset(for screen: NSScreen) -> CGFloat {
+        let live = max(0, screen.visibleFrame.minY - screen.frame.minY)
+        let id = screen.displayID
+        if live > 1 { dockInsetCache[id] = live }
+        return live > 1 ? live : (dockInsetCache[id] ?? live)
+    }
+
+    private func setPanelFrame(_ frame: NSRect, for panel: NSPanel) {
+        guard !panel.frame.equalTo(frame) else { return }
+        panel.setFrame(frame, display: true)
+    }
+
+    private func setLiftOffset(_ value: CGFloat, animated: Bool) {
+        currentLiftOffset = value
+        if animated {
+            withAnimation(.easeInOut(duration: 0.5)) { state.liftOffset = value }
+        } else {
+            state.liftOffset = value
+        }
+        updateHover()
+    }
+
+    private func placementForCurrentContext(panel: NSPanel) -> (screen: NSScreen, isFullscreen: Bool) {
+        if let fullscreenFrame = AppContext.frontmostFullscreenWindowFrame(),
+           let screen = screen(containing: fullscreenFrame) {
+            return (screen, true)
+        }
+
+        if let windowFrame = AppContext.frontmostWindowFrame(),
+           let screen = screen(containing: windowFrame) {
+            let fullscreen = AppContext.frontmostWindowIsFullscreen() ?? isFullscreen(windowFrame, on: screen)
+            return (screen, fullscreen)
+        }
+
+        // Fallback remains deterministic for accessory-app launch: prefer the
+        // panel's current screen once visible, then the menu-bar screen.
+        let screen = panel.screen ?? NSScreen.screens.first ?? NSScreen.main ?? NSScreen()
+        return (screen, false)
+    }
+
+    private func screen(containing windowFrame: CGRect) -> NSScreen? {
+        let center = NSPoint(x: windowFrame.midX, y: windowFrame.midY)
+        return NSScreen.screens.first { $0.frame.contains(center) }
+    }
+
+    private func isFullscreen(_ windowFrame: CGRect, on screen: NSScreen) -> Bool {
+        let tolerance: CGFloat = 1
+        return abs(screen.frame.width - windowFrame.width) < tolerance
+            && abs(screen.frame.height - windowFrame.height) < tolerance
+    }
+
+    private func isFullscreenSpace(on screen: NSScreen) -> Bool {
+        guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else {
+            return false
+        }
+
+        let tolerance: CGFloat = 2
+        return windows.contains { window in
+            guard (window[kCGWindowOwnerName as String] as? String) == "Dock",
+                  (window[kCGWindowName as String] as? String) == "Fullscreen Backdrop",
+                  let boundsDict = window[kCGWindowBounds as String] as? [String: Any],
+                  let width = boundsDict["Width"] as? CGFloat,
+                  let height = boundsDict["Height"] as? CGFloat
+            else { return false }
+
+            return abs(width - screen.frame.width) <= tolerance
+                && abs(height - screen.frame.height) <= tolerance
+        }
+    }
+}
+
+private extension NSScreen {
+    var displayID: CGDirectDisplayID {
+        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
     }
 }
 
@@ -232,6 +348,7 @@ final class DictationIslandState: ObservableObject {
     @Published var level: Double = 0
     @Published var showCancelledToast = false
     @Published var toastToken = 0   // bumped on each cancel to (re)start the lifetime bar
+    @Published var liftOffset: CGFloat = 0   // pill rise above the fullscreen anchor (Dock clearance)
 
     var isExpandedIdle: Bool { phase == .idle && hovering && !showCancelledToast }
 }
@@ -280,6 +397,16 @@ enum IslandMetrics {
         return CGSize(width: maxContent + pad * 2,
                       height: tooltipHeight + tooltipGap + pillSlotHeight + pad * 2)
     }
+
+    /// Extra vertical room above the resting pill so it can be lifted clear of
+    /// the Dock from inside a stationary panel. Generous enough for a large /
+    /// magnified Dock.
+    static let spaceTravel: CGFloat = 160
+
+    /// The actual NSPanel size: the content area plus the lift travel room.
+    static var panelFullSize: CGSize {
+        CGSize(width: panelSize.width, height: panelSize.height + spaceTravel)
+    }
 }
 
 // MARK: - View
@@ -292,6 +419,26 @@ private enum IslandColor {
     static let accent = Color(red: 0.80, green: 0.64, blue: 0.97)
     static let cancel = Color.white.opacity(0.16)
     static let confirm = Color.white
+}
+
+/// Stationary outer view filling the whole (tall) panel. The island is pinned
+/// to the bottom and lifted up by `liftOffset` to clear the Dock in a normal
+/// Space. Because the NSPanel frame never moves on a Space switch, this vertical
+/// travel is a pure SwiftUI animation and never collides with macOS' own
+/// Space/Dock transition. The lift is animated by the controller via
+/// `withAnimation`, so the first placement can be applied without a slide.
+private struct DictationIslandContainer: View {
+    @ObservedObject var state: DictationIslandState
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.clear
+            DictationIslandView(state: state)
+                .offset(y: -state.liftOffset)
+        }
+        .frame(width: IslandMetrics.panelFullSize.width,
+               height: IslandMetrics.panelFullSize.height)
+    }
 }
 
 struct DictationIslandView: View {
@@ -527,9 +674,9 @@ struct DictationIslandView: View {
     private func circleButton(system: String, fg: Color, bg: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: system)
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: 10, weight: .bold))
                 .foregroundColor(fg)
-                .frame(width: 24, height: 24)
+                .frame(width: 22, height: 22)
                 .background(Circle().fill(bg))
         }
         .buttonStyle(.plain)

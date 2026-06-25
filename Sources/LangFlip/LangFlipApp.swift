@@ -74,14 +74,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let shouldReturnToSetup = Settings.shared.returnToOnboardingAfterScreenRecording
 
-        // Onboarding is now first-launch only and asks for the microphone
-        // alone (dictation is the hero). Accessibility + Input Monitoring,
-        // which power the flip/hotkey features, are granted from the LangFlip
-        // tab's Permissions section instead — so we no longer gate startup on
-        // them or re-show onboarding when they're missing. The event tap below
-        // simply stays inert until those are granted, then works on the next
-        // launch (or immediately, since the tap is created lazily here).
-        if !Settings.shared.onboardingDone || shouldReturnToSetup {
+        // Show onboarding on first launch AND whenever a required permission is
+        // missing — Accessibility + Input Monitoring are mandatory for the event
+        // tap (flips/hotkeys), so a fresh install (new bundle id = fresh TCC) must
+        // be walked through them, not left with silently-dead hotkeys. Once all
+        // are granted, onboarding stops appearing. (The watcher in startServices
+        // also brings the tap up live the moment they're granted mid-session.)
+        if !perms.allGranted || !Settings.shared.onboardingDone || shouldReturnToSetup {
             log("showing onboarding window — deferring tap/menubar startup until Continue")
             OnboardingWindowController.shared.show(onComplete: { [weak self] in
                 self?.startServices()

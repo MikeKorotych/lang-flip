@@ -19,7 +19,10 @@ final class FlipOverlay {
     /// Wall-clock budget: spring intro ≈ 0.55 s, linger 0.25 s, fade 0.25 s.
     private static let lingerAfterAnimation: TimeInterval = 0.5
     private static let fadeOutDuration: TimeInterval = 0.25
-    private static let bottomInset: CGFloat = 24
+    static let bottomInset: CGFloat = 24
+    /// Panel side. Keep this explicit so first-show positioning does not depend
+    /// on NSHostingController settling the SwiftUI view's ideal size.
+    static let panelSize: CGFloat = 96
 
     private init() {}
 
@@ -77,7 +80,7 @@ final class FlipOverlay {
         guard window == nil else { return }
         let host = NSHostingController(rootView: FlipOverlayView(state: state))
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 96, height: 96),
+            contentRect: NSRect(x: 0, y: 0, width: Self.panelSize, height: Self.panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -98,10 +101,10 @@ final class FlipOverlay {
     private func position(_ panel: NSPanel?) {
         guard let panel else { return }
         let screen = screenForOverlay()
-        let size = panel.frame.size
-        let x = screen.frame.midX - size.width / 2
+        let side = Self.panelSize
+        let x = screen.frame.midX - side / 2
         let y = screen.visibleFrame.minY + Self.bottomInset
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        panel.setFrame(NSRect(x: x, y: y, width: side, height: side), display: false)
     }
 
     private func screenForOverlay() -> NSScreen {
@@ -156,7 +159,7 @@ private struct FlipOverlayView: View {
             .offset(y: yOffset)
             .rotation3DEffect(.degrees(rotation), axis: (x: 0, y: 1, z: 0))
             .opacity(opacity)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: FlipOverlay.panelSize, height: FlipOverlay.panelSize)
             .onChange(of: state.animationToken) { _ in playIntro() }
             .onChange(of: state.shouldRemainHidden) { hidden in
                 if hidden { playOutro() }

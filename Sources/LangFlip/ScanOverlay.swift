@@ -16,7 +16,6 @@ final class ScanOverlay {
 
     private static let fadeOutDuration: TimeInterval = 0.32
     private static let safetyTimeout: TimeInterval = 25
-    private static let bottomInset: CGFloat = 28
     /// Panel side. The SwiftUI root is pinned to exactly this so the hosting
     /// view never shrinks to fit content and clip the tile at the top of its bob.
     static let panelSize: CGFloat = 220
@@ -89,7 +88,11 @@ final class ScanOverlay {
         // off-centre (shifted right). Setting an explicit square frame fixes it.
         let side = Self.panelSize
         let x = screen.frame.midX - side / 2
-        let y = screen.visibleFrame.minY + Self.bottomInset
+        // The scan panel is intentionally much taller than the flip panel so
+        // the levitation/shadow has room. Position by visual centre instead of
+        // panel bottom so the scan icon sits at the same height as FlipOverlay.
+        let flipVisualCenterY = FlipOverlay.bottomInset + FlipOverlay.panelSize / 2
+        let y = screen.visibleFrame.minY + flipVisualCenterY - side / 2
         panel.setFrame(NSRect(x: x, y: y, width: side, height: side), display: false)
     }
 

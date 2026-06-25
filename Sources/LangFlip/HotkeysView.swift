@@ -13,8 +13,10 @@ struct HotkeysView: View {
     @AppStorage("lf.screenTextCaptureHotkeyCustom") private var screenTextCaptureHotkeyCustom = ""
     @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.controlOptionX.rawValue
     @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
+    @AppStorage("lf.dictationPushToTalkEnabled") private var dictationPushToTalkEnabled = false
     @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
-    @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.fnOption.rawValue
+    @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = false
+    @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.leftOption.rawValue
 
     @State private var appeared = false
 
@@ -52,13 +54,23 @@ struct HotkeysView: View {
             .appearStagger(2, appeared)
 
             FlowSettingsGroup("Dictation") {
-                FlowPickerRow(title: "Push-to-talk",
+                FlowToggleRow(title: "Push-to-talk dictation",
+                              detail: "Hold the key to record, release to transcribe and insert.",
+                              isOn: $dictationPushToTalkEnabled)
+                FlowPickerRow(title: "Push-to-talk key",
                               selection: $dictationPushToTalkShortcut,
                               options: DictationPushToTalkShortcut.allCases.map { (value: $0.rawValue, label: $0.displayName) })
-                FlowPickerRow(title: "Hands-free toggle",
+
+                Divider().overlay(FlowTheme.cardStroke)
+
+                FlowToggleRow(title: "Hands-free dictation",
+                              detail: "Press the key once to start, again to stop and transcribe.",
+                              isOn: $dictationHandsFreeEnabled)
+                FlowPickerRow(title: "Hands-free key",
                               selection: $dictationHandsFreeShortcut,
                               options: DictationHandsFreeShortcut.allCases.map { (value: $0.rawValue, label: $0.displayName) })
-                helpText("Push-to-talk records while held. Hands-free starts and stops recording with the same modifier chord. Enable or disable each mode in Voice.")
+
+                helpText("Turn each mode on and pick its key here. Both can be enabled at once.")
             }
             .appearStagger(3, appeared)
         }

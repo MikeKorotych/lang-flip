@@ -1,11 +1,12 @@
 import AppKit
 import SwiftUI
 
-/// Welcome screen shown on first launch. Dictation-first: it asks for the
-/// microphone — the one permission the hero feature (speak-to-text) needs — and
-/// nothing else. The flip/hotkey permissions (Accessibility, Input Monitoring)
-/// are granted later from the LangFlip tab's Permissions section, so a brand-new
-/// user gets the shortest possible path to "speak and it types".
+/// Welcome / permissions wizard shown on first launch (and on any launch where a
+/// required permission is still missing). Walks through Microphone (dictation)
+/// then Accessibility + Input Monitoring (layout flip / hotkeys) one at a time —
+/// the last two are mandatory for the event tap, so without them flips and
+/// hotkeys are silently dead. The LangFlip tab keeps the same permission rows for
+/// managing them later.
 final class OnboardingWindowController: NSObject {
     static let shared = OnboardingWindowController()
 
@@ -89,8 +90,6 @@ private struct SetupChecklist: View {
 
     let onOpenPreferences: () -> Void
 
-    @ObservedObject private var auth = SupabaseBackendAuth.shared
-    @State private var signingIn = false
     @State private var dictionaryStats = DictionaryManager.stats()
     @State private var dictionaryState: RunState = .idle
     @State private var dictionaryProgress: Double?
@@ -108,25 +107,6 @@ private struct SetupChecklist: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Divider().padding(.vertical, 2)
-
-            checklistRow(
-                done: auth.isSignedIn,
-                icon: "person.crop.circle",
-                title: "Sign in for AI (recommended)",
-                detail: auth.isSignedIn
-                    ? "Signed in as \(auth.currentUser?.email ?? "your account") — cloud AI is ready."
-                    : "Sign in with Google to use AI (grammar, translate, transforms, screen text) — no API key needed.",
-                state: .idle
-            ) {
-                Button {
-                    signIn()
-                } label: {
-                    Text(auth.isSignedIn ? "Signed in" : (signingIn ? "Signing in..." : "Sign in"))
-                        .frame(width: 92)
-                }
-                .disabled(signingIn || auth.isSignedIn)
-                .focusable(false)
-            }
 
             checklistRow(
                 done: hasExtendedDictionaries,
@@ -175,21 +155,6 @@ private struct SetupChecklist: View {
 
     private var hasExtendedDictionaries: Bool {
         dictionaryStats.values.contains { $0.installedCount > 0 }
-    }
-
-    private func signIn() {
-        signingIn = true
-        Task { @MainActor in
-            defer { signingIn = false }
-            do {
-                _ = try await auth.signIn()
-                // Wire AI to the backend so the user is set up end-to-end.
-                Settings.shared.aiMode = .backend
-            } catch {
-                // Sign-in is optional here; failures stay quiet (the user can
-                // retry from the profile menu or AI settings).
-            }
-        }
     }
 
     @ViewBuilder
@@ -254,10 +219,16 @@ private struct SetupChecklist: View {
     }
 
     private func hotkeySummary() -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        // Names track the user's configured languages (Dictionary tab) rather
+        // than hard-coding UK/RU, and frame Triple as the *secondary* language.
+        let primaryName = Settings.shared.primaryLanguage.displayName
+        let secondaryDetail = Settings.shared.secondaryLanguage
+            .map { "Same, but to your secondary language (\($0.displayName))." }
+            ?? "Same, but to your secondary language — pick one in Dictionary."
+        return VStack(alignment: .leading, spacing: 5) {
             hotkeyLine("Single Shift", "Fix selected text, or the last sentence when nothing is selected.")
-            hotkeyLine("Double Shift", "Flip selected text or the last wrong-layout word run to Ukrainian.")
-            hotkeyLine("Triple Shift", "Flip selected text or the last wrong-layout word run to Russian.")
+            hotkeyLine("Double Shift", "Flip selected text or the last wrong-layout words to your primary language (\(primaryName)).")
+            hotkeyLine("Triple Shift", secondaryDetail)
             hotkeyLine("Shift + Space", "Translate selected text into the current keyboard layout language.")
             hotkeyLine("Shift + ⌘ + S", "Copy text from a selected screenshot area.")
         }
@@ -314,18 +285,27 @@ private struct OnboardingView: View {
     let onOpenPreferences: () -> Void
 
     @State private var status: PermissionStatus = .current()
+    @ObservedObject private var auth = SupabaseBackendAuth.shared
+    @State private var signingIn = false
+    /// "Maybe later" on the sign-in step — lets the optional cloud sign-in be
+    /// skipped without blocking the rest of onboarding.
+    @State private var skippedSignIn = false
     /// Driven by polling — when it changes from "missing" to "granted",
     /// the view auto-advances to the next step and the window pops
     /// forward.
     private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
-    /// Onboarding asks for the microphone only — dictation is the hero, and the
-    /// flip/hotkey permissions live in the LangFlip tab now.
-    private let steps: [Step] = [.microphone]
+    /// Onboarding asks for the three permissions the core features need:
+    /// Microphone (dictation) + Accessibility & Input Monitoring (layout flip /
+    /// hotkeys). Without the latter two the event tap can't run, so flips and
+    /// hotkeys are silently dead — they belong in first-run, not buried in a tab.
+    private let steps: [Step] = [.microphone, .accessibility, .inputMonitoring]
 
     private func isGranted(_ step: Step) -> Bool {
         switch step {
-        case .microphone: return status.microphone
+        case .microphone:      return status.microphone
+        case .accessibility:   return status.accessibility
+        case .inputMonitoring: return status.inputMonitoring
         }
     }
 
@@ -336,6 +316,68 @@ private struct OnboardingView: View {
 
     /// True once every shown step is granted — drives the "All set" state.
     private var allStepsGranted: Bool { currentStep == nil }
+
+    /// Optional cloud sign-in, shown after the permissions are granted. Skippable
+    /// ("Maybe later") and also available later from the title-bar profile menu.
+    private var signInStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "person.crop.circle.badge.checkmark")
+                    .font(.title3)
+                    .foregroundColor(.accentColor)
+                Text("Sign in to Sayful Cloud").font(.headline)
+                Text("(recommended)").font(.caption).foregroundColor(.secondary)
+            }
+            Text("Turns on AI features — grammar fix, translate, transforms, and cloud dictation — with no API key. Includes a free weekly quota.")
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(action: signIn) {
+                    Text(signingIn ? "Signing in…" : "Sign in with Google")
+                        .frame(minWidth: 180)
+                }
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
+                .disabled(signingIn)
+                Spacer()
+            }
+            HStack {
+                Spacer()
+                Button("Maybe later") { skippedSignIn = true }
+                    .buttonStyle(.plain)
+                    .font(.callout)
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.accentColor.opacity(0.4), lineWidth: 1.5)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.accentColor.opacity(0.08))
+                )
+        )
+    }
+
+    private func signIn() {
+        signingIn = true
+        Task { @MainActor in
+            defer { signingIn = false }
+            do {
+                _ = try await auth.signIn()
+                // Wire AI to the backend so the user is set up end-to-end; on
+                // success auth.isSignedIn flips → the "You're ready" panel shows.
+                Settings.shared.aiMode = .backend
+            } catch {
+                // Optional — failures stay quiet; user can retry or "Maybe later".
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 18) {
@@ -356,7 +398,13 @@ private struct OnboardingView: View {
                     }
                 }
                 if allStepsGranted {
-                    SetupChecklist(onOpenPreferences: onOpenPreferences)
+                    // After the mandatory permissions: offer Sayful Cloud sign-in
+                    // (optional) before the "you're ready" panel.
+                    if auth.isSignedIn || skippedSignIn {
+                        SetupChecklist(onOpenPreferences: onOpenPreferences)
+                    } else {
+                        signInStep
+                    }
                 }
             }
 
@@ -441,27 +489,65 @@ private struct OnboardingView: View {
     // MARK: Step rendering
 
     private enum Step: Hashable {
-        case microphone
+        case microphone, accessibility, inputMonitoring
 
-        var title: String { "Microphone" }
+        var title: String {
+            switch self {
+            case .microphone:      return "Microphone"
+            case .accessibility:   return "Accessibility"
+            case .inputMonitoring: return "Input Monitoring"
+            }
+        }
 
         var rationale: String {
-            "Lets Sayful hear you for dictation — the core feature."
+            switch self {
+            case .microphone:
+                return "Lets Sayful hear you for dictation."
+            case .accessibility:
+                return "Lets Sayful flip the keyboard layout, fix text, and insert corrections."
+            case .inputMonitoring:
+                return "Lets Sayful see its hotkeys (double-Shift flip, dictation) while you type in any app."
+            }
         }
 
         var instruction: LocalizedStringKey {
-            "Click below and allow microphone access so you can dictate."
+            switch self {
+            case .microphone:
+                return "Click below and allow microphone access so you can dictate."
+            case .accessibility:
+                return "Click below, find **Sayful** in the list and toggle it on."
+            case .inputMonitoring:
+                return "Click below, press **+** if Sayful is missing, add **/Applications/Sayful.app**, then toggle it on."
+            }
         }
 
-        var actionTitle: String { "Allow Microphone" }
+        var actionTitle: String {
+            self == .microphone ? "Allow Microphone" : "Open System Settings"
+        }
 
-        var stepNumber: Int { 1 }
+        var stepNumber: Int {
+            switch self {
+            case .microphone:      return 1
+            case .accessibility:   return 2
+            case .inputMonitoring: return 3
+            }
+        }
 
         func openSettings() {
-            // First call surfaces the system consent dialog; the pane is a
-            // fallback for when the user has already answered once.
-            PermissionStatus.requestMicrophone()
-            PermissionStatus.openMicrophonePane()
+            switch self {
+            case .microphone:
+                // First call surfaces the system consent dialog; the pane is a
+                // fallback for when the user has already answered once.
+                PermissionStatus.requestMicrophone()
+                PermissionStatus.openMicrophonePane()
+            case .accessibility:
+                PermissionStatus.openAccessibilityPane()
+            case .inputMonitoring:
+                // Don't call CGRequestListenEventAccess here — on recent macOS it
+                // can report "granted" before Sayful actually appears in the list.
+                // Opening the pane and waiting for the real toggle stays honest.
+                PermissionStatus.openInputMonitoringPane()
+            }
         }
     }
 
