@@ -109,13 +109,9 @@ struct VoiceTab: View {
     @AppStorage("lf.readSelectionHotkeyEnabled") private var readSelectionHotkeyEnabled = true
     @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.controlOptionX.rawValue
     @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
-    @AppStorage("lf.dictationPushToTalkEnabled") private var dictationPushToTalkEnabled = false
-    @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
-    @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = false
     @AppStorage("lf.showDictationIsland") private var showDictationIsland = true
     @AppStorage("lf.dictationNotifications") private var dictationNotifications = false
     @AppStorage("lf.dictationAutoFormat") private var dictationAutoFormat = true
-    @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.leftOption.rawValue
     @AppStorage("lf.cloudSTTBaseURL") private var cloudSTTBaseURL = "https://openrouter.ai/api/v1"
     @AppStorage("lf.cloudSTTModel") private var cloudSTTModel = "qwen/qwen3-asr-flash-2026-02-10"
 
@@ -348,32 +344,9 @@ struct VoiceTab: View {
                 isOn: $dictationAutoFormat
             )
 
-            Divider().overlay(FlowTheme.cardStroke)
-
-            FlowToggleRow(
-                title: "Push-to-talk dictation",
-                detail: dictationPushToTalkEnabled
-                    ? "Hold \(dictationPushToTalkName) to record, then release to transcribe and insert text."
-                    : "Push-to-talk dictation is off. Hands-free dictation can stay enabled below.",
-                isOn: $dictationPushToTalkEnabled
-            )
-
-            FlowToggleRow(
-                title: "Hands-free dictation",
-                detail: dictationHandsFreeEnabled
-                    ? "Press \(dictationHandsFreeName) once to start recording, then press it again to stop and transcribe."
-                    : "Hands-free dictation is off. Push-to-talk can stay enabled above.",
-                isOn: $dictationHandsFreeEnabled
-            )
-
-            if dictationHandsFreeEnabled {
-                FlowPickerRow(
-                    title: "Hands-free toggle",
-                    detail: "Fn+Option works as a tap toggle: press and release once to start, then press and release again to stop.",
-                    selection: $dictationHandsFreeShortcut,
-                    options: DictationHandsFreeShortcut.allCases.map { (value: $0.rawValue, label: $0.displayName) }
-                )
-            }
+            // Dictation enable toggles + their hotkeys now live together in the
+            // Hotkeys tab (Settings → Hotkeys → Dictation), so the feature switch
+            // and its key are in one place.
 
             Divider().overlay(FlowTheme.cardStroke)
 
@@ -563,14 +536,6 @@ struct VoiceTab: View {
     private var readSelectionShortcutName: String {
         GlobalShortcut.decode(readSelectionHotkeyCustom)?.displayName
             ?? (GlobalShortcutPreset(rawValue: readSelectionHotkeyPreset) ?? .controlOptionX).displayName
-    }
-
-    private var dictationPushToTalkName: String {
-        (DictationPushToTalkShortcut(rawValue: dictationPushToTalkShortcut) ?? .anyShift).displayName
-    }
-
-    private var dictationHandsFreeName: String {
-        (DictationHandsFreeShortcut(rawValue: dictationHandsFreeShortcut) ?? .fnOption).displayName
     }
 
     private var cloudTTSUsesOpenRouter: Bool {
@@ -1942,6 +1907,16 @@ private struct CuratedTranscriptionModel: Identifiable {
             id: "qwen/qwen3-asr-flash-2026-02-10",
             label: "Qwen: Qwen3 ASR Flash - $0.000035/sec (~$0.0021/min)",
             note: "Best default: strongest Cyrillic / Ukrainian / Russian in field use, cheap, robust to noise and mixed languages."
+        ),
+        .init(
+            id: "groq/whisper-large-v3-turbo",
+            label: "Groq: Whisper Large v3 Turbo (direct) - fastest",
+            note: "~3× faster than Qwen (≈0.4s). Routed direct to Groq, not OpenRouter. Fastest option but weaker on Ukrainian in A/B — verify on real dictation."
+        ),
+        .init(
+            id: "groq/whisper-large-v3",
+            label: "Groq: Whisper Large v3 (direct) - fast + accurate",
+            note: "~2× faster than Qwen (≈0.6s), accurate on UK/RU in A/B. Routed direct to Groq. Good speed/accuracy balance for Cyrillic."
         ),
         .init(
             id: "nvidia/parakeet-tdt-0.6b-v3",

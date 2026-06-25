@@ -34,6 +34,15 @@
 
 set -euo pipefail
 
+# Auto-load API keys from an env file OUTSIDE any git tree, so a key can never
+# be committed. Create ~/.sayful-bench.env with e.g. `GROQ_API_KEY=gsk_...`.
+# Existing environment variables win (explicit override still works).
+BENCH_ENV="${BENCH_ENV:-$HOME/.sayful-bench.env}"
+if [[ -f "$BENCH_ENV" ]]; then
+  set -a; # shellcheck disable=SC1090
+  source "$BENCH_ENV"; set +a
+fi
+
 PRESET="${1:-openrouter-json}"
 RUNS="${2:-${RUNS:-10}}"
 FIXTURE="${FIXTURE:-/tmp/sayful-stt-fixture.wav}"
@@ -65,7 +74,7 @@ case "$PRESET" in
     BASE_URL="https://openrouter.ai/api/v1"; MODEL="openai/whisper-large-v3"; MODE="multipart"
     API_KEY="${STT_API_KEY:-$(keychain_openrouter_key)}" ;;
   groq)
-    BASE_URL="https://api.groq.com/openai/v1"; MODEL="whisper-large-v3-turbo"; MODE="multipart"
+    BASE_URL="https://api.groq.com/openai/v1"; MODEL="${STT_MODEL:-whisper-large-v3-turbo}"; MODE="multipart"
     API_KEY="${STT_API_KEY:-${GROQ_API_KEY:-}}" ;;
   custom)
     BASE_URL="${STT_BASE_URL:?set STT_BASE_URL}"; MODEL="${STT_MODEL:?set STT_MODEL}"
@@ -79,9 +88,12 @@ if [[ -z "${API_KEY:-}" ]]; then
 fi
 
 # ---- Generate the deterministic fixture once --------------------------------
+# VOICE picks the `say` voice — e.g. Lesya (uk_UA) / Milena (ru_RU) for Cyrillic
+# fixtures, so we can compare STT models on the user's actual languages.
 if [[ ! -f "$FIXTURE" ]]; then
   echo "→ generating fixture (16kHz mono Int16 wav, same format the app records)…"
-  say -o "$FIXTURE" --file-format=WAVE --data-format=LEI16@16000 "$PHRASE"
+  VOICE_ARG=(); if [[ -n "${VOICE:-}" ]]; then VOICE_ARG=(-v "$VOICE"); fi
+  say ${VOICE_ARG[@]+"${VOICE_ARG[@]}"} -o "$FIXTURE" --file-format=WAVE --data-format=LEI16@16000 "$PHRASE"
 fi
 AUDIO_BYTES=$(stat -f%z "$FIXTURE")
 DURATION=$(afinfo "$FIXTURE" 2>/dev/null | awk -F': ' '/estimated duration/{printf "%.1f", $2}')
