@@ -164,10 +164,17 @@ final class DictationIslandController {
                 state.level = 0
             } else if SpeechReader.shared.isSpeaking {
                 state.phase = .ttsPlayback
+                state.ttsPlaybackPaused = false
+                stopLevelTimer()
+                state.level = 0
+            } else if SpeechReader.shared.isPaused {
+                state.phase = .ttsPlayback
+                state.ttsPlaybackPaused = true
                 stopLevelTimer()
                 state.level = 0
             } else {
                 state.phase = .idle
+                state.ttsPlaybackPaused = false
                 stopLevelTimer()
                 state.level = 0
             }
@@ -370,6 +377,7 @@ final class DictationIslandState: ObservableObject {
     @Published var level: Double = 0
     @Published var showCancelledToast = false
     @Published var showFailedToast = false
+    @Published var ttsPlaybackPaused = false
     @Published var toastToken = 0   // bumped on each cancel to (re)start the lifetime bar
     @Published var liftOffset: CGFloat = 0   // pill rise above the fullscreen anchor (Dock clearance)
 
@@ -618,9 +626,12 @@ struct DictationIslandView: View {
 
     private var playbackContent: some View {
         HStack(spacing: 6) {
-            circleButton(system: "play.fill", fg: .black, bg: IslandColor.confirm) {
-                _ = SpeechReader.shared.replayLastGeneratedAudio()
+            circleButton(system: state.ttsPlaybackPaused ? "play.fill" : "pause.fill",
+                         fg: .black,
+                         bg: IslandColor.confirm) {
+                _ = SpeechReader.shared.togglePlayback()
             }
+            .animation(pillSpring, value: state.ttsPlaybackPaused)
             circleButton(system: "stop.fill", fg: IslandColor.text, bg: IslandColor.cancel) {
                 SpeechReader.shared.stop()
             }

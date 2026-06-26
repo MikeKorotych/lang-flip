@@ -6,6 +6,8 @@ final class SpeechReader: NSObject, NSSpeechSynthesizerDelegate {
     private let synthesizer = NSSpeechSynthesizer()
     private var lastSpokenText = ""
     private var lastBackend: TextToSpeechBackend = .cloud
+    private(set) var isPaused = false
+    private var systemSpeechPaused = false
 
     private override init() {
         super.init()
@@ -31,6 +33,8 @@ final class SpeechReader: NSObject, NSSpeechSynthesizerDelegate {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
         stop()
+        isPaused = false
+        systemSpeechPaused = false
         lastSpokenText = clean
         lastBackend = Settings.shared.ttsBackend
         if lastBackend == .omniVoice {
@@ -47,7 +51,42 @@ final class SpeechReader: NSObject, NSSpeechSynthesizerDelegate {
     }
 
     func stop() {
+        stop(clearPaused: true)
+    }
+
+    func pausePlayback() {
+        guard isSpeaking else { return }
+        if AudioFilePlayer.shared.pause() {
+            isPaused = true
+            NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
+            return
+        }
         if synthesizer.isSpeaking {
+            synthesizer.pauseSpeaking(at: .immediateBoundary)
+            systemSpeechPaused = true
+            isPaused = true
+            NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
+        }
+    }
+
+    @discardableResult
+    func togglePlayback() -> Bool {
+        if isSpeaking {
+            pausePlayback()
+            return true
+        }
+        return replayLastGeneratedAudio()
+    }
+
+    private func stop(clearPaused: Bool) {
+        if clearPaused {
+            isPaused = false
+            systemSpeechPaused = false
+        }
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking()
+        }
+        if systemSpeechPaused && clearPaused {
             synthesizer.stopSpeaking()
         }
         OmniVoiceSynthesizer.shared.stop()
@@ -57,15 +96,29 @@ final class SpeechReader: NSObject, NSSpeechSynthesizerDelegate {
 
     @discardableResult
     func replayLastGeneratedAudio() -> Bool {
+        if AudioFilePlayer.shared.resume() {
+            isPaused = false
+            return true
+        }
+        if systemSpeechPaused {
+            systemSpeechPaused = false
+            isPaused = false
+            synthesizer.continueSpeaking()
+            NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
+            return true
+        }
         if lastBackend == .cloud, let url = CloudSpeechSynthesizer.shared.lastOutputURL {
+            isPaused = false
             CloudSpeechSynthesizer.shared.play(url)
             return true
         }
         if lastBackend == .omniVoice, let url = OmniVoiceSynthesizer.shared.lastOutputURL {
+            isPaused = false
             OmniVoiceSynthesizer.shared.play(url)
             return true
         }
         if !lastSpokenText.isEmpty {
+            isPaused = false
             speak(lastSpokenText)
             return true
         }

@@ -15,7 +15,7 @@ struct TransformsView: View {
     // (not in the AI settings tab, which is hidden for normal users) so everyone
     // can toggle them.
     @AppStorage("lf.grammarCheckOnSingleShift") private var grammarOnSingleShift = true
-    @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = false
+    @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = true
     @AppStorage("lf.translationHotkeyPreset") private var translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
     @AppStorage("lf.translationHotkeyCustom") private var translationHotkeyCustom = ""
     @State private var aiReady = false

@@ -11,7 +11,6 @@ final class CloudSpeechSynthesizer {
     static let shared = CloudSpeechSynthesizer()
 
     private var synthesisTask: Task<Void, Never>?
-    private var playbackProcess: Process?
     private var pcmPlayback: PCMStreamPlayer?
     private(set) var lastOutputURL: URL?
 
@@ -32,7 +31,7 @@ final class CloudSpeechSynthesizer {
     }
 
     var isSpeaking: Bool {
-        synthesisTask != nil || playbackProcess?.isRunning == true || pcmPlayback != nil
+        synthesisTask != nil || AudioFilePlayer.shared.isPlaying || pcmPlayback != nil
     }
 
     @discardableResult
@@ -154,6 +153,10 @@ final class CloudSpeechSynthesizer {
         )
         await MainActor.run {
             self.lastOutputURL = outputURL
+            TTSHistory.shared.add(text: clean,
+                                  audioURL: outputURL,
+                                  model: Settings.shared.cloudTTSModel,
+                                  voice: Settings.shared.cloudTTSVoice)
         }
         return outputURL
     }
@@ -176,7 +179,13 @@ final class CloudSpeechSynthesizer {
         NetworkLatency.log.info(
             "TTS write=\(String(format: "%.0f", NetworkLatency.elapsedMs(since: writeStart)), privacy: .public)ms audio=\(bytes.count, privacy: .public)B model=\(Settings.shared.cloudTTSModel, privacy: .public)"
         )
-        await MainActor.run { self.lastOutputURL = outputURL }
+        await MainActor.run {
+            self.lastOutputURL = outputURL
+            TTSHistory.shared.add(text: text,
+                                  audioURL: outputURL,
+                                  model: Settings.shared.cloudTTSModel,
+                                  voice: Settings.shared.cloudTTSVoice)
+        }
         return outputURL
     }
 
@@ -226,35 +235,15 @@ final class CloudSpeechSynthesizer {
     }
 
     func play(_ url: URL) {
-        playbackProcess?.terminate()
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
-        process.arguments = [url.path]
-        process.terminationHandler = { _ in
-            DispatchQueue.main.async {
-                if self.playbackProcess === process {
-                    self.playbackProcess = nil
-                    NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
-                }
-            }
-        }
-        do {
-            try process.run()
-            playbackProcess = process
-            NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
-        } catch {
-            Notifications.show(title: "Audio playback failed", body: error.localizedDescription)
-        }
+        lastOutputURL = url
+        _ = AudioFilePlayer.shared.play(url)
     }
 
     func stop() {
         setBuffering(false)
         synthesisTask?.cancel()
         synthesisTask = nil
-        if playbackProcess?.isRunning == true {
-            playbackProcess?.terminate()
-        }
-        playbackProcess = nil
+        AudioFilePlayer.shared.stop()
         pcmPlayback?.stop()
         pcmPlayback = nil
         NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)

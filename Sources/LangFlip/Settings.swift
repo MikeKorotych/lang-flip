@@ -1213,11 +1213,11 @@ final class Settings {
     }
 
     /// When true, ⇧Space (Shift+Space) translates the current text
-    /// selection into the active keyboard layout language. LangFlip enables this
-    /// automatically after a local Ollama model is ready. Users can
-    /// still turn it off and that choice sticks.
+    /// selection into the active keyboard layout language. On by default because
+    /// the gesture is explicit; users can still turn it off and that choice
+    /// sticks.
     var translationHotkeyEnabled: Bool {
-        get { defaults.object(forKey: Keys.translationHotkeyEnabled) as? Bool ?? false }
+        get { defaults.object(forKey: Keys.translationHotkeyEnabled) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.translationHotkeyEnabled) }
     }
 

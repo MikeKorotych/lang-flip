@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import SwiftUI
 
 /// Renders a shortcut display name ("Shift+Command+S", "Shift Shift") in
@@ -33,7 +34,7 @@ struct HomeView: View {
             HStack(alignment: .top, spacing: 18) {
                 VStack(alignment: .leading, spacing: 22) {
                     DictationHeroCard()
-                    DictationHistoryList()
+                    HomeHistoryPanel()
                 }
 
                 VStack(spacing: 18) {
@@ -246,6 +247,37 @@ private final class DictationState: ObservableObject {
     deinit { timer?.invalidate() }
 }
 
+// MARK: - Home history tabs
+
+private enum HomeHistoryTab: String, CaseIterable {
+    case dictation = "Dictation"
+    case screenText = "Screen Text"
+    case speech = "Speech"
+}
+
+private struct HomeHistoryPanel: View {
+    @State private var tab: HomeHistoryTab = .dictation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            FlowSegmented(
+                items: HomeHistoryTab.allCases.map { (value: $0, label: $0.rawValue) },
+                selection: $tab,
+                expands: true
+            )
+
+            switch tab {
+            case .dictation:
+                DictationHistoryList()
+            case .screenText:
+                OCRHistoryList()
+            case .speech:
+                TTSHistoryList()
+            }
+        }
+    }
+}
+
 // MARK: - Dictation history (full, scrollable, grouped by day)
 
 private struct DictationHistoryList: View {
@@ -330,6 +362,254 @@ private struct DictationHistoryList: View {
         f.dateFormat = "EEEE, MMM d"
         return f.string(from: day)
     }
+}
+
+// MARK: - OCR history
+
+private struct OCRHistoryList: View {
+    @ObservedObject private var history = OCRHistory.shared
+
+    var body: some View {
+        if history.entries.isEmpty {
+            EmptyHistoryCard(icon: "viewfinder", text: "Captured screen text will show up here.")
+        } else {
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(groups, id: \.label) { group in
+                    VStack(alignment: .leading, spacing: 12) {
+                        FlowSectionLabel(group.label)
+                        FlowCard(padding: 0) {
+                            VStack(spacing: 0) {
+                                ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
+                                    if index > 0 { Divider().overlay(FlowTheme.cardStroke) }
+                                    OCRHistoryRow(entry: entry)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var groups: [(label: String, entries: [OCRHistoryEntry])] {
+        groupedByDay(history.entries)
+    }
+}
+
+private struct OCRHistoryRow: View {
+    let entry: OCRHistoryEntry
+
+    @State private var hovering = false
+    @State private var copied = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Text(shortTime(entry.date))
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundColor(FlowTheme.inkSecondary)
+                .frame(width: 60, alignment: .leading)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(entry.text)
+                    .font(.system(size: 14))
+                    .foregroundColor(FlowTheme.ink)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("\(entry.wordCount) words")
+                    .font(.system(size: 11))
+                    .foregroundColor(FlowTheme.inkSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            rowIconButton(copied ? "checkmark" : "doc.on.doc", help: "Copy text") { copy() }
+                .foregroundColor(copied ? FlowTheme.accent : FlowTheme.inkSecondary)
+            rowIconButton("trash", help: "Delete") { OCRHistory.shared.delete(entry) }
+                .foregroundColor(.red.opacity(0.75))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+        .background(hovering ? FlowTheme.rowHover.opacity(0.4) : .clear)
+        .onHover { hovering = $0 }
+    }
+
+    private func rowIconButton(_ system: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system)
+                .font(.system(size: 12))
+                .frame(width: 26, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(hovering ? FlowTheme.rowHover : .clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .help(help)
+        .opacity(hovering ? 1 : 0)
+    }
+
+    private func copy() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(entry.text, forType: .string)
+        copied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+    }
+}
+
+// MARK: - TTS history
+
+private struct TTSHistoryList: View {
+    @ObservedObject private var history = TTSHistory.shared
+
+    var body: some View {
+        if history.entries.isEmpty {
+            EmptyHistoryCard(icon: "speaker.wave.2", text: "Generated speech files will show up here.")
+        } else {
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(groups, id: \.label) { group in
+                    VStack(alignment: .leading, spacing: 12) {
+                        FlowSectionLabel(group.label)
+                        FlowCard(padding: 0) {
+                            VStack(spacing: 0) {
+                                ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
+                                    if index > 0 { Divider().overlay(FlowTheme.cardStroke) }
+                                    TTSHistoryRow(entry: entry)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var groups: [(label: String, entries: [TTSHistoryEntry])] {
+        groupedByDay(history.entries)
+    }
+}
+
+private struct TTSHistoryRow: View {
+    let entry: TTSHistoryEntry
+
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Text(shortTime(entry.date))
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundColor(FlowTheme.inkSecondary)
+                .frame(width: 60, alignment: .leading)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(entry.text)
+                    .font(.system(size: 14))
+                    .foregroundColor(FlowTheme.ink)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(detail)
+                    .font(.system(size: 11))
+                    .foregroundColor(entry.fileExists ? FlowTheme.inkSecondary : .orange)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            rowIconButton("play.fill", help: "Play audio", disabled: !entry.fileExists) {
+                CloudSpeechSynthesizer.shared.play(entry.audioURL)
+            }
+            .foregroundColor(entry.fileExists ? FlowTheme.accent : FlowTheme.inkSecondary.opacity(0.5))
+            rowIconButton("trash", help: "Delete") { TTSHistory.shared.delete(entry) }
+                .foregroundColor(.red.opacity(0.75))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+        .background(hovering ? FlowTheme.rowHover.opacity(0.4) : .clear)
+        .onHover { hovering = $0 }
+    }
+
+    private var detail: String {
+        if !entry.fileExists { return "Audio file is missing" }
+        let pieces = [
+            entry.voice,
+            entry.model,
+            "\(entry.wordCount) words"
+        ].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return pieces.joined(separator: " · ")
+    }
+
+    private func rowIconButton(_ system: String,
+                               help: String,
+                               disabled: Bool = false,
+                               action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system)
+                .font(.system(size: 12))
+                .frame(width: 26, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(hovering ? FlowTheme.rowHover : .clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .help(help)
+        .disabled(disabled)
+        .opacity(hovering ? 1 : 0)
+    }
+}
+
+private struct EmptyHistoryCard: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        FlowCard {
+            HStack(spacing: 12) {
+                Image(systemName: icon).foregroundColor(FlowTheme.inkSecondary)
+                Text(text)
+                    .font(.system(size: 14))
+                    .foregroundColor(FlowTheme.inkSecondary)
+            }
+        }
+    }
+}
+
+private func groupedByDay<Entry>(_ entries: [Entry]) -> [(label: String, entries: [Entry])] {
+    let cal = Calendar.current
+    var result: [(label: String, entries: [Entry])] = []
+    var currentDay: Date?
+    for entry in entries {
+        let date: Date
+        if let dictation = entry as? DictationEntry {
+            date = dictation.date
+        } else if let ocr = entry as? OCRHistoryEntry {
+            date = ocr.date
+        } else if let tts = entry as? TTSHistoryEntry {
+            date = tts.date
+        } else {
+            continue
+        }
+        let day = cal.startOfDay(for: date)
+        if day != currentDay {
+            result.append((dayLabel(day), []))
+            currentDay = day
+        }
+        result[result.count - 1].entries.append(entry)
+    }
+    return result
+}
+
+private func dayLabel(_ day: Date) -> String {
+    let cal = Calendar.current
+    if cal.isDateInToday(day) { return "Today" }
+    if cal.isDateInYesterday(day) { return "Yesterday" }
+    let f = DateFormatter()
+    f.dateFormat = "EEEE, MMM d"
+    return f.string(from: day)
+}
+
+private func shortTime(_ date: Date) -> String {
+    let f = DateFormatter()
+    f.dateFormat = "h:mm a"
+    return f.string(from: date)
 }
 
 /// One dictation row. Hovering reveals a copy button (like the reference).
@@ -474,62 +754,334 @@ private struct DictationRow: View {
 // MARK: - Superpowers rail
 
 private struct SuperpowersCard: View {
+    private enum EditablePower: String, Identifiable {
+        case translate, capture, read
+
+        var id: String { rawValue }
+    }
+
     private struct Power: Identifiable {
         let id = UUID()
         let icon: String
         let title: String
         let shortcut: String
+        let editable: EditablePower?
     }
+
+    @AppStorage("lf.homeSuperpowersAttentionShown") private var attentionShown = false
+    @AppStorage("lf.translationHotkeyEnabled") private var translationHotkeyEnabled = true
+    @AppStorage("lf.translationHotkeyPreset") private var translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
+    @AppStorage("lf.translationHotkeyCustom") private var translationHotkeyCustom = ""
+    @AppStorage("lf.screenTextCaptureHotkeyPreset") private var screenTextCaptureHotkeyPreset = GlobalShortcutPreset.commandShiftS.rawValue
+    @AppStorage("lf.screenTextCaptureHotkeyCustom") private var screenTextCaptureHotkeyCustom = ""
+    @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.commandShiftX.rawValue
+    @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
+    @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = true
+    @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.leftOption.rawValue
+    @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
+
+    @State private var highlighting = false
+    @State private var recording: EditablePower?
+    @State private var recordingWarning = ""
+    @State private var monitor: Any?
 
     private var powers: [Power] {
         [
-            Power(icon: "mic.fill", title: "Start Dictation", shortcut: compactShortcut(Settings.shared.dictationHandsFreeShortcut.displayName)),
-            Power(icon: "wand.and.stars", title: "Fix Selected Text", shortcut: compactShortcut("Shift")),
-            Power(icon: "arrow.2.squarepath", title: "Flip Layout", shortcut: compactShortcut("Shift Shift")),
-            Power(icon: "globe", title: "Translate Selected Text", shortcut: compactShortcut(Settings.shared.translationShortcut.displayName)),
-            Power(icon: "viewfinder", title: "Capture Screen Text", shortcut: compactShortcut(Settings.shared.screenTextCaptureShortcut.displayName)),
-            Power(icon: "speaker.wave.2", title: "Read Selected Text", shortcut: compactShortcut(Settings.shared.readSelectionShortcut.displayName)),
+            Power(icon: "mic.fill", title: "Start Dictation", shortcut: compactShortcut(handsFreeShortcutName), editable: nil),
+            Power(icon: "wand.and.stars", title: "Fix Selected Text", shortcut: compactShortcut("Shift"), editable: nil),
+            Power(icon: "arrow.2.squarepath", title: "Flip Layout", shortcut: compactShortcut("Shift Shift"), editable: nil),
+            Power(icon: "globe", title: "Translate Selected Text", shortcut: shortcutDisplay(for: .translate), editable: .translate),
+            Power(icon: "viewfinder", title: "Capture Screen Text", shortcut: shortcutDisplay(for: .capture), editable: .capture),
+            Power(icon: "speaker.wave.2", title: "Read Selected Text", shortcut: shortcutDisplay(for: .read), editable: .read),
         ]
     }
 
     var body: some View {
         FlowCard {
             VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Superpowers")
-                        .font(.system(size: 16, weight: .semibold, design: .serif))
-                        .foregroundColor(FlowTheme.ink)
-                    Text("Everything else Sayful does, by hotkey.")
-                        .font(.system(size: 12))
-                        .foregroundColor(FlowTheme.inkSecondary)
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Superpowers")
+                            .font(.system(size: 16, weight: .semibold, design: .serif))
+                            .foregroundColor(FlowTheme.ink)
+                        Text("Everything else Sayful does, by hotkey.")
+                            .font(.system(size: 12))
+                            .foregroundColor(FlowTheme.inkSecondary)
+                    }
+                    Spacer()
+                    if hasCustomizedHotkeys {
+                        Button(action: resetHotkeys) {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(FlowTheme.inkSecondary)
+                                .frame(width: 24, height: 24)
+                                .background(Circle().fill(FlowTheme.paper))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Reset hotkeys")
+                    }
                 }
 
                 ForEach(powers) { power in
-                    HStack(spacing: 11) {
-                        Image(systemName: power.icon)
-                            .font(.system(size: 14))
-                            .foregroundColor(FlowTheme.accent)
-                            .frame(width: 22)
-                        Text(power.title)
-                            .font(.system(size: 13))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.9)
-                            .foregroundColor(FlowTheme.ink)
-                        Spacer()
-                        Text(power.shortcut)
-                            .font(.system(size: 12, weight: .medium))
-                            .lineLimit(1)
-                            .fixedSize()
-                            .foregroundColor(FlowTheme.inkSecondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(FlowTheme.paper)
-                            )
-                    }
+                    SuperpowerRow(
+                        icon: power.icon,
+                        title: power.title,
+                        shortcut: power.shortcut,
+                        isEditable: power.editable != nil,
+                        isRecording: recording == power.editable,
+                        onShortcutTap: {
+                            if let editable = power.editable {
+                                startRecording(editable)
+                            }
+                        }
+                    )
+                }
+
+                if !recordingWarning.isEmpty {
+                    Text(recordingWarning)
+                        .font(.system(size: 11))
+                        .foregroundColor(.orange)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
+        .scaleEffect(highlighting ? 1.025 : 1)
+        .overlay(
+            RoundedRectangle(cornerRadius: FlowTheme.cornerRadius, style: .continuous)
+                .stroke(FlowTheme.accent.opacity(highlighting ? 0.75 : 0), lineWidth: 2)
+        )
+        .shadow(color: FlowTheme.accent.opacity(highlighting ? 0.22 : 0), radius: 18, y: 8)
+        .animation(.spring(response: 0.34, dampingFraction: 0.62), value: highlighting)
+        .onAppear(perform: playFirstOpenHighlight)
+        .onDisappear(perform: stopRecording)
+    }
+
+    private var handsFreeShortcutName: String {
+        (DictationHandsFreeShortcut(rawValue: dictationHandsFreeShortcut) ?? .leftOption).displayName
+    }
+
+    private var hasCustomizedHotkeys: Bool {
+        translationHotkeyCustom.isEmpty == false ||
+        screenTextCaptureHotkeyCustom.isEmpty == false ||
+        readSelectionHotkeyCustom.isEmpty == false ||
+        translationHotkeyPreset != GlobalShortcutPreset.shiftSpace.rawValue ||
+        screenTextCaptureHotkeyPreset != GlobalShortcutPreset.commandShiftS.rawValue ||
+        readSelectionHotkeyPreset != GlobalShortcutPreset.commandShiftX.rawValue ||
+        dictationHandsFreeShortcut != DictationHandsFreeShortcut.leftOption.rawValue ||
+        dictationPushToTalkShortcut != DictationPushToTalkShortcut.anyShift.rawValue ||
+        !dictationHandsFreeEnabled ||
+        !translationHotkeyEnabled
+    }
+
+    private func shortcutDisplay(for power: EditablePower) -> String {
+        compactShortcut(shortcut(for: power).displayName)
+    }
+
+    private func shortcut(for power: EditablePower) -> GlobalShortcut {
+        switch power {
+        case .translate:
+            return GlobalShortcut.decode(translationHotkeyCustom)
+                ?? (GlobalShortcutPreset(rawValue: translationHotkeyPreset) ?? .shiftSpace).shortcut
+        case .capture:
+            return GlobalShortcut.decode(screenTextCaptureHotkeyCustom)
+                ?? (GlobalShortcutPreset(rawValue: screenTextCaptureHotkeyPreset) ?? .commandShiftS).shortcut
+        case .read:
+            return GlobalShortcut.decode(readSelectionHotkeyCustom)
+                ?? (GlobalShortcutPreset(rawValue: readSelectionHotkeyPreset) ?? .commandShiftX).shortcut
+        }
+    }
+
+    private func choices(for power: EditablePower) -> [GlobalShortcutPreset] {
+        switch power {
+        case .translate: return GlobalShortcutPreset.translationChoices
+        case .capture: return GlobalShortcutPreset.screenCaptureChoices
+        case .read: return GlobalShortcutPreset.readAloudChoices
+        }
+    }
+
+    private func startRecording(_ power: EditablePower) {
+        stopRecording()
+        recording = power
+        recordingWarning = ""
+        ShortcutRecordingState.isRecording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            handle(event: event, power: power)
+        }
+    }
+
+    private func stopRecording() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+        recording = nil
+        ShortcutRecordingState.isRecording = false
+    }
+
+    private func handle(event: NSEvent, power: EditablePower) -> NSEvent? {
+        if event.keyCode == UInt16(kVK_Escape) {
+            recordingWarning = ""
+            stopRecording()
+            return nil
+        }
+        guard let shortcut = GlobalShortcut.from(event: event) else {
+            recordingWarning = "Use modifiers plus a key."
+            return nil
+        }
+        if shortcut.modifiers == GlobalShortcut.shift && shortcut.keyCode != CGKeyCode(kVK_Space) {
+            recordingWarning = "Add Control, Option, or Command."
+            return nil
+        }
+        save(shortcut, for: power)
+        recordingWarning = ""
+        stopRecording()
+        return nil
+    }
+
+    private func save(_ shortcut: GlobalShortcut, for power: EditablePower) {
+        if let preset = choices(for: power).first(where: { $0.shortcut == shortcut }) {
+            setPreset(preset, for: power)
+            setCustom("", for: power)
+        } else {
+            setCustom(shortcut.encoded, for: power)
+        }
+    }
+
+    private func setPreset(_ preset: GlobalShortcutPreset, for power: EditablePower) {
+        switch power {
+        case .translate: translationHotkeyPreset = preset.rawValue
+        case .capture: screenTextCaptureHotkeyPreset = preset.rawValue
+        case .read: readSelectionHotkeyPreset = preset.rawValue
+        }
+    }
+
+    private func setCustom(_ value: String, for power: EditablePower) {
+        switch power {
+        case .translate: translationHotkeyCustom = value
+        case .capture: screenTextCaptureHotkeyCustom = value
+        case .read: readSelectionHotkeyCustom = value
+        }
+    }
+
+    private func resetHotkeys() {
+        translationHotkeyEnabled = true
+        translationHotkeyPreset = GlobalShortcutPreset.shiftSpace.rawValue
+        translationHotkeyCustom = ""
+        screenTextCaptureHotkeyPreset = GlobalShortcutPreset.commandShiftS.rawValue
+        screenTextCaptureHotkeyCustom = ""
+        readSelectionHotkeyPreset = GlobalShortcutPreset.commandShiftX.rawValue
+        readSelectionHotkeyCustom = ""
+        dictationHandsFreeEnabled = true
+        dictationHandsFreeShortcut = DictationHandsFreeShortcut.leftOption.rawValue
+        dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
+    }
+
+    private func playFirstOpenHighlight() {
+        guard !attentionShown else { return }
+        attentionShown = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            withAnimation { highlighting = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+                withAnimation { highlighting = false }
+            }
+        }
+    }
+}
+
+private struct SuperpowerRow: View {
+    let icon: String
+    let title: String
+    let shortcut: String
+    let isEditable: Bool
+    let isRecording: Bool
+    let onShortcutTap: () -> Void
+
+    var body: some View {
+        HStack(spacing: 11) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(FlowTheme.accent)
+                .frame(width: 22)
+            Text(title)
+                .font(.system(size: 13))
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+                .foregroundColor(FlowTheme.ink)
+            Spacer()
+            ShortcutPill(
+                title: shortcut,
+                isEditable: isEditable,
+                isRecording: isRecording,
+                action: onShortcutTap
+            )
+        }
+    }
+}
+
+private struct ShortcutPill: View {
+    let title: String
+    let isEditable: Bool
+    let isRecording: Bool
+    let action: () -> Void
+
+    @State private var hovering = false
+    @State private var pulse = false
+
+    var body: some View {
+        Button(action: {
+            if isEditable { action() }
+        }) {
+            Group {
+                if isRecording {
+                    Circle()
+                        .fill(Color(red: 0.9, green: 0.18, blue: 0.16))
+                        .frame(width: 10, height: 10)
+                        .scaleEffect(pulse ? 1.18 : 0.76)
+                        .opacity(pulse ? 1 : 0.58)
+                        .frame(width: 38, height: 24)
+                } else {
+                    Text(title)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                        .fixedSize()
+                        .foregroundColor(FlowTheme.inkSecondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: isRecording ? 12 : 6, style: .continuous)
+                    .fill(isRecording ? Color(red: 0.9, green: 0.18, blue: 0.16).opacity(0.14) : FlowTheme.paper)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: isRecording ? 12 : 6, style: .continuous)
+                    .stroke(borderColor, lineWidth: isRecording || hovering ? 1.4 : 0)
+            )
+            .shadow(color: shadowColor, radius: hovering || isRecording ? 7 : 0, y: 2)
+            .contentShape(RoundedRectangle(cornerRadius: isRecording ? 12 : 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = isEditable && $0 }
+        .animation(.spring(response: 0.25, dampingFraction: 0.75), value: hovering)
+        .animation(.spring(response: 0.25, dampingFraction: 0.75), value: isRecording)
+        .onChange(of: isRecording) { recording in
+            pulse = recording
+        }
+        .onAppear {
+            pulse = isRecording
+        }
+        .animation(isRecording ? .easeInOut(duration: 0.62).repeatForever(autoreverses: true) : .default, value: pulse)
+    }
+
+    private var borderColor: Color {
+        if isRecording { return Color(red: 0.9, green: 0.18, blue: 0.16).opacity(pulse ? 1 : 0.35) }
+        if hovering { return FlowTheme.accent.opacity(0.55) }
+        return .clear
+    }
+
+    private var shadowColor: Color {
+        if isRecording { return Color(red: 0.9, green: 0.18, blue: 0.16).opacity(0.2) }
+        if hovering { return FlowTheme.accent.opacity(0.16) }
+        return .clear
     }
 }

@@ -1055,12 +1055,14 @@ final class EventTap {
                         switch result {
                         case .extracted(let text):
                             if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: extracted \(text.count) chars\n".utf8)) }
+                            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            OCRHistory.shared.add(trimmed)
                             let pb = NSPasteboard.general
                             pb.clearContents()
-                            pb.setString(text.trimmingCharacters(in: .whitespacesAndNewlines), forType: .string)
+                            pb.setString(trimmed, forType: .string)
                             Sound.playFlip()
-                            let preview = String(text.prefix(60)).replacingOccurrences(of: "\n", with: " ")
-                            Notifications.show(title: "Text copied", body: text.count > 60 ? "\(preview)…" : preview)
+                            let preview = String(trimmed.prefix(60)).replacingOccurrences(of: "\n", with: " ")
+                            Notifications.show(title: "Text copied", body: trimmed.count > 60 ? "\(preview)…" : preview)
                         case .unsupported:
                             if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: assistant doesn't support OCR\n".utf8)) }
                             Notifications.show(title: "Sayful", body: "Copy text from screenshot needs a vision-capable model. Switch to Ollama with Qwen 3.5 in Preferences.")

@@ -15,7 +15,6 @@ final class OmniVoiceSynthesizer {
     }
 
     private var generationProcess: Process?
-    private var playbackProcess: Process?
     private(set) var lastOutputURL: URL?
 
     private struct SpeechChunk {
@@ -43,7 +42,7 @@ final class OmniVoiceSynthesizer {
     }
 
     var isSpeaking: Bool {
-        generationProcess?.isRunning == true || playbackProcess?.isRunning == true
+        generationProcess?.isRunning == true || AudioFilePlayer.shared.isPlaying
     }
 
     static func availability() -> Availability {
@@ -104,31 +103,18 @@ final class OmniVoiceSynthesizer {
             }
             await MainActor.run {
                 self.lastOutputURL = outputURL
+                TTSHistory.shared.add(text: clean,
+                                      audioURL: outputURL,
+                                      model: "OmniVoice",
+                                      voice: nil)
             }
             return outputURL
         }.value
     }
 
     func play(_ url: URL) {
-        playbackProcess?.terminate()
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
-        process.arguments = [url.path]
-        process.terminationHandler = { _ in
-            DispatchQueue.main.async {
-                if self.playbackProcess === process {
-                    self.playbackProcess = nil
-                    NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
-                }
-            }
-        }
-        do {
-            try process.run()
-            playbackProcess = process
-            NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
-        } catch {
-            Notifications.show(title: "Audio playback failed", body: error.localizedDescription)
-        }
+        lastOutputURL = url
+        _ = AudioFilePlayer.shared.play(url)
     }
 
     private func generateSingle(text: String, outputURL: URL, executableURL: URL) async throws {
@@ -234,11 +220,8 @@ final class OmniVoiceSynthesizer {
         if generationProcess?.isRunning == true {
             generationProcess?.terminate()
         }
-        if playbackProcess?.isRunning == true {
-            playbackProcess?.terminate()
-        }
         generationProcess = nil
-        playbackProcess = nil
+        AudioFilePlayer.shared.stop()
         NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
     }
 
