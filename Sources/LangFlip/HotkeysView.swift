@@ -15,7 +15,7 @@ struct HotkeysView: View {
     @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
     @AppStorage("lf.dictationPushToTalkEnabled") private var dictationPushToTalkEnabled = false
     @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
-    @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = false
+    @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = true
     @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.leftOption.rawValue
 
     @State private var appeared = false

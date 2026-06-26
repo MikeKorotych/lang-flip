@@ -686,6 +686,7 @@ final class Settings {
         static let dictationPushToTalkShortcut = "lf.dictationPushToTalkShortcut"
         static let dictationHandsFreeEnabled = "lf.dictationHandsFreeEnabled"
         static let dictationHandsFreeShortcut = "lf.dictationHandsFreeShortcut"
+        static let dictationHandsFreeDefaultMigration = "lf.dictationHandsFreeDefaultMigration.leftOptionV1"
     }
 
     private static let defaultCloudSTTModel = DictationTranscriptionMode.fastModelID
@@ -698,6 +699,7 @@ final class Settings {
         migrateLegacyCloudSTTDefault()
         migrateLegacyCloudTTSDefault()
         migrateReadSelectionHotkeyDefault()
+        migrateDictationHandsFreeDefault()
     }
 
     private func migrateLegacyCloudSTTDefault() {
@@ -730,6 +732,17 @@ final class Settings {
             defaults.set(GlobalShortcutPreset.commandShiftX.rawValue, forKey: Keys.readSelectionHotkeyPreset)
         }
         defaults.set(true, forKey: Keys.readSelectionHotkeyDefaultMigration)
+    }
+
+    private func migrateDictationHandsFreeDefault() {
+        guard !defaults.bool(forKey: Keys.dictationHandsFreeDefaultMigration) else { return }
+        if defaults.object(forKey: Keys.dictationHandsFreeEnabled) == nil {
+            defaults.set(true, forKey: Keys.dictationHandsFreeEnabled)
+        }
+        if defaults.object(forKey: Keys.dictationHandsFreeShortcut) == nil {
+            defaults.set(DictationHandsFreeShortcut.leftOption.rawValue, forKey: Keys.dictationHandsFreeShortcut)
+        }
+        defaults.set(true, forKey: Keys.dictationHandsFreeDefaultMigration)
     }
 
     var enabled: Bool {
@@ -1146,7 +1159,7 @@ final class Settings {
     }
 
     var dictationHandsFreeEnabled: Bool {
-        get { defaults.object(forKey: Keys.dictationHandsFreeEnabled) as? Bool ?? false }
+        get { defaults.object(forKey: Keys.dictationHandsFreeEnabled) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.dictationHandsFreeEnabled) }
     }
 

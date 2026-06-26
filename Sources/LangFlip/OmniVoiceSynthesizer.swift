@@ -114,9 +114,18 @@ final class OmniVoiceSynthesizer {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
         process.arguments = [url.path]
+        process.terminationHandler = { _ in
+            DispatchQueue.main.async {
+                if self.playbackProcess === process {
+                    self.playbackProcess = nil
+                    NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
+                }
+            }
+        }
         do {
             try process.run()
             playbackProcess = process
+            NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
         } catch {
             Notifications.show(title: "Audio playback failed", body: error.localizedDescription)
         }
@@ -230,6 +239,7 @@ final class OmniVoiceSynthesizer {
         }
         generationProcess = nil
         playbackProcess = nil
+        NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
     }
 
     private static func arguments(text: String, outputURL: URL) -> [String] {

@@ -4,6 +4,8 @@ final class SpeechReader: NSObject, NSSpeechSynthesizerDelegate {
     static let shared = SpeechReader()
 
     private let synthesizer = NSSpeechSynthesizer()
+    private var lastSpokenText = ""
+    private var lastBackend: TextToSpeechBackend = .cloud
 
     private override init() {
         super.init()
@@ -29,16 +31,19 @@ final class SpeechReader: NSObject, NSSpeechSynthesizerDelegate {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
         stop()
-        if Settings.shared.ttsBackend == .omniVoice {
+        lastSpokenText = clean
+        lastBackend = Settings.shared.ttsBackend
+        if lastBackend == .omniVoice {
             _ = OmniVoiceSynthesizer.shared.speak(clean)
             return
         }
-        if Settings.shared.ttsBackend == .cloud {
+        if lastBackend == .cloud {
             _ = CloudSpeechSynthesizer.shared.speak(clean)
             return
         }
         applySettings()
         synthesizer.startSpeaking(clean)
+        NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
     }
 
     func stop() {
@@ -47,6 +52,24 @@ final class SpeechReader: NSObject, NSSpeechSynthesizerDelegate {
         }
         OmniVoiceSynthesizer.shared.stop()
         CloudSpeechSynthesizer.shared.stop()
+        NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
+    }
+
+    @discardableResult
+    func replayLastGeneratedAudio() -> Bool {
+        if lastBackend == .cloud, let url = CloudSpeechSynthesizer.shared.lastOutputURL {
+            CloudSpeechSynthesizer.shared.play(url)
+            return true
+        }
+        if lastBackend == .omniVoice, let url = OmniVoiceSynthesizer.shared.lastOutputURL {
+            OmniVoiceSynthesizer.shared.play(url)
+            return true
+        }
+        if !lastSpokenText.isEmpty {
+            speak(lastSpokenText)
+            return true
+        }
+        return false
     }
 
     func applySettings() {
@@ -55,5 +78,9 @@ final class SpeechReader: NSObject, NSSpeechSynthesizerDelegate {
             synthesizer.setVoice(NSSpeechSynthesizer.VoiceName(rawValue: voice))
         }
         synthesizer.rate = Float(Settings.shared.speechRate)
+    }
+
+    func speechSynthesizer(_ sender: NSSpeechSynthesizer, didFinishSpeaking finishedSpeaking: Bool) {
+        NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
     }
 }

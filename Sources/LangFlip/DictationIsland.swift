@@ -162,6 +162,10 @@ final class DictationIslandController {
                 state.phase = .speaking
                 stopLevelTimer()
                 state.level = 0
+            } else if SpeechReader.shared.isSpeaking {
+                state.phase = .ttsPlayback
+                stopLevelTimer()
+                state.level = 0
             } else {
                 state.phase = .idle
                 stopLevelTimer()
@@ -359,7 +363,7 @@ private extension NSScreen {
 // MARK: - State
 
 final class DictationIslandState: ObservableObject {
-    enum Phase: Equatable { case idle, recording, transcribing, speaking }
+    enum Phase: Equatable { case idle, recording, transcribing, speaking, ttsPlayback }
 
     @Published var phase: Phase = .idle
     @Published var hovering = false
@@ -386,6 +390,7 @@ enum IslandMetrics {
     static let micWidth: CGFloat = 34           // ~round mic button
     static let recordingWidth: CGFloat = 156    // compact: little slack around the waves
     static let transcribingWidth: CGFloat = recordingWidth  // match recording so the pill doesn't jump width on state change
+    static let ttsPlaybackWidth: CGFloat = 60
     static let toastWidth: CGFloat = 224        // snug: toast text + action, minimal gap
 
     static let tooltipWidth: CGFloat = 188
@@ -407,13 +412,14 @@ enum IslandMetrics {
         case .transcribing: return CGSize(width: transcribingWidth, height: pillHeight)
         // TTS buffering: collapse to a circle holding a spinner.
         case .speaking:     return CGSize(width: pillHeight, height: pillHeight)
+        case .ttsPlayback:  return CGSize(width: ttsPlaybackWidth, height: pillHeight)
         }
     }
 
     /// Fixed panel large enough for every state (incl. the wider tooltip), so we
     /// never resize the window.
     static var panelSize: CGSize {
-        let maxContent = max(micWidth, recordingWidth, transcribingWidth, toastWidth, tooltipWidth)
+        let maxContent = max(micWidth, recordingWidth, transcribingWidth, ttsPlaybackWidth, toastWidth, tooltipWidth)
         return CGSize(width: maxContent + pad * 2,
                       height: tooltipHeight + tooltipGap + pillSlotHeight + pad * 2)
     }
@@ -599,6 +605,7 @@ struct DictationIslandView: View {
             // Speaking spinner lives in a persistent overlay (see `pill`) so it
             // scales in/out from the pill's centre instead of popping off-centre.
             case .speaking:     EmptyView()
+            case .ttsPlayback:  playbackContent
             }
         }
     }
@@ -607,6 +614,18 @@ struct DictationIslandView: View {
     /// circle pill — the "preparing audio" indicator for read-aloud.
     private var speakingContent: some View {
         IslandSpinner(size: 16)
+    }
+
+    private var playbackContent: some View {
+        HStack(spacing: 6) {
+            circleButton(system: "play.fill", fg: .black, bg: IslandColor.confirm) {
+                _ = SpeechReader.shared.replayLastGeneratedAudio()
+            }
+            circleButton(system: "stop.fill", fg: IslandColor.text, bg: IslandColor.cancel) {
+                SpeechReader.shared.stop()
+            }
+        }
+        .padding(.horizontal, 5)
     }
 
     private var recordingContent: some View {

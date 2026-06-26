@@ -302,6 +302,7 @@ private struct OnboardingView: View {
     /// "Maybe later" on the sign-in step — lets the optional cloud sign-in be
     /// skipped without blocking the rest of onboarding.
     @State private var skippedSignIn = false
+    @State private var completedOnboarding = false
     /// Driven by polling — when it changes from "missing" to "granted",
     /// the view auto-advances to the next step and the window pops
     /// forward.
@@ -360,7 +361,10 @@ private struct OnboardingView: View {
             }
             HStack {
                 Spacer()
-                Button("Maybe later") { skippedSignIn = true }
+                Button("Maybe later") {
+                    skippedSignIn = true
+                    completeOnboardingIfReady()
+                }
                     .buttonStyle(.plain)
                     .font(.callout)
                     .foregroundColor(.secondary)
@@ -386,11 +390,24 @@ private struct OnboardingView: View {
             do {
                 _ = try await auth.signIn()
                 // Wire AI to the backend so the user is set up end-to-end; on
-                // success auth.isSignedIn flips → the "You're ready" panel shows.
+                // success the app opens straight to Home.
                 Settings.shared.aiMode = .backend
+                completeOnboardingIfReady()
             } catch {
                 // Optional — failures stay quiet; user can retry or "Maybe later".
             }
+        }
+    }
+
+    private func completeOnboardingIfReady() {
+        guard !completedOnboarding,
+              allStepsGranted,
+              !needsKeyboardRestart,
+              auth.isSignedIn || skippedSignIn
+        else { return }
+        completedOnboarding = true
+        DispatchQueue.main.async {
+            onContinue()
         }
     }
 
@@ -416,9 +433,9 @@ private struct OnboardingView: View {
                     if needsKeyboardRestart {
                         restartStep
                     // After the mandatory permissions: offer Sayful Cloud sign-in
-                    // (optional) before the "you're ready" panel.
+                    // (optional), then open Home immediately.
                     } else if auth.isSignedIn || skippedSignIn {
-                        SetupChecklist(onOpenPreferences: onOpenPreferences)
+                        EmptyView()
                     } else {
                         signInStep
                     }
@@ -431,9 +448,13 @@ private struct OnboardingView: View {
         }
         .padding(24)
         .frame(width: 512)
+        .onAppear(perform: completeOnboardingIfReady)
         .onReceive(timer) { _ in
             let next = PermissionStatus.current()
-            guard next != status else { return }
+            if next == status {
+                completeOnboardingIfReady()
+                return
+            }
             let wasIncomplete = !allStepsGranted
             status = next
             // Pop the window forward when something just changed, so the
@@ -442,6 +463,7 @@ private struct OnboardingView: View {
             if wasIncomplete {
                 OnboardingWindowController.shared.bringToFront()
             }
+            completeOnboardingIfReady()
         }
     }
 
@@ -489,20 +511,7 @@ private struct OnboardingView: View {
                 .controlSize(.large)
             }
         } else if allStepsGranted {
-            HStack(spacing: 10) {
-                Button(action: onContinue) {
-                    Text("Continue")
-                        .frame(minWidth: 120)
-                }
-                .keyboardShortcut(.return)
-                .controlSize(.large)
-
-                Button(action: onOpenPreferences) {
-                    Text("Open Settings")
-                        .frame(minWidth: 140)
-                }
-                .controlSize(.large)
-            }
+            EmptyView()
         } else {
             // Plain helper text while the user is mid-flow. Tells them
             // explicitly to come back, since otherwise it's easy to assume
