@@ -576,7 +576,7 @@ struct DictationIslandView: View {
             // opacity are driven straight from the phase, so on finish it shrinks
             // into the pill's centre and fades (no transition, no reflow drift).
             .overlay {
-                transcribingContent
+                transcribingContent(active: state.phase == .transcribing)
                     .fixedSize()
                     .scaleEffect(state.phase == .transcribing ? 1 : 0.3, anchor: .center)
                     .opacity(state.phase == .transcribing ? 1 : 0)
@@ -586,7 +586,7 @@ struct DictationIslandView: View {
             // TTS buffering spinner — same persistent-overlay trick so it scales
             // in/out from the pill's centre (no off-centre pop on enter/exit).
             .overlay {
-                speakingContent
+                speakingContent(active: state.phase == .speaking)
                     .scaleEffect(state.phase == .speaking ? 1 : 0.3, anchor: .center)
                     .opacity(state.phase == .speaking ? 1 : 0)
                     .animation(pillSpring, value: state.phase)
@@ -661,8 +661,8 @@ struct DictationIslandView: View {
 
     /// TTS buffering: a small circular spinner spinning in place inside the
     /// circle pill — the "preparing audio" indicator for read-aloud.
-    private var speakingContent: some View {
-        IslandSpinner(size: 16)
+    private func speakingContent(active: Bool) -> some View {
+        IslandSpinner(size: 16, active: active)
     }
 
     private var playbackContent: some View {
@@ -702,15 +702,15 @@ struct DictationIslandView: View {
         .onDisappear { recShown = false }
     }
 
-    private var transcribingContent: some View {
+    private func transcribingContent(active: Bool) -> some View {
         HStack(spacing: 8) {
             // Custom spinner everywhere now (the system one glitched on scale-in
             // for TTS; trying the custom one in all states to confirm it's clean).
-            IslandSpinner(size: 14)
+            IslandSpinner(size: 14, active: active)
             Text("Transcribing…")
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundColor(IslandColor.text.opacity(0.4))
-                .modifier(ShimmerText())
+                .modifier(ShimmerText(active: active))
         }
         .padding(.horizontal, 12)
     }
@@ -873,30 +873,40 @@ private struct StaggerIn: ViewModifier {
 /// (TTS buffering); the real `ProgressView` is kept elsewhere.
 private struct IslandSpinner: View {
     var size: CGFloat = 16
+    var active: Bool = true
     var spokeCount: Int = 8    // the system indicator uses 8 spokes
     var period: Double = 1.0   // one revolution per second, like the system one
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            // Discrete head position (the system indicator steps spoke-by-spoke).
-            let head = Int((t / period * Double(spokeCount)).rounded(.down)) % spokeCount
-            ZStack {
-                ForEach(0..<spokeCount, id: \.self) { i in
-                    let behind = Double((head - i + spokeCount) % spokeCount)
-                    // Dimmer than full white — the system spokes are a soft grey
-                    // (head ~0.55 → tail ~0.12), not bright.
-                    let opacity = 0.12 + 0.43 * (1.0 - behind / Double(spokeCount))
-                    Capsule()
-                        .fill(IslandColor.text)
-                        .frame(width: size * 0.12, height: size * 0.30)
-                        .offset(y: -size * 0.33)
-                        .rotationEffect(.degrees(Double(i) / Double(spokeCount) * 360.0))
-                        .opacity(opacity)
+        Group {
+            if active {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                    spinnerFrame(at: timeline.date.timeIntervalSinceReferenceDate)
                 }
+            } else {
+                spinnerFrame(at: 0)
             }
-            .frame(width: size, height: size)
         }
+    }
+
+    private func spinnerFrame(at t: TimeInterval) -> some View {
+        // Discrete head position (the system indicator steps spoke-by-spoke).
+        let head = Int((t / period * Double(spokeCount)).rounded(.down)) % spokeCount
+        return ZStack {
+            ForEach(0..<spokeCount, id: \.self) { i in
+                let behind = Double((head - i + spokeCount) % spokeCount)
+                // Dimmer than full white — the system spokes are a soft grey
+                // (head ~0.55 → tail ~0.12), not bright.
+                let opacity = 0.12 + 0.43 * (1.0 - behind / Double(spokeCount))
+                Capsule()
+                    .fill(IslandColor.text)
+                    .frame(width: size * 0.12, height: size * 0.30)
+                    .offset(y: -size * 0.33)
+                    .rotationEffect(.degrees(Double(i) / Double(spokeCount) * 360.0))
+                    .opacity(opacity)
+            }
+        }
+        .frame(width: size, height: size)
     }
 }
 
@@ -906,30 +916,38 @@ private struct IslandSpinner: View {
 /// masked to its shape. Pair with a dimmed base colour so the sweep reads as a
 /// highlight passing over the text (the "Transcribing…" label uses this).
 private struct ShimmerText: ViewModifier {
+    let active: Bool
+
     @State private var x: CGFloat = -1
 
     func body(content: Content) -> some View {
-        content.overlay(
-            GeometryReader { geo in
-                let w = geo.size.width
-                let band = max(24, w * 0.5)
-                LinearGradient(
-                    colors: [.clear, IslandColor.text, .clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(width: band, height: geo.size.height)
-                .position(x: x, y: geo.size.height / 2)
-                .blendMode(.plusLighter)
-                .onAppear {
-                    x = -band
-                    withAnimation(.linear(duration: 1.25).repeatForever(autoreverses: false)) {
-                        x = w + band
+        Group {
+            if active {
+                content.overlay(
+                    GeometryReader { geo in
+                        let w = geo.size.width
+                        let band = max(24, w * 0.5)
+                        LinearGradient(
+                            colors: [.clear, IslandColor.text, .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: band, height: geo.size.height)
+                        .position(x: x, y: geo.size.height / 2)
+                        .blendMode(.plusLighter)
+                        .onAppear {
+                            x = -band
+                            withAnimation(.linear(duration: 1.25).repeatForever(autoreverses: false)) {
+                                x = w + band
+                            }
+                        }
                     }
-                }
+                    .mask(content)
+                    .allowsHitTesting(false)
+                )
+            } else {
+                content
             }
-            .mask(content)
-            .allowsHitTesting(false)
-        )
+        }
     }
 }

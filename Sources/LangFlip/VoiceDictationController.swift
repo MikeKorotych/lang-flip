@@ -20,6 +20,11 @@ final class VoiceDictationController {
     private var sttReservationTask: Task<Void, Never>?
     private var failedTranscription: FailedTranscription?
 
+    /// Give SwiftUI one display tick to render the island's new state before
+    /// we do synchronous recorder teardown / pasteboard / AX side effects.
+    private static let islandTransitionHeadStart: TimeInterval = 0.035
+    private static let postTranscriptionSideEffectDelay: TimeInterval = 0.10
+
     private struct FailedTranscription {
         let audioURL: URL
         let duration: Double?
@@ -68,8 +73,8 @@ final class VoiceDictationController {
 
     func stopAndTranscribe() {
         guard isRecording else { return }
-        VoiceRecorder.shared.stop()
         isRecording = false
+        isTranscribing = true
         mode = nil
         let duration = recordingStartedAt.map { Date().timeIntervalSince($0) }
         recordingStartedAt = nil
@@ -80,13 +85,25 @@ final class VoiceDictationController {
         sttReservationTask = nil
         sttReservation = nil
 
-        guard let audioURL = VoiceRecorder.shared.lastRecordingURL else {
-            notifyStateChanged()
-            Notifications.show(title: "Dictation failed", body: "No recording was saved.")
-            return
-        }
+        notifyStateChanged()
 
-        beginTranscription(audioURL: audioURL, duration: duration, app: app, reservationID: reservationID)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.islandTransitionHeadStart) { [weak self] in
+            guard let self else { return }
+            VoiceRecorder.shared.stop()
+
+            guard let audioURL = VoiceRecorder.shared.lastRecordingURL else {
+                self.isTranscribing = false
+                self.notifyStateChanged()
+                Notifications.show(title: "Dictation failed", body: "No recording was saved.")
+                return
+            }
+
+            self.beginTranscription(audioURL: audioURL,
+                                    duration: duration,
+                                    app: app,
+                                    reservationID: reservationID,
+                                    stateAlreadyTranscribing: true)
+        }
     }
 
     /// Re-run transcription on the last recording after a cancel — backs the
@@ -139,10 +156,15 @@ final class VoiceDictationController {
                                     app: String?,
                                     reservationID: String?,
                                     replacingHistoryEntryID: UUID? = nil,
-                                    insertOnSuccess: Bool = true) {
-        isTranscribing = true
+                                    insertOnSuccess: Bool = true,
+                                    stateAlreadyTranscribing: Bool = false) {
+        if !isTranscribing {
+            isTranscribing = true
+        }
         // The island shows the transcribing state; the banner is opt-in.
-        notifyStateChanged()
+        if !stateAlreadyTranscribing {
+            notifyStateChanged()
+        }
         if Settings.shared.dictationNotifications {
             Notifications.show(title: "Dictation", body: "Transcribing...")
         }
@@ -164,14 +186,12 @@ final class VoiceDictationController {
                 await MainActor.run {
                     self.failedTranscription = nil
                     self.isTranscribing = false
-                    if insertOnSuccess {
-                        self.insert(text, duration: duration, app: app, replacingHistoryEntryID: replacingHistoryEntryID)
-                    } else if let replacingHistoryEntryID {
-                        DictationHistory.shared.replaceFailed(id: replacingHistoryEntryID, with: text, duration: duration, app: app)
-                        Sound.playFlip()
-                        Notifications.show(title: "Transcript ready", body: "Saved in Home history.")
-                    }
                     self.notifyStateChanged()
+                    self.schedulePostTranscriptionSideEffects(text: text,
+                                                              duration: duration,
+                                                              app: app,
+                                                              replacingHistoryEntryID: replacingHistoryEntryID,
+                                                              insertOnSuccess: insertOnSuccess)
                 }
             } catch {
                 await MainActor.run {
@@ -193,6 +213,23 @@ final class VoiceDictationController {
                     Notifications.show(title: "Transcription failed", body: "Click Retry on the dictation island.")
                     AppLog.write("STT failed: \(error.localizedDescription)")
                 }
+            }
+        }
+    }
+
+    private func schedulePostTranscriptionSideEffects(text: String,
+                                                      duration: Double?,
+                                                      app: String?,
+                                                      replacingHistoryEntryID: UUID?,
+                                                      insertOnSuccess: Bool) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.postTranscriptionSideEffectDelay) { [weak self] in
+            guard let self else { return }
+            if insertOnSuccess {
+                self.insert(text, duration: duration, app: app, replacingHistoryEntryID: replacingHistoryEntryID)
+            } else if let replacingHistoryEntryID {
+                DictationHistory.shared.replaceFailed(id: replacingHistoryEntryID, with: text, duration: duration, app: app)
+                Sound.playFlip()
+                Notifications.show(title: "Transcript ready", body: "Saved in Home history.")
             }
         }
     }
