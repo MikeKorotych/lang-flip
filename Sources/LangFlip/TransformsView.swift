@@ -292,6 +292,7 @@ private struct TransformEditor: View {
 
 private struct TransformDemo: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var sampleText = "i want to chek how this featre works for a quick note. today i need to buy coffe, milk and some snacks, but dont make it sound too formal"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -299,8 +300,15 @@ private struct TransformDemo: View {
                 DisplayText("How Transforms work", size: 20)
                 Spacer()
                 Button(action: { dismiss() }) {
-                    Image(systemName: "xmark.circle.fill").foregroundColor(FlowTheme.inkSecondary)
-                }.buttonStyle(.plain)
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(FlowTheme.inkSecondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help("Close")
             }
 
             Text("Select text in any app, then press a Transform's shortcut. Sayful rewrites the selection in place.")
@@ -314,10 +322,24 @@ private struct TransformDemo: View {
                          text: "Write a blog post about our new cold brew coffee. Keep the tone casual and fun.")
             }
 
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Try Polish")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(FlowTheme.accent)
+                TextEditor(text: $sampleText)
+                    .font(.system(size: 13))
+                    .foregroundColor(FlowTheme.ink)
+                    .scrollContentBackground(.hidden)
+                    .padding(10)
+                    .frame(height: 96)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(FlowTheme.rowHover))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(FlowTheme.cardStroke, lineWidth: 1))
+            }
+
             HStack(spacing: 8) {
                 Text("Highlight text, then press")
                     .font(.system(size: 13)).foregroundColor(FlowTheme.ink)
-                Text("⌥1")
+                Text("Shift")
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(RoundedRectangle(cornerRadius: 6).fill(FlowTheme.rowHover))

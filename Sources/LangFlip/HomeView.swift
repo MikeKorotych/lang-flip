@@ -143,7 +143,7 @@ private struct DictationHeroCard: View {
                     (
                         Text("Speak - ")
                             .font(.system(size: 30, weight: .semibold, design: .serif))
-                        + Text("It types.")
+                        + Text("It types")
                             .font(.system(size: 30, weight: .semibold, design: .serif))
                             .italic()
                     )
