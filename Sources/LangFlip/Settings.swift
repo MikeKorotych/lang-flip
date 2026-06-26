@@ -228,6 +228,40 @@ enum DictationHandsFreeShortcut: String, CaseIterable, Identifiable {
     }
 }
 
+enum DictationTranscriptionMode: String, CaseIterable, Identifiable {
+    case fast
+    case quality
+
+    static let storageKey = "lf.dictationTranscriptionMode"
+    static let fastModelID = "groq/whisper-large-v3"
+    static let qualityModelID = "qwen/qwen3-asr-flash-2026-02-10"
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .fast: return "Fast"
+        case .quality: return "Quality"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .fast:
+            return "Fastest transcription. Uses Groq Whisper for lower latency."
+        case .quality:
+            return "Better punctuation and Cyrillic polish. Uses Qwen ASR and can feel slower."
+        }
+    }
+
+    var backendModelOverride: String? {
+        switch self {
+        case .fast: return nil
+        case .quality: return Self.qualityModelID
+        }
+    }
+}
+
 enum GlobalShortcutPreset: String, CaseIterable, Identifiable {
     case shiftSpace
     case commandShiftS
@@ -655,6 +689,7 @@ final class Settings {
         static let microphoneDeviceID = "lf.microphoneDeviceID"
         static let cloudSTTBaseURL = "lf.cloudSTTBaseURL"
         static let cloudSTTModel = "lf.cloudSTTModel"
+        static let dictationTranscriptionMode = DictationTranscriptionMode.storageKey
         static let cloudSTTDefaultMigration = "lf.cloudSTTDefaultMigration.groqWhisperV1"
         static let dictationPushToTalkEnabled = "lf.dictationPushToTalkEnabled"
         static let dictationPushToTalkShortcut = "lf.dictationPushToTalkShortcut"
@@ -662,8 +697,8 @@ final class Settings {
         static let dictationHandsFreeShortcut = "lf.dictationHandsFreeShortcut"
     }
 
-    private static let defaultCloudSTTModel = "groq/whisper-large-v3"
-    private static let legacyQwenCloudSTTModel = "qwen/qwen3-asr-flash-2026-02-10"
+    private static let defaultCloudSTTModel = DictationTranscriptionMode.fastModelID
+    private static let legacyQwenCloudSTTModel = DictationTranscriptionMode.qualityModelID
     private static let defaultCloudTTSModel = "google/gemini-3.1-flash-tts-preview"
     private static let defaultCloudTTSVoice = "Kore"
     private static let legacyOpenAICloudTTSModel = "openai/gpt-4o-mini-tts-2025-12-15"
@@ -1233,6 +1268,26 @@ final class Settings {
     var screenTextCaptureShortcut: GlobalShortcut {
         GlobalShortcut.decode(defaults.string(forKey: Keys.screenTextCaptureHotkeyCustom))
             ?? screenTextCaptureHotkeyPreset.shortcut
+    }
+
+    var dictationTranscriptionMode: DictationTranscriptionMode {
+        get {
+            guard let raw = defaults.string(forKey: Keys.dictationTranscriptionMode),
+                  let mode = DictationTranscriptionMode(rawValue: raw)
+            else { return .fast }
+            return mode
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.dictationTranscriptionMode) }
+    }
+
+    var backendSTTModelOverride: String? {
+        if defaults.bool(forKey: "lf.showAdvancedAI") {
+            let model = cloudSTTModel.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !model.isEmpty, model != DictationTranscriptionMode.fastModelID {
+                return model
+            }
+        }
+        return dictationTranscriptionMode.backendModelOverride
     }
 
     /// Default target language for menu-driven translate-selection.

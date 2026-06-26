@@ -23,6 +23,7 @@ private func compactShortcut(_ name: String) -> String {
 /// through the same `VoiceDictationController` the global hotkey uses.
 struct HomeView: View {
     @State private var appeared = false
+    @AppStorage("lf.aiMode") private var aiMode = AIMode.backend.rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -37,6 +38,9 @@ struct HomeView: View {
 
                 VStack(spacing: 18) {
                     StatsCard()
+                    if AIMode(rawValue: aiMode) == .backend {
+                        DictationTranscriptionModeCard()
+                    }
                     SuperpowersCard()
                 }
                 .frame(width: 290)
@@ -44,6 +48,27 @@ struct HomeView: View {
             .appearStagger(1, appeared)
         }
         .appearTrigger($appeared)
+    }
+}
+
+// MARK: - Dictation mode
+
+private struct DictationTranscriptionModeCard: View {
+    var body: some View {
+        FlowCard {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Dictation Mode")
+                        .font(.system(size: 16, weight: .semibold, design: .serif))
+                        .foregroundColor(FlowTheme.ink)
+                    Text("Pick speed or richer transcription.")
+                        .font(.system(size: 12))
+                        .foregroundColor(FlowTheme.inkSecondary)
+                }
+
+                DictationTranscriptionModePicker()
+            }
+        }
     }
 }
 

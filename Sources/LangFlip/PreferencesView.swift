@@ -96,7 +96,6 @@ struct GeneralTab: View {
 
 struct VoiceTab: View {
     @AppStorage("lf.aiMode") private var aiMode = AIMode.backend.rawValue
-    @AppStorage("lf.showAdvancedAI") private var showAdvancedAI = false
     // Text-to-speech is a cloud feature now (login + quota). The backend picker
     // was removed, so this stays `.cloud`.
     @AppStorage("lf.ttsBackend") private var ttsBackend = TextToSpeechBackend.cloud.rawValue
@@ -344,6 +343,15 @@ struct VoiceTab: View {
                 isOn: $dictationAutoFormat
             )
 
+            if usesSayfulCloud {
+                Divider().overlay(FlowTheme.cardStroke)
+
+                DictationTranscriptionModePicker(
+                    title: "Transcription mode",
+                    detail: "Choose the speed/quality trade-off for Sayful Cloud dictation."
+                )
+            }
+
             // Dictation enable toggles + their hotkeys now live together in the
             // Hotkeys tab (Settings → Hotkeys → Dictation), so the feature switch
             // and its key are in one place.
@@ -431,7 +439,7 @@ struct VoiceTab: View {
             // it); Advanced/BYOK users point it at their own OpenAI-compatible
             // endpoint. Audio is sent to the provider; nothing is stored.
             if usesSayfulCloud {
-                helpText("Dictation uses Sayful Cloud — no API key needed. The server holds the provider key and picks the STT model. Only your recorded dictation audio is sent; sign in from the profile menu.")
+                helpText("Dictation uses Sayful Cloud — no API key needed. Fast mode uses Groq Whisper; Quality mode uses Qwen ASR. Only your recorded dictation audio is sent; sign in from the profile menu.")
                 // The developer STT-model override now lives in the Developer tab,
                 // so this Voice tab stays a clean end-user view.
             } else {
@@ -643,13 +651,10 @@ struct VoiceTab: View {
             }
             let upload = try STTAudioUploadPreparer.prepareBackendUpload(from: audioURL)
             defer { upload.cleanup() }
-            let modelOverride = showAdvancedAI && cloudSTTModel != "groq/whisper-large-v3"
-                ? cloudSTTModel
-                : nil
             let result = try await HTTPBackendClient.shared.transcribe(
                 BackendTranscribeRequest(audio: upload.data, filename: upload.filename,
                                          language: nil,
-                                         model: modelOverride))
+                                         model: Settings.shared.backendSTTModelOverride))
             return result.text
         }
         return try await CloudTranscriber.transcribe(audioURL: audioURL)
@@ -720,12 +725,12 @@ struct ModelsTab: View {
             }
 
             // STT model override for Sayful Cloud dictation. Lives here (not in
-            // Voice) so the Voice tab stays a clean end-user view; the backend
-            // honors this per request, end users get the server default.
+            // Voice) so the Voice tab stays a clean end-user view. Normal users
+            // choose Fast/Quality in Voice; this picker is a manual experiment.
             if AIMode(rawValue: aiMode) == .backend {
                 Section("Speech-to-text model (dictation)") {
                     OpenRouterTranscriptionModelPicker(selectedModel: $cloudSTTModel)
-                    helpText("Overrides the STT model the backend runs for your account, per request — for testing/comparing models. End users keep the server default.")
+                    helpText("Developer override for testing/comparing models. Leave this on Groq Whisper to let the Voice tab's Fast/Quality mode choose the production model.")
                 }
             }
 
@@ -1922,7 +1927,7 @@ private struct CuratedTranscriptionModel: Identifiable {
     let label: String
     let note: String
 
-    static let defaultID = "groq/whisper-large-v3"
+    static let defaultID = DictationTranscriptionMode.fastModelID
 
     static let curated: [CuratedTranscriptionModel] = [
         .init(
@@ -1931,7 +1936,7 @@ private struct CuratedTranscriptionModel: Identifiable {
             note: "Current production default. Routed direct to Groq, not OpenRouter; best speed/quality balance in recent UK/RU field tests."
         ),
         .init(
-            id: "qwen/qwen3-asr-flash-2026-02-10",
+            id: DictationTranscriptionMode.qualityModelID,
             label: "Qwen: Qwen3 ASR Flash - $0.000035/sec (~$0.0021/min)",
             note: "Often better punctuation and Cyrillic text polish, but currently slower through OpenRouter. Use for A/B quality tests."
         ),

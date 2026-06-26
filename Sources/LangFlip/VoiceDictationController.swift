@@ -235,12 +235,7 @@ final class VoiceDictationController {
     }
 
     private static func backendSTTModelOverride() -> String? {
-        guard UserDefaults.standard.bool(forKey: "lf.showAdvancedAI") else { return nil }
-        let model = Settings.shared.cloudSTTModel
-        // Sayful Cloud default. Omitting the override lets the backend use the
-        // server-side default and keeps Developer UI aligned with production.
-        if model == "groq/whisper-large-v3" { return nil }
-        return model
+        Settings.shared.backendSTTModelOverride
     }
 
     /// Reformat a transcript through the AI assistant (structure only, words
