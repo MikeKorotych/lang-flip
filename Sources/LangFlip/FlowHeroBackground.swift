@@ -14,12 +14,19 @@ struct FlowAuroraBackground: View {
     /// Layers shift by their own `depth`, giving a parallax sense of depth.
     var parallax: CGSize = .zero
 
+    /// True only while the hosting window is actually on screen. The animated
+    /// backdrop is a 30 fps MeshGradient — left running it burns ~20% CPU forever,
+    /// even when the window is closed/hidden (SwiftUI keeps the TimelineView ticking
+    /// for a cached, off-screen window). Gating on real occlusion freezes it when
+    /// nobody can see it.
+    @State private var onScreen = true
+
     var body: some View {
         ZStack {
             // Base glow: an animated MeshGradient on macOS 15+ (richer, more
             // liquid), falling back to drifting blurred blobs on macOS 13–14.
             if #available(macOS 15.0, *) {
-                MeshAurora(parallax: parallax)
+                MeshAurora(parallax: parallax, animating: onScreen)
             } else {
                 LegacyAurora(parallax: parallax)
             }
@@ -39,6 +46,55 @@ struct FlowAuroraBackground: View {
                 .allowsHitTesting(false)
         }
         .clipped()
+        .background(WindowVisibilityObserver { visible in
+            if onScreen != visible { onScreen = visible }
+        })
+    }
+}
+
+/// Reports whether the hosting `NSWindow` is currently on screen
+/// (`occlusionState` contains `.visible`). Lets animated backdrops pause their
+/// per-frame work when the window is closed, hidden (Cmd-H), minimised or fully
+/// occluded — otherwise a `TimelineView(.animation)` keeps firing (and burning
+/// CPU/GPU) indefinitely even when nothing is visible.
+private struct WindowVisibilityObserver: NSViewRepresentable {
+    var onChange: (Bool) -> Void
+
+    func makeNSView(context: Context) -> NSView { Tracker(onChange: onChange) }
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? Tracker)?.onChange = onChange
+    }
+
+    final class Tracker: NSView {
+        var onChange: (Bool) -> Void
+        private var token: NSObjectProtocol?
+
+        init(onChange: @escaping (Bool) -> Void) {
+            self.onChange = onChange
+            super.init(frame: .zero)
+        }
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let token { NotificationCenter.default.removeObserver(token); self.token = nil }
+            guard let window else { report(false); return }
+            report(window.occlusionState.contains(.visible))
+            token = NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification,
+                object: window, queue: .main
+            ) { [weak self] _ in
+                guard let self, let w = self.window else { return }
+                self.report(w.occlusionState.contains(.visible))
+            }
+        }
+
+        // Hop off the current update pass so we never mutate SwiftUI state mid-layout.
+        private func report(_ visible: Bool) {
+            DispatchQueue.main.async { [onChange] in onChange(visible) }
+        }
+
+        deinit { if let token { NotificationCenter.default.removeObserver(token) } }
     }
 }
 
@@ -49,6 +105,9 @@ struct FlowAuroraBackground: View {
 @available(macOS 15.0, *)
 private struct MeshAurora: View {
     var parallax: CGSize
+    /// Drives the per-frame clock only while the window is on screen; otherwise we
+    /// render a single frozen frame so the mesh costs nothing in the background.
+    var animating: Bool = true
 
     // Dark column 0 (left) stays put so the copy keeps contrast.
     private let dark0 = Color(red: 0.150, green: 0.135, blue: 0.120)
@@ -57,9 +116,14 @@ private struct MeshAurora: View {
     private let green = Color(red: 0.215, green: 0.335, blue: 0.285)
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { tl in
-            let t = tl.date.timeIntervalSinceReferenceDate
-            MeshGradient(width: 3, height: 3, points: points(t), colors: colors(t))
+        if animating {
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { tl in
+                let t = tl.date.timeIntervalSinceReferenceDate
+                MeshGradient(width: 3, height: 3, points: points(t), colors: colors(t))
+            }
+        } else {
+            // Frozen frame — no TimelineView clock, no per-frame mesh recompute.
+            MeshGradient(width: 3, height: 3, points: points(0), colors: colors(0))
         }
     }
 
