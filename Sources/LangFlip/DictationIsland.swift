@@ -95,6 +95,9 @@ final class DictationIslandController {
             self, selector: #selector(dictationCancelled),
             name: .langFlipDictationCancelled, object: nil)
         NotificationCenter.default.addObserver(
+            self, selector: #selector(transcriptionFailed),
+            name: .langFlipDictationTranscriptionFailed, object: nil)
+        NotificationCenter.default.addObserver(
             self, selector: #selector(screenChanged),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
         let workspaceCenter = NSWorkspace.shared.notificationCenter
@@ -125,7 +128,7 @@ final class DictationIslandController {
         // Detection footprint: current pill width (so ✕/✓ stay clickable while
         // recording), but at least the mic size when idle to avoid flicker.
         let base = IslandMetrics.contentSize(for: state).width
-        let detW = (state.phase == .idle && !state.showCancelledToast
+        let detW = (state.phase == .idle && !state.showsToast
                     ? max(base, IslandMetrics.micWidth) : base) + 20
         let detH = IslandMetrics.pillSlotHeight + 16
         // The panel frame is anchored at the fullscreen (physical-bottom)
@@ -136,7 +139,7 @@ final class DictationIslandController {
                           width: detW, height: detH)
         let inside = rect.contains(mouse)
         if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
-        if state.phase == .idle && !state.showCancelledToast, state.hovering != inside {
+        if state.phase == .idle && !state.showsToast, state.hovering != inside {
             state.hovering = inside
         }
     }
@@ -151,7 +154,7 @@ final class DictationIslandController {
                 // A new recording (e.g. via hotkey) supersedes any lingering
                 // "Transcript cancelled" toast — clear it so the island shows the
                 // recording controls, not a stale toast with a live Undo.
-                if state.showCancelledToast { dismissToast() }
+                if state.showsToast { dismissToast() }
                 state.phase = .recording
                 startLevelTimer()
             } else if CloudSpeechSynthesizer.shared.isBuffering || AITextProcessing.shared.isActive {
@@ -179,8 +182,22 @@ final class DictationIslandController {
 
     @objc private func dictationCancelled() {
         DispatchQueue.main.async { [self] in
+            state.showFailedToast = false
             state.showCancelledToast = true
             state.toastToken &+= 1   // re-trigger the lifetime bar even if the toast is already up
+            toastTimer?.invalidate()
+            toastTimer = Timer.scheduledTimer(withTimeInterval: IslandMetrics.toastDuration, repeats: false) { [weak self] _ in
+                self?.dismissToast()
+            }
+            updateHover()
+        }
+    }
+
+    @objc private func transcriptionFailed() {
+        DispatchQueue.main.async { [self] in
+            state.showCancelledToast = false
+            state.showFailedToast = true
+            state.toastToken &+= 1
             toastTimer?.invalidate()
             toastTimer = Timer.scheduledTimer(withTimeInterval: IslandMetrics.toastDuration, repeats: false) { [weak self] _ in
                 self?.dismissToast()
@@ -193,6 +210,7 @@ final class DictationIslandController {
         toastTimer?.invalidate()
         toastTimer = nil
         state.showCancelledToast = false
+        state.showFailedToast = false
         updateHover()
     }
 
@@ -347,10 +365,12 @@ final class DictationIslandState: ObservableObject {
     @Published var hovering = false
     @Published var level: Double = 0
     @Published var showCancelledToast = false
+    @Published var showFailedToast = false
     @Published var toastToken = 0   // bumped on each cancel to (re)start the lifetime bar
     @Published var liftOffset: CGFloat = 0   // pill rise above the fullscreen anchor (Dock clearance)
 
-    var isExpandedIdle: Bool { phase == .idle && hovering && !showCancelledToast }
+    var showsToast: Bool { showCancelledToast || showFailedToast }
+    var isExpandedIdle: Bool { phase == .idle && hovering && !showsToast }
 }
 
 // MARK: - Metrics
@@ -366,18 +386,18 @@ enum IslandMetrics {
     static let micWidth: CGFloat = 34           // ~round mic button
     static let recordingWidth: CGFloat = 156    // compact: little slack around the waves
     static let transcribingWidth: CGFloat = recordingWidth  // match recording so the pill doesn't jump width on state change
-    static let toastWidth: CGFloat = 218        // snug: "Transcript cancelled" + Undo, minimal gap
+    static let toastWidth: CGFloat = 224        // snug: toast text + action, minimal gap
 
     static let tooltipWidth: CGFloat = 188
     static let tooltipHeight: CGFloat = 26
     static let tooltipGap: CGFloat = 7
 
-    /// How long the "Transcript cancelled" toast lives before it auto-dismisses.
+    /// How long transient action toasts live before they auto-dismiss.
     static let toastDuration: TimeInterval = 4
 
     /// Current pill content size (width drives the in-place animation).
     static func contentSize(for state: DictationIslandState) -> CGSize {
-        if state.showCancelledToast { return CGSize(width: toastWidth, height: pillHeight) }
+        if state.showsToast { return CGSize(width: toastWidth, height: pillHeight) }
         switch state.phase {
         case .idle:
             return state.hovering
@@ -450,7 +470,7 @@ struct DictationIslandView: View {
 
     private var pillWidth: CGFloat { IslandMetrics.contentSize(for: state).width }
     private var pillHeight: CGFloat { IslandMetrics.contentSize(for: state).height }
-    private var stateKey: String { "\(state.phase)-\(state.hovering)-\(state.showCancelledToast)" }
+    private var stateKey: String { "\(state.phase)-\(state.hovering)-\(state.showCancelledToast)-\(state.showFailedToast)" }
 
     // Pill grow/shrink — a touch longer with a soft overshoot so it springs in
     // place rather than snapping. (Grows from the centre; the panel never moves.)
@@ -513,7 +533,7 @@ struct DictationIslandView: View {
                     .scaleEffect(x: toastProgress, anchor: .leading)
                     .padding(.horizontal, 18)
                     .padding(.bottom, 0)
-                    .opacity(state.showCancelledToast ? 1 : 0)
+                    .opacity(state.showsToast ? 1 : 0)
             }
             // Transcribing label as a persistent, centred overlay: its scale +
             // opacity are driven straight from the phase, so on finish it shrinks
@@ -542,15 +562,15 @@ struct DictationIslandView: View {
             .overlay {
                 toastContent
                     .frame(width: IslandMetrics.toastWidth)
-                    .scaleEffect(state.showCancelledToast ? 1 : 0.3, anchor: .center)
-                    .opacity(state.showCancelledToast ? 1 : 0)
-                    .animation(pillSpring, value: state.showCancelledToast)
-                    .allowsHitTesting(state.showCancelledToast)
+                    .scaleEffect(state.showsToast ? 1 : 0.3, anchor: .center)
+                    .opacity(state.showsToast ? 1 : 0)
+                    .animation(pillSpring, value: state.showsToast)
+                    .allowsHitTesting(state.showsToast)
             }
             .scaleEffect(pillPop, anchor: .center)
             .contentShape(Capsule())
             .onTapGesture {
-                if state.phase == .idle && !state.showCancelledToast {
+                if state.phase == .idle && !state.showsToast {
                     VoiceDictationController.shared.toggleRecording()
                 }
             }
@@ -558,7 +578,7 @@ struct DictationIslandView: View {
 
     @ViewBuilder
     private var innerContent: some View {
-        if state.showCancelledToast {
+        if state.showsToast {
             // Toast lives in a persistent overlay (see `pill`) so it shrinks into
             // the pill's centre on dismiss instead of sliding out down-right as
             // the pill collapses.
@@ -626,17 +646,21 @@ struct DictationIslandView: View {
 
     private var toastContent: some View {
         HStack(spacing: 8) {
-            Text("Transcript cancelled")
+            Text(state.showFailedToast ? "Transcription failed" : "Transcript cancelled")
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundColor(IslandColor.text)
                 .lineLimit(1)
                 .fixedSize()
             Spacer(minLength: 2)
             Button {
-                VoiceDictationController.shared.undoCancel()
+                if state.showFailedToast {
+                    VoiceDictationController.shared.retryFailedTranscription()
+                } else {
+                    VoiceDictationController.shared.undoCancel()
+                }
                 DictationIslandController.shared.dismissToast()
             } label: {
-                Text("Undo")
+                Text(state.showFailedToast ? "Retry" : "Undo")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.black)
                     .lineLimit(1)

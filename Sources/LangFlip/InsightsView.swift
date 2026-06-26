@@ -141,10 +141,11 @@ private struct InsightsUsageSnapshot {
     static let empty = make(entries: [])
 
     static func make(entries: [DictationEntry]) -> InsightsUsageSnapshot {
+        let completedEntries = entries.filter(\.isTranscribed)
         let cal = Calendar.current
         let now = Date()
         let today = cal.startOfDay(for: now)
-        let digests = entries.map {
+        let digests = completedEntries.map {
             EntryDigest(date: $0.date,
                         day: cal.startOfDay(for: $0.date),
                         wordCount: $0.wordCount,
@@ -855,9 +856,10 @@ private struct YourVoiceView: View {
     let appeared: Bool
 
     private let milestone = 1000
+    private var completedEntries: [DictationEntry] { history.entries.filter(\.isTranscribed) }
 
     var body: some View {
-        if history.entries.isEmpty {
+        if completedEntries.isEmpty {
             FlowCard {
                 HStack(spacing: 12) {
                     Image(systemName: "waveform.circle").foregroundColor(FlowTheme.accent)
@@ -968,24 +970,24 @@ private struct YourVoiceView: View {
 
     // MARK: Derived data
 
-    private var totalWords: Int { history.entries.reduce(0) { $0 + $1.wordCount } }
+    private var totalWords: Int { completedEntries.reduce(0) { $0 + $1.wordCount } }
     private var progress: Double { Double(totalWords % milestone) / Double(milestone) }
     private var wordsToNextMilestone: Int { milestone - (totalWords % milestone) }
-    private var createdDate: Date { history.entries.map { $0.date }.min() ?? Date() }
+    private var createdDate: Date { completedEntries.map { $0.date }.min() ?? Date() }
 
     private var topCategory: AppCategory {
         var counts: [AppCategory: Int] = [:]
-        for e in history.entries { counts[AppCategory.classify(e.app), default: 0] += 1 }
+        for e in completedEntries { counts[AppCategory.classify(e.app), default: 0] += 1 }
         return counts.max { $0.value < $1.value }?.key ?? .other
     }
 
     private var topApp: String {
-        let names = history.entries.compactMap { $0.app }
+        let names = completedEntries.compactMap { $0.app }
         return Dictionary(grouping: names, by: { $0 }).max { $0.value.count < $1.value.count }?.key ?? "your apps"
     }
 
     private var avgWords: Int {
-        history.entries.isEmpty ? 0 : totalWords / history.entries.count
+        completedEntries.isEmpty ? 0 : totalWords / completedEntries.count
     }
 
     private var profileName: String {
@@ -1004,17 +1006,17 @@ private struct YourVoiceView: View {
     private var profileIcon: String { topCategory.icon }
 
     private var profileDescription: String {
-        "Your dictations cluster around \(topCategory.title.lowercased()), most often in \(topApp). You average \(avgWords) words per dictation across \(history.entries.count) sessions."
+        "Your dictations cluster around \(topCategory.title.lowercased()), most often in \(topApp). You average \(avgWords) words per dictation across \(completedEntries.count) sessions."
     }
 
     private var catchphrase: String {
-        guard let recent = history.entries.first?.text else { return "—" }
+        guard let recent = completedEntries.first?.text else { return "—" }
         let clean = recent.replacingOccurrences(of: "\n", with: " ")
         return "“\(clean.count > 70 ? String(clean.prefix(70)) + "…" : clean)”"
     }
 
     private var mostUsedWord: String {
-        let words = history.entries
+        let words = completedEntries
             .flatMap { $0.text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init) }
             .filter { $0.count >= 4 }
         return Dictionary(grouping: words, by: { $0 }).max { $0.value.count < $1.value.count }?.key ?? "—"
@@ -1035,7 +1037,7 @@ private struct YourVoiceView: View {
 
     private var peakBucket: (Int, Int)? {
         let cal = Calendar.current
-        let buckets = history.entries.map { entry -> String in
+        let buckets = completedEntries.map { entry -> String in
             let w = cal.component(.weekday, from: entry.date)
             let h = cal.component(.hour, from: entry.date)
             return "\(w)-\(h)"

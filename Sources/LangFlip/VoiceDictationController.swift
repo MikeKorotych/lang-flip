@@ -18,6 +18,15 @@ final class VoiceDictationController {
     private var recordingApp: String?
     private var sttReservation: BackendSTTReserveResult?
     private var sttReservationTask: Task<Void, Never>?
+    private var failedTranscription: FailedTranscription?
+
+    private struct FailedTranscription {
+        let audioURL: URL
+        let duration: Double?
+        let app: String?
+        let historyEntryID: UUID?
+        let insertOnSuccess: Bool
+    }
 
     private init() {}
 
@@ -35,6 +44,7 @@ final class VoiceDictationController {
         }
         self.mode = mode
         isRecording = true
+        failedTranscription = nil
         recordingStartedAt = Date()
         // Recording runs for seconds while the network sits idle — warm the STT
         // connection now so the upload-after-stop reuses a hot TLS connection.
@@ -88,7 +98,44 @@ final class VoiceDictationController {
         beginTranscription(audioURL: audioURL, duration: nil, app: nil, reservationID: nil)
     }
 
-    private func beginTranscription(audioURL: URL, duration: Double?, app: String?, reservationID: String?) {
+    func retryFailedTranscription() {
+        guard !isRecording, !isTranscribing,
+              let failedTranscription,
+              FileManager.default.fileExists(atPath: failedTranscription.audioURL.path)
+        else { return }
+        beginTranscription(audioURL: failedTranscription.audioURL,
+                           duration: failedTranscription.duration,
+                           app: failedTranscription.app,
+                           reservationID: nil,
+                           replacingHistoryEntryID: failedTranscription.historyEntryID,
+                           insertOnSuccess: failedTranscription.insertOnSuccess)
+    }
+
+    func retryFailedTranscription(entry: DictationEntry) {
+        guard !isRecording, !isTranscribing,
+              entry.isFailed,
+              let audioURL = entry.audioURL,
+              FileManager.default.fileExists(atPath: audioURL.path)
+        else { return }
+        failedTranscription = FailedTranscription(audioURL: audioURL,
+                                                  duration: entry.duration,
+                                                  app: entry.app,
+                                                  historyEntryID: entry.id,
+                                                  insertOnSuccess: false)
+        beginTranscription(audioURL: audioURL,
+                           duration: entry.duration,
+                           app: entry.app,
+                           reservationID: nil,
+                           replacingHistoryEntryID: entry.id,
+                           insertOnSuccess: false)
+    }
+
+    private func beginTranscription(audioURL: URL,
+                                    duration: Double?,
+                                    app: String?,
+                                    reservationID: String?,
+                                    replacingHistoryEntryID: UUID? = nil,
+                                    insertOnSuccess: Bool = true) {
         isTranscribing = true
         // The island shows the transcribing state; the banner is opt-in.
         notifyStateChanged()
@@ -111,15 +158,36 @@ final class VoiceDictationController {
                     PersonalDictionaryStore.shared.apply(to: formatted)
                 }
                 await MainActor.run {
+                    self.failedTranscription = nil
                     self.isTranscribing = false
-                    self.insert(text, duration: duration, app: app)
+                    if insertOnSuccess {
+                        self.insert(text, duration: duration, app: app, replacingHistoryEntryID: replacingHistoryEntryID)
+                    } else if let replacingHistoryEntryID {
+                        DictationHistory.shared.replaceFailed(id: replacingHistoryEntryID, with: text, duration: duration, app: app)
+                        Sound.playFlip()
+                        Notifications.show(title: "Transcript ready", body: "Saved in Home history.")
+                    }
                     self.notifyStateChanged()
                 }
             } catch {
                 await MainActor.run {
+                    let failureID = DictationHistory.shared.recordFailure(
+                        audioURL: audioURL,
+                        duration: duration,
+                        app: app,
+                        error: error.localizedDescription,
+                        replacing: replacingHistoryEntryID
+                    )
+                    self.failedTranscription = FailedTranscription(audioURL: audioURL,
+                                                                   duration: duration,
+                                                                   app: app,
+                                                                   historyEntryID: failureID,
+                                                                   insertOnSuccess: insertOnSuccess)
                     self.isTranscribing = false
                     self.notifyStateChanged()
-                    Notifications.show(title: "Transcription failed", body: error.localizedDescription)
+                    NotificationCenter.default.post(name: .langFlipDictationTranscriptionFailed, object: nil)
+                    Notifications.show(title: "Transcription failed", body: "Click Retry on the dictation island.")
+                    AppLog.write("STT failed: \(error.localizedDescription)")
                 }
             }
         }
@@ -137,6 +205,7 @@ final class VoiceDictationController {
         mode = nil
         recordingStartedAt = nil
         recordingApp = nil
+        failedTranscription = nil
         notifyStateChanged()
         NotificationCenter.default.post(name: .langFlipDictationCancelled, object: nil)
     }
@@ -208,6 +277,9 @@ final class VoiceDictationController {
             // Developers (Advanced) can pin the STT model for their account;
             // everyone else sends nil and gets the backend's server default.
             let modelOverride = Self.backendSTTModelOverride()
+            let modelLog = modelOverride ?? "server-default"
+            NetworkLatency.log.info("STT model=\(modelLog, privacy: .public)")
+            AppLog.write("STT model=\(modelLog)")
 
             let request = BackendTranscribeRequest(audio: upload.data,
                                                    filename: upload.filename,
@@ -271,7 +343,7 @@ final class VoiceDictationController {
         return formatted
     }
 
-    private func insert(_ text: String, duration: Double? = nil, app: String? = nil) {
+    private func insert(_ text: String, duration: Double? = nil, app: String? = nil, replacingHistoryEntryID: UUID? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             Notifications.show(title: "Dictation", body: "No speech was recognized.")
@@ -293,7 +365,11 @@ final class VoiceDictationController {
             beforeContext: beforeContext,
             appBundleID: appBundleID
         )
-        DictationHistory.shared.add(cleaned, duration: duration, app: app)
+        if let replacingHistoryEntryID {
+            DictationHistory.shared.replaceFailed(id: replacingHistoryEntryID, with: cleaned, duration: duration, app: app)
+        } else {
+            DictationHistory.shared.add(cleaned, duration: duration, app: app)
+        }
         // The text appears at the cursor and the sound confirms it — the "inserted"
         // banner is opt-in (off by default) to keep dictation quiet.
         if Settings.shared.dictationNotifications {

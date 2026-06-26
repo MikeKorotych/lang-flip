@@ -76,12 +76,13 @@ private struct DictationTranscriptionModeCard: View {
 
 private struct StatsCard: View {
     @ObservedObject private var history = DictationHistory.shared
+    private var completedEntries: [DictationEntry] { history.entries.filter(\.isTranscribed) }
 
     var body: some View {
         FlowCard {
             VStack(alignment: .leading, spacing: 14) {
                 statRow(Self.formatCount(totalWords), "total words")
-                statRow("\(history.entries.count)", history.entries.count == 1 ? "dictation" : "dictations")
+                statRow("\(completedEntries.count)", completedEntries.count == 1 ? "dictation" : "dictations")
                 statRow("\(streak)", streak == 1 ? "day streak" : "day streaks")
             }
         }
@@ -99,13 +100,13 @@ private struct StatsCard: View {
     }
 
     private var totalWords: Int {
-        history.entries.reduce(0) { $0 + $1.text.split(whereSeparator: { $0.isWhitespace }).count }
+        completedEntries.reduce(0) { $0 + $1.wordCount }
     }
 
     /// Consecutive days, ending today, that have at least one dictation.
     private var streak: Int {
         let cal = Calendar.current
-        let days = Set(history.entries.map { cal.startOfDay(for: $0.date) })
+        let days = Set(completedEntries.map { cal.startOfDay(for: $0.date) })
         guard !days.isEmpty else { return 0 }
         var count = 0
         var day = cal.startOfDay(for: Date())
@@ -344,26 +345,30 @@ private struct DictationRow: View {
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundColor(FlowTheme.inkSecondary)
                 .frame(width: 60, alignment: .leading)
-            Text(entry.text)
-                .font(.system(size: 14))
-                .foregroundColor(FlowTheme.ink)
-                .lineLimit(4)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button(action: copy) {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 12))
-                    .foregroundColor(copied ? FlowTheme.accent : FlowTheme.inkSecondary)
-                    .frame(width: 26, height: 22)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(hovering ? FlowTheme.rowHover : .clear)
-                    )
+            if entry.isFailed {
+                failedContent
+            } else {
+                Text(entry.text)
+                    .font(.system(size: 14))
+                    .foregroundColor(FlowTheme.ink)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(action: copy) {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 12))
+                        .foregroundColor(copied ? FlowTheme.accent : FlowTheme.inkSecondary)
+                        .frame(width: 26, height: 22)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(hovering ? FlowTheme.rowHover : .clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help("Copy transcript")
+                .opacity(hovering ? 1 : 0)
             }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .help("Copy transcript")
-            .opacity(hovering ? 1 : 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -372,7 +377,46 @@ private struct DictationRow: View {
         .onHover { hovering = $0 }
     }
 
+    private var failedContent: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 13))
+                .foregroundColor(.orange)
+                .frame(width: 18)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Transcription failed")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(FlowTheme.ink)
+                Text(entry.errorMessage ?? "The recording is saved. Try transcribing it again.")
+                    .font(.system(size: 12))
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                VoiceDictationController.shared.retryFailedTranscription(entry: entry)
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.clockwise")
+                    Text("Retry")
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.black)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(FlowTheme.accent))
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .help("Retry transcription")
+            .disabled(entry.audioURL == nil)
+        }
+    }
+
     private func copy() {
+        guard entry.isTranscribed else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(entry.text, forType: .string)
         copied = true

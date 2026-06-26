@@ -30,6 +30,10 @@ extension Notification.Name {
     /// transcribing). The island shows a "Transcript cancelled" toast.
     static let langFlipDictationCancelled = Notification.Name("LangFlipDictationCancelled")
 
+    /// Posted when transcription fails but the recording file is still available.
+    /// The island shows a "Transcription failed" toast with a retry action.
+    static let langFlipDictationTranscriptionFailed = Notification.Name("LangFlipDictationTranscriptionFailed")
+
     /// Posted when text-to-speech buffering (synthesis) starts/stops. Drives the
     /// island's `.speaking` spinner while audio is being prepared.
     static let langFlipTTSStateChanged = Notification.Name("LangFlipTTSStateChanged")

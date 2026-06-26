@@ -98,7 +98,7 @@ final class MenubarController: NSObject {
     @objc private func refresh() {
         // "Paste last transcript" reflects the most recent dictation, with a
         // dimmed preview line beneath it (like the reference menu).
-        let last = DictationHistory.shared.entries.first
+        let last = DictationHistory.shared.entries.first(where: \.isTranscribed)
         pasteLastItem.isEnabled = (last != nil)
         if let last {
             pastePreviewItem.isHidden = false
@@ -177,7 +177,7 @@ final class MenubarController: NSObject {
     }
 
     @objc private func pasteLastTranscript() {
-        guard let last = DictationHistory.shared.entries.first else { return }
+        guard let last = DictationHistory.shared.entries.first(where: \.isTranscribed) else { return }
         VoiceDictationController.shared.pasteText(last.text)
     }
 
