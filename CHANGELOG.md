@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.7.0 - Dictation, Home, and Playback Polish
+
+This release turns the recent Sayful Cloud work into a more complete daily-use
+experience: faster dictation choices, safer retry flows, clearer Home history,
+and more polished playback and hotkey controls.
+
+### Added
+
+- Added a simple Dictation Mode switch: Fast for lower latency, Quality for
+  richer transcription.
+- Added retry for failed transcriptions from both the dictation island and Home
+  history, reusing the recorded audio instead of losing the attempt.
+- Added Home activity tabs for dictations, screen text captures, and generated
+  speech files.
+- Added playback controls for generated speech, including pause/resume in the
+  island and Home history.
+- Added animated hotkey chips in the Superpowers card, including inline
+  recording and reset affordances.
+
+### Improved
+
+- Streamlined onboarding so a ready account opens straight into Home, with
+  hands-free dictation and Shift+Space translation enabled by default.
+- Made dictation auto-formatting prefer logical paragraphs for longer
+  monologues while preserving the speaker's wording.
+- Tightened text-polish prompts so Single Shift behaves like typo cleanup first,
+  not a style rewrite.
+- Polished the Dictation hero, Superpowers highlight, Transform demo sheet, and
+  TTS control animations.
+- Kept generated speech files in Home so they can be replayed or deleted later.
+
+### Fixed
+
+- Fixed TTS history rows so the play button turns into pause while the selected
+  file is playing.
+- Fixed playback controls appearing from the edge of the screen instead of the
+  center of the dictation island.
+- Fixed LangFlip word-boundary handling so punctuation keys that are Cyrillic
+  letters on another layout, such as `;` for `ж`, no longer trigger an early
+  auto-flip.
+- Fixed Home hotkey chips getting stuck in recording state after relaunch.
+- Fixed first-run permission/event-tap restart paths so hotkeys work after
+  onboarding without needing a manual relaunch.
+
 ## 0.6.0 - Personal Dictation Dictionary
 
 This release teaches Sayful how you spell product names, people, jargon, and

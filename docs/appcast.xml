@@ -26,6 +26,31 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.7.0</title>
+      <pubDate>Fri, 26 Jun 2026 13:40:57 +0000</pubDate>
+      <sparkle:version>0.7.0</sparkle:version>
+      <sparkle:shortVersionString>0.7.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Dictation, Home, and playback polish</h2>
+        <ul>
+          <li>Added a simple Dictation Mode switch: Fast for lower latency, Quality for richer transcription.</li>
+          <li>Added retry for failed transcriptions from both the dictation island and Home history, reusing the recorded audio instead of losing the attempt.</li>
+          <li>Added Home activity tabs for dictations, screen text captures, and generated speech files.</li>
+          <li>Added generated speech playback controls, including pause/resume in the island and Home history.</li>
+          <li>Streamlined onboarding so a ready account opens straight into Home, with hands-free dictation and Shift+Space translation enabled by default.</li>
+          <li>Polished Superpowers hotkey chips, the Dictation hero, Transform demo, and TTS control animations.</li>
+          <li>Fixed LangFlip word boundaries so punctuation keys that are Cyrillic letters on another layout, such as ; for ж, no longer trigger an early auto-flip.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.7.0/Sayful-0.7.0.dmg"
+        length="6676957"
+        type="application/octet-stream"
+        sparkle:edSignature="wKMig1xvLZ6+U80NpDWVzCq7XQ6gP6F/+b+omTJMSe5nU3MuUeuJxOYyuMVyKwva3AHpteaDAsAN3VFIutjxDQ==" />
+    </item>
+
+    <item>
       <title>v0.6.0</title>
       <pubDate>Thu, 25 Jun 2026 18:28:26 +0000</pubDate>
       <sparkle:version>0.6.0</sparkle:version>
