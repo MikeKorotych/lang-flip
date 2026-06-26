@@ -846,13 +846,13 @@ private struct SuperpowersCard: View {
                 }
             }
         }
-        .scaleEffect(highlighting ? 1.025 : 1)
+        .scaleEffect(highlighting ? 1.018 : 1)
         .overlay(
             RoundedRectangle(cornerRadius: FlowTheme.cornerRadius, style: .continuous)
                 .stroke(FlowTheme.accent.opacity(highlighting ? 0.75 : 0), lineWidth: 2)
         )
-        .shadow(color: FlowTheme.accent.opacity(highlighting ? 0.22 : 0), radius: 18, y: 8)
-        .animation(.spring(response: 0.34, dampingFraction: 0.62), value: highlighting)
+        .shadow(color: FlowTheme.accent.opacity(highlighting ? 0.20 : 0), radius: 22, y: 10)
+        .animation(.spring(response: 0.72, dampingFraction: 0.82), value: highlighting)
         .onAppear(perform: playFirstOpenHighlight)
         .onDisappear(perform: stopRecording)
     }
@@ -1097,9 +1097,9 @@ private struct SuperpowersCard: View {
     private func playFirstOpenHighlight() {
         guard !attentionShown else { return }
         attentionShown = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
             withAnimation { highlighting = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.05) {
                 withAnimation { highlighting = false }
             }
         }
