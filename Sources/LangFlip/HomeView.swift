@@ -61,7 +61,7 @@ private struct DictationTranscriptionModeCard: View {
                     Text("Dictation Mode")
                         .font(.system(size: 16, weight: .semibold, design: .serif))
                         .foregroundColor(FlowTheme.ink)
-                    Text("Pick speed or richer transcription.")
+                    Text("Choose speed or quality.")
                         .font(.system(size: 12))
                         .foregroundColor(FlowTheme.inkSecondary)
                 }

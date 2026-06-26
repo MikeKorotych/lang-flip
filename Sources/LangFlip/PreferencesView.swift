@@ -348,7 +348,7 @@ struct VoiceTab: View {
 
                 DictationTranscriptionModePicker(
                     title: "Transcription mode",
-                    detail: "Choose the speed/quality trade-off for Sayful Cloud dictation."
+                    detail: "Choose what matters more for dictation."
                 )
             }
 
@@ -439,7 +439,7 @@ struct VoiceTab: View {
             // it); Advanced/BYOK users point it at their own OpenAI-compatible
             // endpoint. Audio is sent to the provider; nothing is stored.
             if usesSayfulCloud {
-                helpText("Dictation uses Sayful Cloud — no API key needed. Fast mode uses Groq Whisper; Quality mode uses Qwen ASR. Only your recorded dictation audio is sent; sign in from the profile menu.")
+                helpText("Dictation uses Sayful Cloud — no API key needed. Fast prioritizes speed; Quality prioritizes cleaner punctuation and text. Only your recorded dictation audio is sent; sign in from the profile menu.")
                 // The developer STT-model override now lives in the Developer tab,
                 // so this Voice tab stays a clean end-user view.
             } else {

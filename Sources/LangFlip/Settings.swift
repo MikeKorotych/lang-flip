@@ -245,15 +245,6 @@ enum DictationTranscriptionMode: String, CaseIterable, Identifiable {
         }
     }
 
-    var detail: String {
-        switch self {
-        case .fast:
-            return "Fastest transcription. Uses Groq Whisper for lower latency."
-        case .quality:
-            return "Better punctuation and Cyrillic polish. Uses Qwen ASR and can feel slower."
-        }
-    }
-
     var backendModelOverride: String? {
         switch self {
         case .fast: return nil

@@ -43,11 +43,6 @@ struct DictationTranscriptionModePicker: View {
             } else {
                 segmentedControl
             }
-
-            Text(selectedMode.detail)
-                .font(.system(size: 12))
-                .foregroundColor(FlowTheme.inkSecondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
