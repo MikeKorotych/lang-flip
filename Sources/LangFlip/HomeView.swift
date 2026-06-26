@@ -133,7 +133,7 @@ private struct DictationHeroCard: View {
     private var statusText: String {
         if state.isTranscribing { return "Transcribing…" }
         if state.isRecording { return "Listening… click to stop" }
-        return "Click the mic, or hold \(Settings.shared.dictationHandsFreeShortcut.displayName)"
+        return "Click the mic, or hold \(compactShortcut(Settings.shared.dictationHandsFreeShortcut.displayName))"
     }
 
     var body: some View {
@@ -141,7 +141,7 @@ private struct DictationHeroCard: View {
             HStack(spacing: 18) {
                 VStack(alignment: .leading, spacing: 10) {
                     (
-                        Text("Speak. ")
+                        Text("Speak - ")
                             .font(.system(size: 30, weight: .semibold, design: .serif))
                         + Text("It types.")
                             .font(.system(size: 30, weight: .semibold, design: .serif))
