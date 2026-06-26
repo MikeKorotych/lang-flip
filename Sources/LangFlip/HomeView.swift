@@ -828,7 +828,7 @@ private struct SuperpowersCard: View {
                         title: power.title,
                         shortcut: power.shortcut,
                         isEditable: power.editable != nil,
-                        isRecording: recording == power.editable,
+                        isRecording: power.editable != nil && recording == power.editable,
                         onShortcutTap: {
                             if let editable = power.editable {
                                 toggleRecording(editable)
