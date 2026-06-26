@@ -831,7 +831,7 @@ private struct SuperpowersCard: View {
                         isRecording: recording == power.editable,
                         onShortcutTap: {
                             if let editable = power.editable {
-                                startRecording(editable)
+                                toggleRecording(editable)
                             }
                         }
                     )
@@ -906,6 +906,15 @@ private struct SuperpowersCard: View {
         ShortcutRecordingState.isRecording = true
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             handle(event: event, power: power)
+        }
+    }
+
+    private func toggleRecording(_ power: EditablePower) {
+        if recording == power {
+            recordingWarning = ""
+            stopRecording()
+        } else {
+            startRecording(power)
         }
     }
 
