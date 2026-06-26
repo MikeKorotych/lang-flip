@@ -5,6 +5,8 @@ struct DictationEntry: Identifiable, Codable {
     enum Status: String, Codable {
         case transcribed
         case failed
+        case retrying
+        case recovered
     }
 
     let id: UUID
@@ -61,8 +63,10 @@ struct DictationEntry: Identifiable, Codable {
         return text.split(whereSeparator: { $0.isWhitespace }).count
     }
 
-    var isTranscribed: Bool { status == .transcribed }
+    var isTranscribed: Bool { status == .transcribed || status == .recovered }
     var isFailed: Bool { status == .failed }
+    var isRetrying: Bool { status == .retrying }
+    var isRecovered: Bool { status == .recovered }
     var audioURL: URL? { audioPath.map(URL.init(fileURLWithPath:)) }
 }
 
@@ -112,6 +116,24 @@ final class DictationHistory: ObservableObject {
         return entryID
     }
 
+    func markRetrying(id: UUID) {
+        DispatchQueue.main.async {
+            guard let idx = self.entries.firstIndex(where: { $0.id == id }) else { return }
+            let previous = self.entries[idx]
+            self.entries[idx] = DictationEntry(
+                id: previous.id,
+                text: "Retrying transcription",
+                date: previous.date,
+                duration: previous.duration,
+                app: previous.app,
+                status: .retrying,
+                audioPath: previous.audioPath,
+                errorMessage: nil
+            )
+            self.save()
+        }
+    }
+
     func replaceFailed(id: UUID, with text: String, duration: Double? = nil, app: String? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -123,7 +145,9 @@ final class DictationHistory: ObservableObject {
                     text: trimmed,
                     date: previous.date,
                     duration: duration ?? previous.duration,
-                    app: app ?? previous.app
+                    app: app ?? previous.app,
+                    status: .recovered,
+                    audioPath: previous.audioPath
                 )
                 self.save()
             } else {
@@ -136,7 +160,24 @@ final class DictationHistory: ObservableObject {
         guard let data = UserDefaults.standard.data(forKey: key),
               let decoded = try? JSONDecoder().decode([DictationEntry].self, from: data)
         else { return }
-        entries = decoded
+        var normalizedInterruptedRetry = false
+        entries = decoded.map { entry in
+            guard entry.isRetrying else { return entry }
+            normalizedInterruptedRetry = true
+            return DictationEntry(
+                id: entry.id,
+                text: "Transcription failed",
+                date: entry.date,
+                duration: entry.duration,
+                app: entry.app,
+                status: .failed,
+                audioPath: entry.audioPath,
+                errorMessage: "The previous retry was interrupted."
+            )
+        }
+        if normalizedInterruptedRetry {
+            save()
+        }
     }
 
     private func save() {

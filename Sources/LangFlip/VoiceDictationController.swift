@@ -103,6 +103,9 @@ final class VoiceDictationController {
               let failedTranscription,
               FileManager.default.fileExists(atPath: failedTranscription.audioURL.path)
         else { return }
+        if let historyEntryID = failedTranscription.historyEntryID {
+            DictationHistory.shared.markRetrying(id: historyEntryID)
+        }
         beginTranscription(audioURL: failedTranscription.audioURL,
                            duration: failedTranscription.duration,
                            app: failedTranscription.app,
@@ -122,6 +125,7 @@ final class VoiceDictationController {
                                                   app: entry.app,
                                                   historyEntryID: entry.id,
                                                   insertOnSuccess: false)
+        DictationHistory.shared.markRetrying(id: entry.id)
         beginTranscription(audioURL: audioURL,
                            duration: entry.duration,
                            app: entry.app,

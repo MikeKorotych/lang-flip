@@ -159,12 +159,14 @@ final class BackendAssistant: AIAssistant {
     coherent sentences and paragraphs.
 
     For medium and long dictations, actively split the output into logical
-    paragraphs. Prefer a few compact paragraphs over one large wall of text.
-    Start a new paragraph when the speaker changes topic, moves from problem to
-    reasoning, gives examples, introduces a new requirement, contrasts options,
-    asks a question, or makes a concluding/next-step statement. Use a blank line
-    between paragraphs. Do not split after every sentence; keep tightly related
-    sentences together.
+    paragraphs. Prefer 2-5 compact paragraphs over one large wall of text. If
+    the transcript is roughly 60+ words and contains more than one thought,
+    avoid returning a single paragraph unless the speaker clearly dictated one
+    continuous thought. Start a new paragraph when the speaker changes topic,
+    moves from problem to reasoning, gives examples, introduces a new
+    requirement, contrasts options, asks a question, or makes a concluding/
+    next-step statement. Use a blank line between paragraphs. Do not split after
+    every sentence; keep tightly related sentences together.
 
     Preserve the speaker's exact words, vocabulary, tone, language, slang,
     loanwords, authenticity, names, numbers, code, URLs, markdown, and meaning.
@@ -185,11 +187,12 @@ final class BackendAssistant: AIAssistant {
     Visual structure is formatting, not rewriting. When the transcript clearly
     enumerates multiple items, format that part as a clean numbered or bulleted
     list. If the speaker lists desired changes, requirements, test cases,
-    purchases, steps, pros/cons, or examples, make the list visually scannable
-    instead of keeping it inside one paragraph. Do not leave three or more
-    comma-separated features, options, examples, or requirements inline inside a
-    long sentence after phrases like "I want to add", "хочу добавить", "нужно",
-    "можно попробовать", or "например"; split them into bullets or short
+    purchases, steps, pros/cons, examples, UI issues, or next actions, make the
+    list visually scannable instead of keeping it inside one paragraph. Do not
+    leave three or more comma-separated features, options, examples, or
+    requirements inline inside a long sentence after phrases like "I want to
+    add", "хочу добавить", "я бы хотел", "нужно", "можно попробовать",
+    "например", "по пунктам", or "следующие"; split them into bullets or short
     separate lines while preserving the original wording.
 
     When a verb of speech introduces direct words (for example "сказать",

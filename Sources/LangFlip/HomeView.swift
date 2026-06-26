@@ -345,29 +345,10 @@ private struct DictationRow: View {
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundColor(FlowTheme.inkSecondary)
                 .frame(width: 60, alignment: .leading)
-            if entry.isFailed {
-                failedContent
+            if entry.isFailed || entry.isRetrying {
+                retryableContent
             } else {
-                Text(entry.text)
-                    .font(.system(size: 14))
-                    .foregroundColor(FlowTheme.ink)
-                    .lineLimit(4)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Button(action: copy) {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 12))
-                        .foregroundColor(copied ? FlowTheme.accent : FlowTheme.inkSecondary)
-                        .frame(width: 26, height: 22)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(hovering ? FlowTheme.rowHover : .clear)
-                        )
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .help("Copy transcript")
-                .opacity(hovering ? 1 : 0)
+                transcriptContent
             }
         }
         .padding(.horizontal, 16)
@@ -377,18 +358,48 @@ private struct DictationRow: View {
         .onHover { hovering = $0 }
     }
 
-    private var failedContent: some View {
+    private var transcriptContent: some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                if entry.isRecovered {
+                    statusPill("Recovered", icon: "checkmark.circle.fill", color: FlowTheme.accent)
+                }
+                Text(entry.text)
+                    .font(.system(size: 14))
+                    .foregroundColor(FlowTheme.ink)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: copy) {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 12))
+                    .foregroundColor(copied ? FlowTheme.accent : FlowTheme.inkSecondary)
+                    .frame(width: 26, height: 22)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(hovering ? FlowTheme.rowHover : .clear)
+                    )
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .help("Copy transcript")
+            .opacity(hovering ? 1 : 0)
+        }
+    }
+
+    private var retryableContent: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
+            Image(systemName: entry.isRetrying ? "arrow.triangle.2.circlepath" : "exclamationmark.triangle.fill")
                 .font(.system(size: 13))
-                .foregroundColor(.orange)
+                .foregroundColor(entry.isRetrying ? FlowTheme.accent : .orange)
                 .frame(width: 18)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 3) {
-                Text("Transcription failed")
+                Text(entry.isRetrying ? "Retrying transcription" : "Transcription failed")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(FlowTheme.ink)
-                Text(entry.errorMessage ?? "The recording is saved. Try transcribing it again.")
+                Text(retryDetail)
                     .font(.system(size: 12))
                     .foregroundColor(FlowTheme.inkSecondary)
                     .lineLimit(2)
@@ -399,8 +410,14 @@ private struct DictationRow: View {
                 VoiceDictationController.shared.retryFailedTranscription(entry: entry)
             } label: {
                 HStack(spacing: 5) {
-                    Image(systemName: "arrow.clockwise")
-                    Text("Retry")
+                    if entry.isRetrying {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .frame(width: 12, height: 12)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    Text(entry.isRetrying ? "Retrying" : "Retry")
                 }
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(.black)
@@ -411,8 +428,32 @@ private struct DictationRow: View {
             .buttonStyle(.plain)
             .focusable(false)
             .help("Retry transcription")
-            .disabled(entry.audioURL == nil)
+            .disabled(entry.isRetrying || entry.audioURL == nil)
         }
+    }
+
+    private var retryDetail: String {
+        if entry.isRetrying {
+            return "Using the saved recording."
+        }
+        if entry.audioURL != nil {
+            let message = entry.errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return message.isEmpty ? "Recording saved. Try transcribing it again." : "Recording saved. \(message)"
+        }
+        return "Recording is no longer available."
+    }
+
+    private func statusPill(_ title: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .semibold))
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(color.opacity(0.12)))
     }
 
     private func copy() {
