@@ -491,8 +491,12 @@ private struct TTSHistoryRow: View {
     let entry: TTSHistoryEntry
 
     @State private var hovering = false
+    @State private var playbackRefresh = 0
 
     var body: some View {
+        let isCurrent = AudioFilePlayer.shared.isCurrent(entry.audioURL)
+        let isPlaying = isCurrent && AudioFilePlayer.shared.isPlaying
+
         HStack(alignment: .top, spacing: 14) {
             Text(shortTime(entry.date))
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
@@ -510,8 +514,10 @@ private struct TTSHistoryRow: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            rowIconButton("play.fill", help: "Play audio", disabled: !entry.fileExists) {
-                CloudSpeechSynthesizer.shared.play(entry.audioURL)
+            rowIconButton(isPlaying ? "pause.fill" : "play.fill",
+                          help: isPlaying ? "Pause audio" : "Play audio",
+                          disabled: !entry.fileExists) {
+                SpeechReader.shared.toggleGeneratedAudio(entry.audioURL)
             }
             .foregroundColor(entry.fileExists ? FlowTheme.accent : FlowTheme.inkSecondary.opacity(0.5))
             rowIconButton("trash", help: "Delete") { TTSHistory.shared.delete(entry) }
@@ -521,7 +527,11 @@ private struct TTSHistoryRow: View {
         .padding(.vertical, 12)
         .contentShape(Rectangle())
         .background(hovering ? FlowTheme.rowHover.opacity(0.4) : .clear)
+        .animation(.easeInOut(duration: 0.15), value: playbackRefresh)
         .onHover { hovering = $0 }
+        .onReceive(NotificationCenter.default.publisher(for: .langFlipTTSStateChanged)) { _ in
+            playbackRefresh &+= 1
+        }
     }
 
     private var detail: String {

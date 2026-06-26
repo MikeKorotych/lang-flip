@@ -78,6 +78,26 @@ final class SpeechReader: NSObject, NSSpeechSynthesizerDelegate {
         return replayLastGeneratedAudio()
     }
 
+    func toggleGeneratedAudio(_ url: URL) {
+        if AudioFilePlayer.shared.isCurrent(url) {
+            if AudioFilePlayer.shared.isPlaying {
+                pausePlayback()
+                return
+            }
+            if AudioFilePlayer.shared.isPaused {
+                _ = AudioFilePlayer.shared.resume()
+                isPaused = false
+                return
+            }
+        }
+
+        stop(clearPaused: true)
+        lastBackend = .cloud
+        isPaused = false
+        systemSpeechPaused = false
+        CloudSpeechSynthesizer.shared.play(url)
+    }
+
     private func stop(clearPaused: Bool) {
         if clearPaused {
             isPaused = false

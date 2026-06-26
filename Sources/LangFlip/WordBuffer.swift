@@ -1,11 +1,10 @@
 import Foundation
 
 /// Holds the characters typed since the last word boundary.
-/// Boundaries: whitespace, newline, tab, and strong punctuation that ends words.
-/// Comma and period stay inside the buffer until the next boundary because
-/// those same physical keys are letters ("б", "ю") when English text was
-/// actually intended as Ukrainian/Russian.
-/// Brackets stay inside for the same reason: "[" / "]" are physical "х" / "ї|ъ".
+/// Auto-flip is intentionally evaluated on whitespace, not punctuation:
+/// punctuation keys such as ";" can be real Cyrillic letters ("ж") when the
+/// user is typing on the wrong layout. Completing only on space keeps words
+/// like "nfr;t" together until they can be converted to "также".
 final class WordBuffer {
     struct CompletedWord {
         let word: String
@@ -20,11 +19,17 @@ final class WordBuffer {
     private(set) var recentHistory: [String] = []
     private static let recentHistoryCap = 8
 
-    private static let boundary: Set<Character> = [
-        " ", "\t", "\n", "\r",
-        ";", ":", "!", "?",
-        "(", ")", "{", "}",
-        "\"", "'", "`", "/", "\\", "|", "—", "–"
+    private static let boundary: Set<Character> = [" ", "\t", "\n", "\r"]
+
+    /// Punctuation that can trail a normal word but is not itself a physical
+    /// letter in the supported Cyrillic layouts. When the user types
+    /// "ghbdtn! ", we rewrite only "ghbdtn" and preserve "! " as the boundary.
+    /// Characters like ";", ",", ".", "[" and "]" stay in the word because
+    /// they map to Cyrillic letters on the same physical keys.
+    private static let trailingPunctuation: Set<Character> = [
+        ":", "!", "?",
+        ")", "}",
+        "\"", "`", "/", "\\", "|", "—", "–"
     ]
 
     func feed(_ s: String) {
@@ -46,10 +51,12 @@ final class WordBuffer {
         for ch in s {
             if Self.boundary.contains(ch) {
                 if !current.isEmpty {
-                    if completed == nil {
-                        completed = CompletedWord(word: current, boundary: String(ch))
+                    if let next = Self.completedWord(from: current, whitespace: String(ch)) {
+                        if completed == nil {
+                            completed = next
+                        }
+                        appendToHistory(next.word)
                     }
-                    appendToHistory(current)
                 }
                 current.removeAll(keepingCapacity: true)
             } else {
@@ -57,6 +64,17 @@ final class WordBuffer {
             }
         }
         return completed
+    }
+
+    private static func completedWord(from token: String, whitespace: String) -> CompletedWord? {
+        var word = token
+        var suffix = ""
+        while let last = word.last, trailingPunctuation.contains(last) {
+            suffix.insert(last, at: suffix.startIndex)
+            word.removeLast()
+        }
+        guard !word.isEmpty else { return nil }
+        return CompletedWord(word: word, boundary: suffix + whitespace)
     }
 
     private func appendToHistory(_ word: String) {

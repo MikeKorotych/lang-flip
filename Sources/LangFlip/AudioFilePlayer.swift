@@ -5,12 +5,17 @@ final class AudioFilePlayer: NSObject, AVAudioPlayerDelegate {
     static let shared = AudioFilePlayer()
 
     private var player: AVAudioPlayer?
+    private(set) var currentURL: URL?
     private(set) var isPaused = false
 
     private override init() {}
 
     var isPlaying: Bool {
         player?.isPlaying == true
+    }
+
+    func isCurrent(_ url: URL) -> Bool {
+        currentURL?.standardizedFileURL == url.standardizedFileURL
     }
 
     @discardableResult
@@ -21,6 +26,7 @@ final class AudioFilePlayer: NSObject, AVAudioPlayerDelegate {
             next.delegate = self
             next.prepareToPlay()
             player = next
+            currentURL = url.standardizedFileURL
             isPaused = false
             let started = next.play()
             notify()
@@ -55,6 +61,7 @@ final class AudioFilePlayer: NSObject, AVAudioPlayerDelegate {
             player.stop()
         }
         player = nil
+        currentURL = nil
         isPaused = false
         notify()
     }
@@ -62,6 +69,7 @@ final class AudioFilePlayer: NSObject, AVAudioPlayerDelegate {
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         if self.player === player {
             self.player = nil
+            currentURL = nil
             isPaused = false
             notify()
         }
@@ -70,6 +78,7 @@ final class AudioFilePlayer: NSObject, AVAudioPlayerDelegate {
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
         if self.player === player {
             self.player = nil
+            currentURL = nil
             isPaused = false
             if let error {
                 Notifications.show(title: "Audio playback failed", body: error.localizedDescription)
