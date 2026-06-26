@@ -218,7 +218,11 @@ final class VoiceRecorder: NSObject {
     }
 
     private func notify() {
-        NotificationCenter.default.post(name: .langFlipVoiceRecorderChanged, object: self)
+        // Observers are SwiftUI views (`.onReceive`), so always post on main —
+        // `stop()` is now torn down off the main thread (see stopAndTranscribe).
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .langFlipVoiceRecorderChanged, object: self)
+        }
     }
 
     private static func normalizedPower(_ db: Float) -> Double {

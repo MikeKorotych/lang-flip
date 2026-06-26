@@ -20,9 +20,8 @@ final class VoiceDictationController {
     private var sttReservationTask: Task<Void, Never>?
     private var failedTranscription: FailedTranscription?
 
-    /// Give SwiftUI one display tick to render the island's new state before
-    /// we do synchronous recorder teardown / pasteboard / AX side effects.
-    private static let islandTransitionHeadStart: TimeInterval = 0.035
+    /// Defer the pasteboard/paste side effects briefly so the island's
+    /// transcribing→done shrink can begin before the synchronous insert burst.
     private static let postTranscriptionSideEffectDelay: TimeInterval = 0.10
 
     private struct FailedTranscription {
@@ -87,22 +86,28 @@ final class VoiceDictationController {
 
         notifyStateChanged()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.islandTransitionHeadStart) { [weak self] in
-            guard let self else { return }
+        // Tear the recorder down off the main thread: stopping AVAudioEngine
+        // deactivates the audio HAL (tens of ms) and would otherwise stall the
+        // recording→transcribing spring. `stop()`/`teardown()` finalize the WAV
+        // under their own render lock, so this is safe off-main; we hop back to
+        // main for the transcription kickoff, which touches main-only state.
+        DispatchQueue.global(qos: .userInitiated).async {
             VoiceRecorder.shared.stop()
-
-            guard let audioURL = VoiceRecorder.shared.lastRecordingURL else {
-                self.isTranscribing = false
-                self.notifyStateChanged()
-                Notifications.show(title: "Dictation failed", body: "No recording was saved.")
-                return
+            let audioURL = VoiceRecorder.shared.lastRecordingURL
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard let audioURL else {
+                    self.isTranscribing = false
+                    self.notifyStateChanged()
+                    Notifications.show(title: "Dictation failed", body: "No recording was saved.")
+                    return
+                }
+                self.beginTranscription(audioURL: audioURL,
+                                        duration: duration,
+                                        app: app,
+                                        reservationID: reservationID,
+                                        stateAlreadyTranscribing: true)
             }
-
-            self.beginTranscription(audioURL: audioURL,
-                                    duration: duration,
-                                    app: app,
-                                    reservationID: reservationID,
-                                    stateAlreadyTranscribing: true)
         }
     }
 
@@ -186,12 +191,18 @@ final class VoiceDictationController {
                 await MainActor.run {
                     self.failedTranscription = nil
                     self.isTranscribing = false
+                    // Read the focused-field context (a cross-process AX call) BEFORE
+                    // flipping state, so the slow read doesn't land mid-shrink. Focus
+                    // stays in the target app — the island is a non-activating panel —
+                    // so it's still the right field. Only needed when we'll insert.
+                    let beforeContext = insertOnSuccess ? FocusedTextReader.current() : nil
                     self.notifyStateChanged()
                     self.schedulePostTranscriptionSideEffects(text: text,
                                                               duration: duration,
                                                               app: app,
                                                               replacingHistoryEntryID: replacingHistoryEntryID,
-                                                              insertOnSuccess: insertOnSuccess)
+                                                              insertOnSuccess: insertOnSuccess,
+                                                              beforeContext: beforeContext)
                 }
             } catch {
                 await MainActor.run {
@@ -221,11 +232,12 @@ final class VoiceDictationController {
                                                       duration: Double?,
                                                       app: String?,
                                                       replacingHistoryEntryID: UUID?,
-                                                      insertOnSuccess: Bool) {
+                                                      insertOnSuccess: Bool,
+                                                      beforeContext: FocusedTextReader.Context? = nil) {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.postTranscriptionSideEffectDelay) { [weak self] in
             guard let self else { return }
             if insertOnSuccess {
-                self.insert(text, duration: duration, app: app, replacingHistoryEntryID: replacingHistoryEntryID)
+                self.insert(text, duration: duration, app: app, replacingHistoryEntryID: replacingHistoryEntryID, precapturedContext: beforeContext)
             } else if let replacingHistoryEntryID {
                 DictationHistory.shared.replaceFailed(id: replacingHistoryEntryID, with: text, duration: duration, app: app)
                 Sound.playFlip()
@@ -384,7 +396,7 @@ final class VoiceDictationController {
         return formatted
     }
 
-    private func insert(_ text: String, duration: Double? = nil, app: String? = nil, replacingHistoryEntryID: UUID? = nil) {
+    private func insert(_ text: String, duration: Double? = nil, app: String? = nil, replacingHistoryEntryID: UUID? = nil, precapturedContext: FocusedTextReader.Context? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             Notifications.show(title: "Dictation", body: "No speech was recognized.")
@@ -393,7 +405,9 @@ final class VoiceDictationController {
 
         // Expand any snippet triggers automatically before inserting.
         let cleaned = SnippetStore.shared.expand(trimmed)
-        let beforeContext = FocusedTextReader.current()
+        // Prefer the context captured before the island shrink (see the completion
+        // path); fall back to a fresh read for callers that don't pre-capture.
+        let beforeContext = precapturedContext ?? FocusedTextReader.current()
         let appBundleID = AppContext.frontmostBundleID()
 
         let pb = NSPasteboard.general
