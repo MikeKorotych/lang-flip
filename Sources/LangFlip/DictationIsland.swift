@@ -161,22 +161,22 @@ final class DictationIslandController {
                 // Spinner: TTS buffering OR AI text processing (fix / transform / translate).
                 state.phase = .speaking
                 stopLevelTimer()
-                state.level = 0
+                state.audioLevel.reset()
             } else if SpeechReader.shared.isSpeaking {
                 state.phase = .ttsPlayback
                 state.ttsPlaybackPaused = false
                 stopLevelTimer()
-                state.level = 0
+                state.audioLevel.reset()
             } else if SpeechReader.shared.isPaused {
                 state.phase = .ttsPlayback
                 state.ttsPlaybackPaused = true
                 stopLevelTimer()
-                state.level = 0
+                state.audioLevel.reset()
             } else {
                 state.phase = .idle
                 state.ttsPlaybackPaused = false
                 stopLevelTimer()
-                state.level = 0
+                state.audioLevel.reset()
             }
             // The pill resized; recompute click-through against the cursor even
             // if it didn't move, so the new ✕/✓ aren't dead under a still cursor.
@@ -187,7 +187,7 @@ final class DictationIslandController {
     @objc private func recorderChanged() {
         guard state.phase == .recording else { return }
         DispatchQueue.main.async { [self] in
-            state.level = VoiceRecorder.shared.normalizedAveragePower
+            state.audioLevel.set(VoiceRecorder.shared.normalizedAveragePower)
         }
     }
 
@@ -243,7 +243,7 @@ final class DictationIslandController {
         guard levelTimer == nil else { return }
         levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             guard let self, self.state.phase == .recording else { return }
-            self.state.level = VoiceRecorder.shared.normalizedAveragePower
+            self.state.audioLevel.set(VoiceRecorder.shared.normalizedAveragePower)
         }
     }
 
@@ -374,15 +374,31 @@ final class DictationIslandState: ObservableObject {
 
     @Published var phase: Phase = .idle
     @Published var hovering = false
-    @Published var level: Double = 0
     @Published var showCancelledToast = false
     @Published var showFailedToast = false
     @Published var ttsPlaybackPaused = false
     @Published var toastToken = 0   // bumped on each cancel to (re)start the lifetime bar
     @Published var liftOffset: CGFloat = 0   // pill rise above the fullscreen anchor (Dock clearance)
 
+    let audioLevel = DictationIslandAudioLevelState()
+
     var showsToast: Bool { showCancelledToast || showFailedToast }
     var isExpandedIdle: Bool { phase == .idle && hovering && !showsToast }
+}
+
+final class DictationIslandAudioLevelState: ObservableObject {
+    @Published private(set) var value: Double = 0
+
+    func set(_ nextValue: Double) {
+        let clamped = min(1, max(0, nextValue))
+        guard abs(clamped - value) >= 0.015 else { return }
+        value = clamped
+    }
+
+    func reset() {
+        guard value != 0 else { return }
+        value = 0
+    }
 }
 
 // MARK: - Metrics
@@ -484,7 +500,14 @@ struct DictationIslandView: View {
 
     private var pillWidth: CGFloat { IslandMetrics.contentSize(for: state).width }
     private var pillHeight: CGFloat { IslandMetrics.contentSize(for: state).height }
-    private var stateKey: String { "\(state.phase)-\(state.hovering)-\(state.showCancelledToast)-\(state.showFailedToast)" }
+    private var animationKey: IslandAnimationKey {
+        IslandAnimationKey(
+            phase: state.phase,
+            hovering: state.hovering,
+            showCancelledToast: state.showCancelledToast,
+            showFailedToast: state.showFailedToast
+        )
+    }
 
     // Pill grow/shrink — a touch longer with a soft overshoot so it springs in
     // place rather than snapping. (Grows from the centre; the panel never moves.)
@@ -503,7 +526,7 @@ struct DictationIslandView: View {
             .padding(.bottom, IslandMetrics.pad)
         }
         .frame(width: IslandMetrics.panelSize.width, height: IslandMetrics.panelSize.height)
-        .animation(pillSpring, value: stateKey)
+        .animation(pillSpring, value: animationKey)
         // Lifetime bar fills left→right; re-armed on every cancel (token bump),
         // so a fresh cancel while a toast is still up restarts it cleanly.
         .onChange(of: state.toastToken) { _ in
@@ -666,7 +689,7 @@ struct DictationIslandView: View {
                 VoiceDictationController.shared.cancel()
             }
             .modifier(StaggerIn(shown: recShown, delay: 0.06))
-            WaveBars(level: state.level)
+            LiveWaveBars(audioLevel: state.audioLevel)
                 .frame(maxWidth: .infinity)
                 .modifier(StaggerIn(shown: recShown, delay: 0.14))
             circleButton(system: "checkmark", fg: .black, bg: IslandColor.confirm) {
@@ -755,8 +778,24 @@ struct DictationIslandView: View {
     }
 }
 
+private struct IslandAnimationKey: Equatable {
+    let phase: DictationIslandState.Phase
+    let hovering: Bool
+    let showCancelledToast: Bool
+    let showFailedToast: Bool
+}
+
 extension IslandMetrics {
     static func showsTooltipExpanded(_ state: DictationIslandState) -> Bool { state.isExpandedIdle }
+}
+
+private struct LiveWaveBars: View {
+    @ObservedObject var audioLevel: DictationIslandAudioLevelState
+
+    var body: some View {
+        WaveBars(level: audioLevel.value)
+            .transaction { $0.animation = nil }
+    }
 }
 
 /// Live audio-level bars, animated continuously while recording. Tuned for a
