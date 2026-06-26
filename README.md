@@ -193,7 +193,7 @@ make release   # build, sign, package, notarize, and staple a release DMG
 Onboarding test commands:
 
 ```sh
-make reset-onboarding        # reset settings + permissions, keep downloads
+make reset-onboarding        # reset settings, permissions, tokens, recordings; keep downloads
 make reset-onboarding-fresh  # also remove installed dictionaries and TTS files
 make reset-onboarding-empty  # full new-user reset, including local models
 make run-onboarding          # reset fresh, rebuild, install, launch

@@ -11,11 +11,17 @@ struct PermissionStatus: Equatable {
     let accessibility: Bool
     let inputMonitoring: Bool
     let microphone: Bool
+    /// True only when macOS not only shows Input Monitoring as granted, but this
+    /// running process can create the keyboard event tap. On some macOS builds
+    /// the grant is applied only after the app is restarted, so onboarding keeps
+    /// this separate from the visible permission state.
+    let eventTapReady: Bool
 
     /// The two approvals the keyboard event tap relies on (flip + hotkeys).
     /// Surfaced in the LangFlip tab's Permissions section; deliberately excludes
     /// the microphone, which is handled on its own (onboarding + Voice tab).
     var allGranted: Bool { accessibility && inputMonitoring }
+    var keyboardReady: Bool { accessibility && inputMonitoring && eventTapReady }
 
     /// Read the current permission state. `prompt = true` shows the
     /// Accessibility consent dialog the first time it's queried.
@@ -36,8 +42,11 @@ struct PermissionStatus: Equatable {
         }
         let im = CGPreflightListenEventAccess()
             && IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
-            && canCreateKeyboardEventTap()
-        return PermissionStatus(accessibility: ax, inputMonitoring: im, microphone: hasMicrophone())
+        let tapReady = im && canCreateKeyboardEventTap()
+        return PermissionStatus(accessibility: ax,
+                                inputMonitoring: im,
+                                microphone: hasMicrophone(),
+                                eventTapReady: tapReady)
     }
 
     /// Open the right pane of System Settings → Privacy & Security → …

@@ -55,6 +55,18 @@ final class OnboardingWindowController: NSObject {
         window.makeKeyAndOrderFront(nil)
     }
 
+    /// Input Monitoring sometimes becomes operational only after the app is
+    /// relaunched. Keep this user-facing instead of leaving onboarding stuck on
+    /// an already-enabled permission row.
+    func restartApp() {
+        let bundlePath = Bundle.main.bundleURL.path
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "sleep 0.6; /usr/bin/open \"$1\"", "restart-sayful", bundlePath]
+        try? process.run()
+        NSApp.terminate(nil)
+    }
+
     private func markDoneAndClose(openPreferences: Bool) {
         Settings.shared.onboardingDone = true
         Settings.shared.returnToOnboardingAfterScreenRecording = false
@@ -316,6 +328,9 @@ private struct OnboardingView: View {
 
     /// True once every shown step is granted — drives the "All set" state.
     private var allStepsGranted: Bool { currentStep == nil }
+    private var needsKeyboardRestart: Bool {
+        status.accessibility && status.inputMonitoring && !status.eventTapReady
+    }
 
     /// Optional cloud sign-in, shown after the permissions are granted. Skippable
     /// ("Maybe later") and also available later from the title-bar profile menu.
@@ -398,9 +413,11 @@ private struct OnboardingView: View {
                     }
                 }
                 if allStepsGranted {
+                    if needsKeyboardRestart {
+                        restartStep
                     // After the mandatory permissions: offer Sayful Cloud sign-in
                     // (optional) before the "you're ready" panel.
-                    if auth.isSignedIn || skippedSignIn {
+                    } else if auth.isSignedIn || skippedSignIn {
                         SetupChecklist(onOpenPreferences: onOpenPreferences)
                     } else {
                         signInStep
@@ -438,7 +455,7 @@ private struct OnboardingView: View {
                 .frame(width: 96, height: 96)
         }
         VStack(spacing: 4) {
-            Text(allStepsGranted ? "All set!" : "Welcome to Sayful")
+            Text(needsKeyboardRestart ? "Almost done" : (allStepsGranted ? "All set!" : "Welcome to Sayful"))
                 .font(.system(size: 20, weight: .semibold))
             Text(headerSubtitle)
                 .font(.body)
@@ -450,15 +467,28 @@ private struct OnboardingView: View {
 
     private var headerSubtitle: String {
         let remaining = steps.filter { !isGranted($0) }.count
+        if needsKeyboardRestart {
+            return "Sayful needs a quick restart to finish enabling hotkeys."
+        }
         switch remaining {
         case 0:  return "Sayful is ready. Speak in any app and it types for you."
-        default: return "One quick permission and you're ready."
+        case 1:  return "One quick step and you're ready."
+        default: return "\(remaining) quick steps and you're ready."
         }
     }
 
     @ViewBuilder
     private var footer: some View {
-        if allStepsGranted {
+        if needsKeyboardRestart {
+            HStack {
+                Button(action: { OnboardingWindowController.shared.restartApp() }) {
+                    Text("Restart Sayful")
+                        .frame(minWidth: 150)
+                }
+                .keyboardShortcut(.return)
+                .controlSize(.large)
+            }
+        } else if allStepsGranted {
             HStack(spacing: 10) {
                 Button(action: onContinue) {
                     Text("Continue")
@@ -487,6 +517,42 @@ private struct OnboardingView: View {
     }
 
     // MARK: Step rendering
+
+    private var restartStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.clockwise.circle.fill")
+                    .font(.title3)
+                    .foregroundColor(.accentColor)
+                Text("Finish setup")
+                    .font(.headline)
+            }
+            Text("Input Monitoring is enabled. macOS needs Sayful to reopen before the hotkeys can start working.")
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(action: { OnboardingWindowController.shared.restartApp() }) {
+                    Text("Restart Sayful")
+                        .frame(minWidth: 180)
+                }
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
+                Spacer()
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.accentColor.opacity(0.4), lineWidth: 1.5)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.accentColor.opacity(0.08))
+                )
+        )
+    }
 
     private enum Step: Hashable {
         case microphone, accessibility, inputMonitoring

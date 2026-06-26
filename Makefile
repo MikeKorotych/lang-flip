@@ -67,8 +67,9 @@ plan:
 # ─── Dev reset helpers ────────────────────────────────────────────
 
 # Reset exactly the things that make the app feel like a first launch:
-# app settings + macOS privacy permissions. Keeps downloaded models,
-# runtimes, and dictionaries so repeated onboarding tests stay quick.
+# app settings, macOS privacy permissions, keychain tokens/API keys, saved
+# dictations, generated audio, profile avatar, and logs. Keeps downloaded
+# models, runtimes, and dictionaries so repeated onboarding tests stay quick.
 reset-onboarding:
 	./Scripts/reset-onboarding.sh $(BUNDLE_ID) settings $(APP_NAME)
 
