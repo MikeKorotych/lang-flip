@@ -143,6 +143,10 @@ final class EventTap {
         let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags
 
+        if ShortcutRecordingState.isRecording {
+            return Unmanaged.passUnretained(event)
+        }
+
         if type == .flagsChanged {
             handleFlagsChanged(keyCode: keyCode, flags: flags)
             return Unmanaged.passUnretained(event)
@@ -153,10 +157,6 @@ final class EventTap {
         if debug {
             let masked = flags.intersection([.maskCommand, .maskAlternate, .maskControl, .maskShift])
             FileHandle.standardError.write(Data("lang-flip[debug]: keyDown keyCode=\(keyCode) flags=\(String(masked.rawValue, radix: 16))\n".utf8))
-        }
-
-        if ShortcutRecordingState.isRecording {
-            return Unmanaged.passUnretained(event)
         }
 
         DictationCorrectionLearner.shared.noteUserKey(keyCode: keyCode, flags: flags)

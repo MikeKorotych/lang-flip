@@ -755,7 +755,7 @@ private struct DictationRow: View {
 
 private struct SuperpowersCard: View {
     private enum EditablePower: String, Identifiable {
-        case translate, capture, read
+        case dictation, fix, flip, translate, capture, read
 
         var id: String { rawValue }
     }
@@ -776,6 +776,7 @@ private struct SuperpowersCard: View {
     @AppStorage("lf.screenTextCaptureHotkeyCustom") private var screenTextCaptureHotkeyCustom = ""
     @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.commandShiftX.rawValue
     @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
+    @AppStorage("lf.hotkeyPreset") private var hotkeyPreset = HotkeyPreset.doubleShift.rawValue
     @AppStorage("lf.dictationHandsFreeEnabled") private var dictationHandsFreeEnabled = true
     @AppStorage("lf.dictationHandsFreeShortcut") private var dictationHandsFreeShortcut = DictationHandsFreeShortcut.leftOption.rawValue
     @AppStorage("lf.dictationPushToTalkShortcut") private var dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
@@ -787,9 +788,9 @@ private struct SuperpowersCard: View {
 
     private var powers: [Power] {
         [
-            Power(icon: "mic.fill", title: "Start Dictation", shortcut: compactShortcut(handsFreeShortcutName), editable: nil),
-            Power(icon: "wand.and.stars", title: "Fix Selected Text", shortcut: compactShortcut("Shift"), editable: nil),
-            Power(icon: "arrow.2.squarepath", title: "Flip Layout", shortcut: compactShortcut("Shift Shift"), editable: nil),
+            Power(icon: "mic.fill", title: "Start Dictation", shortcut: compactShortcut(handsFreeShortcutName), editable: .dictation),
+            Power(icon: "wand.and.stars", title: "Fix Selected Text", shortcut: coreTapSymbol, editable: .fix),
+            Power(icon: "arrow.2.squarepath", title: "Flip Layout", shortcut: coreTapSymbol + coreTapSymbol, editable: .flip),
             Power(icon: "globe", title: "Translate Selected Text", shortcut: shortcutDisplay(for: .translate), editable: .translate),
             Power(icon: "viewfinder", title: "Capture Screen Text", shortcut: shortcutDisplay(for: .capture), editable: .capture),
             Power(icon: "speaker.wave.2", title: "Read Selected Text", shortcut: shortcutDisplay(for: .read), editable: .read),
@@ -867,10 +868,19 @@ private struct SuperpowersCard: View {
         translationHotkeyPreset != GlobalShortcutPreset.shiftSpace.rawValue ||
         screenTextCaptureHotkeyPreset != GlobalShortcutPreset.commandShiftS.rawValue ||
         readSelectionHotkeyPreset != GlobalShortcutPreset.commandShiftX.rawValue ||
+        hotkeyPreset != HotkeyPreset.doubleShift.rawValue ||
         dictationHandsFreeShortcut != DictationHandsFreeShortcut.leftOption.rawValue ||
         dictationPushToTalkShortcut != DictationPushToTalkShortcut.anyShift.rawValue ||
         !dictationHandsFreeEnabled ||
         !translationHotkeyEnabled
+    }
+
+    private var coreTapSymbol: String {
+        switch HotkeyPreset(rawValue: hotkeyPreset) ?? .doubleShift {
+        case .doubleShift: return "⇧"
+        case .doubleRightCmd: return "⌘"
+        case .doubleRightOption: return "⌥"
+        }
     }
 
     private func shortcutDisplay(for power: EditablePower) -> String {
@@ -879,6 +889,8 @@ private struct SuperpowersCard: View {
 
     private func shortcut(for power: EditablePower) -> GlobalShortcut {
         switch power {
+        case .dictation, .fix, .flip:
+            return GlobalShortcutPreset.shiftSpace.shortcut
         case .translate:
             return GlobalShortcut.decode(translationHotkeyCustom)
                 ?? (GlobalShortcutPreset(rawValue: translationHotkeyPreset) ?? .shiftSpace).shortcut
@@ -893,6 +905,7 @@ private struct SuperpowersCard: View {
 
     private func choices(for power: EditablePower) -> [GlobalShortcutPreset] {
         switch power {
+        case .dictation, .fix, .flip: return []
         case .translate: return GlobalShortcutPreset.translationChoices
         case .capture: return GlobalShortcutPreset.screenCaptureChoices
         case .read: return GlobalShortcutPreset.readAloudChoices
@@ -904,7 +917,7 @@ private struct SuperpowersCard: View {
         recording = power
         recordingWarning = ""
         ShortcutRecordingState.isRecording = true
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
             handle(event: event, power: power)
         }
     }
@@ -933,6 +946,18 @@ private struct SuperpowersCard: View {
             stopRecording()
             return nil
         }
+        switch power {
+        case .dictation:
+            return handleDictationShortcutEvent(event)
+        case .fix, .flip:
+            return handleCoreGestureEvent(event)
+        case .translate, .capture, .read:
+            return handleGlobalShortcutEvent(event, power: power)
+        }
+    }
+
+    private func handleGlobalShortcutEvent(_ event: NSEvent, power: EditablePower) -> NSEvent? {
+        guard event.type == .keyDown else { return nil }
         guard let shortcut = GlobalShortcut.from(event: event) else {
             recordingWarning = "Use modifiers plus a key."
             return nil
@@ -947,6 +972,87 @@ private struct SuperpowersCard: View {
         return nil
     }
 
+    private func handleDictationShortcutEvent(_ event: NSEvent) -> NSEvent? {
+        guard event.type == .flagsChanged else { return nil }
+        guard let shortcut = dictationShortcut(from: event) else {
+            recordingWarning = "Use Left Option, Left Command, or a supported modifier pair."
+            return nil
+        }
+        dictationHandsFreeEnabled = true
+        dictationHandsFreeShortcut = shortcut.rawValue
+        recordingWarning = ""
+        stopRecording()
+        return nil
+    }
+
+    private func handleCoreGestureEvent(_ event: NSEvent) -> NSEvent? {
+        guard event.type == .flagsChanged else { return nil }
+        guard let preset = coreHotkeyPreset(from: event) else {
+            recordingWarning = "Use Shift, right Command, or right Option."
+            return nil
+        }
+        hotkeyPreset = preset.rawValue
+        recordingWarning = ""
+        stopRecording()
+        return nil
+    }
+
+    private func dictationShortcut(from event: NSEvent) -> DictationHandsFreeShortcut? {
+        let keyCode = CGKeyCode(event.keyCode)
+        let flags = event.modifierFlags
+        let shift = flags.contains(.shift)
+        let command = flags.contains(.command)
+        let control = flags.contains(.control)
+        let option = flags.contains(.option)
+        let function = flags.contains(.function)
+        let isShiftKey = keyCode == CGKeyCode(kVK_Shift) || keyCode == CGKeyCode(kVK_RightShift)
+        let isCommandKey = keyCode == CGKeyCode(kVK_Command) || keyCode == CGKeyCode(kVK_RightCommand)
+        let isControlKey = keyCode == CGKeyCode(kVK_Control) || keyCode == CGKeyCode(kVK_RightControl)
+        let isOptionKey = keyCode == CGKeyCode(kVK_Option) || keyCode == CGKeyCode(kVK_RightOption)
+
+        if function, option, !shift, !command, !control,
+           isOptionKey || keyCode == CGKeyCode(kVK_Function) {
+            return .fnOption
+        }
+        if command, shift, !option, !control, isCommandKey || isShiftKey {
+            return .commandShift
+        }
+        if control, shift, !option, !command, isControlKey || isShiftKey {
+            return .controlShift
+        }
+        if option, shift, !command, !control, isOptionKey || isShiftKey {
+            return .optionShift
+        }
+        if keyCode == CGKeyCode(kVK_Option), option, !shift, !command, !control {
+            return .leftOption
+        }
+        if keyCode == CGKeyCode(kVK_Command), command, !shift, !option, !control {
+            return .leftCommand
+        }
+        return nil
+    }
+
+    private func coreHotkeyPreset(from event: NSEvent) -> HotkeyPreset? {
+        let keyCode = CGKeyCode(event.keyCode)
+        let flags = event.modifierFlags
+        let shift = flags.contains(.shift)
+        let command = flags.contains(.command)
+        let option = flags.contains(.option)
+        let control = flags.contains(.control)
+
+        if (keyCode == CGKeyCode(kVK_Shift) || keyCode == CGKeyCode(kVK_RightShift)),
+           shift, !command, !option, !control {
+            return .doubleShift
+        }
+        if keyCode == CGKeyCode(kVK_RightCommand), command, !shift, !option, !control {
+            return .doubleRightCmd
+        }
+        if keyCode == CGKeyCode(kVK_RightOption), option, !shift, !command, !control {
+            return .doubleRightOption
+        }
+        return nil
+    }
+
     private func save(_ shortcut: GlobalShortcut, for power: EditablePower) {
         if let preset = choices(for: power).first(where: { $0.shortcut == shortcut }) {
             setPreset(preset, for: power)
@@ -958,6 +1064,7 @@ private struct SuperpowersCard: View {
 
     private func setPreset(_ preset: GlobalShortcutPreset, for power: EditablePower) {
         switch power {
+        case .dictation, .fix, .flip: break
         case .translate: translationHotkeyPreset = preset.rawValue
         case .capture: screenTextCaptureHotkeyPreset = preset.rawValue
         case .read: readSelectionHotkeyPreset = preset.rawValue
@@ -966,6 +1073,7 @@ private struct SuperpowersCard: View {
 
     private func setCustom(_ value: String, for power: EditablePower) {
         switch power {
+        case .dictation, .fix, .flip: break
         case .translate: translationHotkeyCustom = value
         case .capture: screenTextCaptureHotkeyCustom = value
         case .read: readSelectionHotkeyCustom = value
@@ -980,6 +1088,7 @@ private struct SuperpowersCard: View {
         screenTextCaptureHotkeyCustom = ""
         readSelectionHotkeyPreset = GlobalShortcutPreset.commandShiftX.rawValue
         readSelectionHotkeyCustom = ""
+        hotkeyPreset = HotkeyPreset.doubleShift.rawValue
         dictationHandsFreeEnabled = true
         dictationHandsFreeShortcut = DictationHandsFreeShortcut.leftOption.rawValue
         dictationPushToTalkShortcut = DictationPushToTalkShortcut.anyShift.rawValue
