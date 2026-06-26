@@ -3,6 +3,7 @@ import SwiftUI
 struct DictationTranscriptionModePicker: View {
     var title: String? = nil
     var detail: String? = nil
+    var expands = false
 
     @AppStorage(DictationTranscriptionMode.storageKey)
     private var rawMode = DictationTranscriptionMode.fast.rawValue
@@ -51,7 +52,8 @@ struct DictationTranscriptionModePicker: View {
             items: DictationTranscriptionMode.allCases.map {
                 (value: $0, label: $0.displayName)
             },
-            selection: selection
+            selection: selection,
+            expands: expands
         )
     }
 }

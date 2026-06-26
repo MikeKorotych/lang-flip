@@ -421,6 +421,7 @@ struct AppearStagger: ViewModifier {
 struct FlowSegmented<T: Hashable>: View {
     let items: [(value: T, label: String)]
     @Binding var selection: T
+    var expands = false
     @Namespace private var ns
 
     var body: some View {
@@ -451,7 +452,9 @@ struct FlowSegmented<T: Hashable>: View {
         .padding(4)
         .background(Capsule().fill(FlowTheme.card))
         .overlay(Capsule().stroke(FlowTheme.cardStroke, lineWidth: 1))
-        .fixedSize(horizontal: true, vertical: false)
+        .frame(maxWidth: expands ? .infinity : nil)
+        .fixedSize(horizontal: !expands, vertical: false)
+        .animation(.spring(response: 0.32, dampingFraction: 0.78), value: selection)
     }
 }
 

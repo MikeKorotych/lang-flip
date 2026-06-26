@@ -66,7 +66,7 @@ private struct DictationTranscriptionModeCard: View {
                         .foregroundColor(FlowTheme.inkSecondary)
                 }
 
-                DictationTranscriptionModePicker()
+                DictationTranscriptionModePicker(expands: true)
             }
         }
     }
