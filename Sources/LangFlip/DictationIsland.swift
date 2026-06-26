@@ -569,6 +569,22 @@ struct DictationIslandView: View {
                     .animation(pillSpring, value: state.phase)
                     .allowsHitTesting(false)
             }
+            // TTS playback controls use the same persistent-overlay pattern as
+            // the spinner/toasts. Keeping them mounted prevents SwiftUI from
+            // inserting the HStack from the panel edge while the capsule width
+            // is animating; clipping reveals them from the island centre.
+            .overlay {
+                ZStack {
+                    playbackContent
+                        .frame(width: IslandMetrics.ttsPlaybackWidth, height: IslandMetrics.pillHeight)
+                        .scaleEffect(state.phase == .ttsPlayback ? 1 : 0.35, anchor: .center)
+                        .opacity(state.phase == .ttsPlayback ? 1 : 0)
+                        .animation(pillSpring, value: state.phase)
+                }
+                .frame(width: pillWidth, height: pillHeight)
+                .clipShape(Capsule())
+                .allowsHitTesting(state.phase == .ttsPlayback)
+            }
             // "Transcript cancelled" toast — persistent overlay so on dismiss it
             // shrinks into the centre + fades (not slides out). Fixed width keeps
             // its spread layout stable; hit-testing is on only while it's shown so
@@ -613,7 +629,9 @@ struct DictationIslandView: View {
             // Speaking spinner lives in a persistent overlay (see `pill`) so it
             // scales in/out from the pill's centre instead of popping off-centre.
             case .speaking:     EmptyView()
-            case .ttsPlayback:  playbackContent
+            // Playback controls live in a persistent overlay (see `pill`) so
+            // they reveal/collapse in the capsule centre, not from panel edges.
+            case .ttsPlayback:  EmptyView()
             }
         }
     }
