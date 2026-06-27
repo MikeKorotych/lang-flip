@@ -26,6 +26,29 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.7.1</title>
+      <pubDate>Sat, 27 Jun 2026 10:49:17 +0000</pubDate>
+      <sparkle:version>0.7.1</sparkle:version>
+      <sparkle:shortVersionString>0.7.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Smoother dictation island</h2>
+        <ul>
+          <li>Fixed stuttering in the dictation island's transitions (expanding to record, switching to transcribing, and collapsing afterward).</li>
+          <li>Recording controls now collapse into the island's centre on finish instead of sliding off to the bottom-right.</li>
+          <li>The animated Home backdrop pauses when its window isn't on screen, lowering idle CPU.</li>
+          <li>Recorder teardown moved off the main thread and transcripts insert immediately, keeping transitions hitch-free.</li>
+          <li>Removed the mic button from the Home banner — dictation runs from the global hotkey and the always-present island.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.7.1/Sayful-0.7.1.dmg"
+        length="6672874"
+        type="application/octet-stream"
+        sparkle:edSignature="QKayPKcnmzIQqvbJEqYIF/kkW0yyE17+4fPwi3ag44zQiKB+r9iQrsj3oVUTiCp5OFn1vbULo7mCuF15HmlmCA==" />
+    </item>
+
+    <item>
       <title>v0.7.0</title>
       <pubDate>Fri, 26 Jun 2026 13:40:57 +0000</pubDate>
       <sparkle:version>0.7.0</sparkle:version>

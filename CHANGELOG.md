@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.7.1 - Smoother dictation island
+
+This release focuses on the dictation island — the most-used animation — making
+its state transitions smooth, with a couple of cleanups that also lower idle CPU.
+
+### Fixed
+
+- Fixed stuttering in the dictation island's transitions (expanding to record,
+  switching to transcribing, and collapsing afterward). A cached Home window was
+  reacting to dictation state on the main thread and starving the animation; it
+  no longer does.
+- The recording controls (cancel · waves · confirm) now collapse into the
+  island's centre on finish instead of sliding off to the bottom-right.
+
+### Improved
+
+- The animated Home backdrop now pauses when its window isn't on screen, so the
+  app no longer spends CPU rendering it in the background.
+- Recorder teardown runs off the main thread and the transcript is inserted
+  immediately, keeping the island's transitions free of hitches.
+
+### Removed
+
+- Removed the mic button from the Home banner. Dictation runs from the global
+  hotkey and the always-present island, so the in-Home trigger was redundant and
+  competed with the island's animation.
+
 ## 0.7.0 - Dictation, Home, and Playback Polish
 
 This release turns the recent Sayful Cloud work into a more complete daily-use
