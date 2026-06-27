@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.2 - Always-flip: English and case-sensitive
+
+### Added
+
+- Always-flip rules can now target English, so wrong-layout Cyrillic typing meant
+  for English (for example "срфеПЗЕ" → "ChatGPT") is rewritten on the spot.
+
+### Changed
+
+- Always-flip rules are now case-sensitive and keep the casing you enter, so a
+  rule for "ChatGPT" preserves its capitals instead of being lowercased. Existing
+  lowercase rules keep working for lowercase typing.
+
 ## 0.7.1 - Smoother dictation island
 
 This release focuses on the dictation island — the most-used animation — making

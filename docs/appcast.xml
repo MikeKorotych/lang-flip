@@ -26,6 +26,26 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.7.2</title>
+      <pubDate>Sat, 27 Jun 2026 11:12:31 +0000</pubDate>
+      <sparkle:version>0.7.2</sparkle:version>
+      <sparkle:shortVersionString>0.7.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Always-flip: English and case-sensitive</h2>
+        <ul>
+          <li>Always-flip rules can now target English — wrong-layout Cyrillic typing meant for English (e.g. "срфеПЗЕ" → "ChatGPT") is rewritten on the spot.</li>
+          <li>Always-flip rules are now case-sensitive and keep the casing you enter, so a rule for "ChatGPT" preserves its capitals.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.7.2/Sayful-0.7.2.dmg"
+        length="6672659"
+        type="application/octet-stream"
+        sparkle:edSignature="qobvJ4rEY/phq236JilmrB9TSfzDaJToaGnMcAP2I0LM7ywLHoY7SnasscUnIyeBjkNJs/6JEgbLfkJPVE4sCw==" />
+    </item>
+
+    <item>
       <title>v0.7.1</title>
       <pubDate>Sat, 27 Jun 2026 10:49:17 +0000</pubDate>
       <sparkle:version>0.7.1</sparkle:version>
