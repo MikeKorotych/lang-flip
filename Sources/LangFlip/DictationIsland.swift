@@ -560,6 +560,18 @@ struct DictationIslandView: View {
         ZStack { innerContent }
             .frame(width: pillWidth, height: pillHeight)
             .background(capsuleBackground)
+            // Recording controls (✕ · waves · ✓) — mounted only while recording (so
+            // the live-wave TimelineView doesn't tick when idle), revealed with a
+            // centred scale transition so on finish they shrink into the pill's
+            // centre instead of sliding out down-right (matching every other state,
+            // which already uses centred overlays).
+            .overlay {
+                if state.phase == .recording {
+                    recordingContent
+                        .frame(width: IslandMetrics.recordingWidth)
+                        .transition(.scale(scale: 0.4, anchor: .center).combined(with: .opacity))
+                }
+            }
             // Toast lifetime bar — sits right on the capsule's bottom border,
             // filling left→right. Inset past the rounded corners so it stays
             // flush with the bottom edge.
@@ -644,7 +656,9 @@ struct DictationIslandView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(IslandColor.text)
                     .opacity(state.hovering ? 1 : 0)
-            case .recording:    recordingContent
+            // Recording controls live in a centred overlay (see `pill`) so they
+            // collapse into the pill's centre on finish, not down-right.
+            case .recording:    EmptyView()
             // Transcribing content lives in a persistent overlay (see `pill`) so
             // it can scale straight into the centre on exit instead of being
             // reflowed by the collapsing frame.
