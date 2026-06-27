@@ -154,7 +154,9 @@ final class AutoFlip {
         // User-managed and built-in forced rules are deterministic and do
         // not depend on dictionary coverage, so they can run even while the
         // heavy background dictionary load is still warming up.
-        if let target = AlwaysFlipRules.shared.target(for: lower, currentLayout: currentLayout) {
+        // Pass the original-case word: always-flip rules are case-sensitive, so a
+        // rule for "срфеПЗЕ" (ChatGPT) matches the capitalised token, not "срфепзе".
+        if let target = AlwaysFlipRules.shared.target(for: word, currentLayout: currentLayout) {
             return target
         }
         // Hand-picked short phrases where dictionary scoring is too

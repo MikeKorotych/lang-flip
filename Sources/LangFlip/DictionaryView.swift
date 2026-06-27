@@ -235,9 +235,11 @@ private struct LearningPane: View {
                 HStack(spacing: 8) {
                     FlowTextField(placeholder: "Word to always flip", text: $newAlwaysFlipWord)
                     Picker("Target", selection: $newAlwaysFlipTarget) {
-                        // Always-flip turns wrong-layout English typing into a
-                        // non-English language; `.en` would be a no-op target.
-                        ForEach(Layout.nonEnglish, id: \.self) { layout in
+                        // Any layout is a valid flip target — English included
+                        // (e.g. wrong-layout Cyrillic typing meant for English).
+                        // A rule whose target matches the current layout is simply
+                        // skipped at match time, so it's never a harmful no-op.
+                        ForEach(Layout.allCases, id: \.self) { layout in
                             Text(layout.displayName).tag(layout.rawValue)
                         }
                     }

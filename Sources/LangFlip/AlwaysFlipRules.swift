@@ -32,18 +32,18 @@ final class AlwaysFlipRules {
     }
 
     func target(for word: String, currentLayout: Layout) -> Layout? {
-        let lower = Self.normalized(word)
-        guard !lower.isEmpty else { return nil }
+        let trimmed = Self.normalized(word)
+        guard !trimmed.isEmpty else { return nil }
         lock.lock()
-        let match = storedRules.first { $0.word == lower && $0.target != currentLayout }
+        let match = storedRules.first { $0.word == trimmed && $0.target != currentLayout }
         lock.unlock()
         return match?.target
     }
 
     func add(word: String, target: Layout) {
-        let lower = Self.normalized(word)
-        guard !lower.isEmpty else { return }
-        let rule = Rule(word: lower, target: target)
+        let trimmed = Self.normalized(word)
+        guard !trimmed.isEmpty else { return }
+        let rule = Rule(word: trimmed, target: target)
         lock.lock()
         if !storedRules.contains(rule) {
             storedRules.append(rule)
@@ -75,8 +75,10 @@ final class AlwaysFlipRules {
         defaults.set(storedRules.map(\.storageValue), forKey: Self.rulesKey)
     }
 
+    /// Trim only — case is preserved so rules are case-sensitive (a rule for
+    /// "Привет" flips "Привет" but not "привет", and the entered casing sticks).
     private static func normalized(_ word: String) -> String {
-        word.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        word.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func decode(_ raw: String) -> Rule? {
