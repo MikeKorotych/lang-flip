@@ -26,6 +26,27 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.7.3</title>
+      <pubDate>Sat, 27 Jun 2026 11:29:49 +0000</pubDate>
+      <sparkle:version>0.7.3</sparkle:version>
+      <sparkle:shortVersionString>0.7.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>One-click updates from the title bar</h2>
+        <ul>
+          <li>Sayful checks for updates in the background after launch — when a newer version is available, a green update button appears in the title bar next to the bell; click it to install and relaunch.</li>
+          <li>The failed-dictation "Retry" label is now white for clear reading on both themes.</li>
+          <li>Removed a stray focus ring on the notifications "Clear" button.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.7.3/Sayful-0.7.3.dmg"
+        length="6661884"
+        type="application/octet-stream"
+        sparkle:edSignature="pMv5BQfPUuumUVxXLLCZmKYY7JfbZI1b4wAsKMd9i5mR2GeumjQYD7E35tlWlflIZSE20CSNPABFNU3bUp68DQ==" />
+    </item>
+
+    <item>
       <title>v0.7.2</title>
       <pubDate>Sat, 27 Jun 2026 11:12:31 +0000</pubDate>
       <sparkle:version>0.7.2</sparkle:version>

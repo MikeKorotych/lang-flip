@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.3 - One-click updates from the title bar
+
+### Added
+
+- Sayful now checks for updates in the background shortly after launch. When a
+  newer version is available, a green update button appears in the title bar next
+  to the bell — click it to install and relaunch.
+
+### Fixed
+
+- The failed-dictation "Retry" label is now white, so it reads clearly on both
+  light and dark themes.
+- Removed a stray focus ring that stuck to the notifications "Clear" button.
+
 ## 0.7.2 - Always-flip: English and case-sensitive
 
 ### Added
