@@ -57,7 +57,7 @@ struct FlowAuroraBackground: View {
 /// per-frame work when the window is closed, hidden (Cmd-H), minimised or fully
 /// occluded — otherwise a `TimelineView(.animation)` keeps firing (and burning
 /// CPU/GPU) indefinitely even when nothing is visible.
-private struct WindowVisibilityObserver: NSViewRepresentable {
+struct WindowVisibilityObserver: NSViewRepresentable {
     var onChange: (Bool) -> Void
 
     func makeNSView(context: Context) -> NSView { Tracker(onChange: onChange) }

@@ -20,10 +20,6 @@ final class VoiceDictationController {
     private var sttReservationTask: Task<Void, Never>?
     private var failedTranscription: FailedTranscription?
 
-    /// Defer the pasteboard/paste side effects briefly so the island's
-    /// transcribing→done shrink can begin before the synchronous insert burst.
-    private static let postTranscriptionSideEffectDelay: TimeInterval = 0.10
-
     private struct FailedTranscription {
         let audioURL: URL
         let duration: Double?
@@ -54,8 +50,6 @@ final class VoiceDictationController {
         // connection now so the upload-after-stop reuses a hot TLS connection.
         Self.prewarmSTTConnection()
         prepareSTTReservation()
-        // Frontmost app now is the dictation target (global hotkeys don't focus
-        // LangFlip). Captured here for the usage-by-app breakdown in Insights.
         recordingApp = NSWorkspace.shared.frontmostApplication?.localizedName
         notifyStateChanged()
         Sound.playFlip()
@@ -86,11 +80,9 @@ final class VoiceDictationController {
 
         notifyStateChanged()
 
-        // Tear the recorder down off the main thread: stopping AVAudioEngine
-        // deactivates the audio HAL (tens of ms) and would otherwise stall the
-        // recording→transcribing spring. `stop()`/`teardown()` finalize the WAV
-        // under their own render lock, so this is safe off-main; we hop back to
-        // main for the transcription kickoff, which touches main-only state.
+        // Tear the recorder down off the main thread so the AVAudioEngine HAL
+        // deactivation (tens of ms) doesn't contend with the recording→transcribing
+        // transition on the main thread.
         DispatchQueue.global(qos: .userInitiated).async {
             VoiceRecorder.shared.stop()
             let audioURL = VoiceRecorder.shared.lastRecordingURL
@@ -191,18 +183,12 @@ final class VoiceDictationController {
                 await MainActor.run {
                     self.failedTranscription = nil
                     self.isTranscribing = false
-                    // Read the focused-field context (a cross-process AX call) BEFORE
-                    // flipping state, so the slow read doesn't land mid-shrink. Focus
-                    // stays in the target app — the island is a non-activating panel —
-                    // so it's still the right field. Only needed when we'll insert.
-                    let beforeContext = insertOnSuccess ? FocusedTextReader.current() : nil
                     self.notifyStateChanged()
                     self.schedulePostTranscriptionSideEffects(text: text,
                                                               duration: duration,
                                                               app: app,
                                                               replacingHistoryEntryID: replacingHistoryEntryID,
-                                                              insertOnSuccess: insertOnSuccess,
-                                                              beforeContext: beforeContext)
+                                                              insertOnSuccess: insertOnSuccess)
                 }
             } catch {
                 await MainActor.run {
@@ -232,12 +218,14 @@ final class VoiceDictationController {
                                                       duration: Double?,
                                                       app: String?,
                                                       replacingHistoryEntryID: UUID?,
-                                                      insertOnSuccess: Bool,
-                                                      beforeContext: FocusedTextReader.Context? = nil) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.postTranscriptionSideEffectDelay) { [weak self] in
+                                                      insertOnSuccess: Bool) {
+        // Insert as soon as the transcript is ready — on the next runloop tick so
+        // the transcribing→done flip commits its first frame before the (tiny)
+        // synchronous paste, without a perceptible delay.
+        DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if insertOnSuccess {
-                self.insert(text, duration: duration, app: app, replacingHistoryEntryID: replacingHistoryEntryID, precapturedContext: beforeContext)
+                self.insert(text, duration: duration, app: app, replacingHistoryEntryID: replacingHistoryEntryID)
             } else if let replacingHistoryEntryID {
                 DictationHistory.shared.replaceFailed(id: replacingHistoryEntryID, with: text, duration: duration, app: app)
                 Sound.playFlip()
@@ -396,7 +384,7 @@ final class VoiceDictationController {
         return formatted
     }
 
-    private func insert(_ text: String, duration: Double? = nil, app: String? = nil, replacingHistoryEntryID: UUID? = nil, precapturedContext: FocusedTextReader.Context? = nil) {
+    private func insert(_ text: String, duration: Double? = nil, app: String? = nil, replacingHistoryEntryID: UUID? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             Notifications.show(title: "Dictation", body: "No speech was recognized.")
@@ -405,9 +393,7 @@ final class VoiceDictationController {
 
         // Expand any snippet triggers automatically before inserting.
         let cleaned = SnippetStore.shared.expand(trimmed)
-        // Prefer the context captured before the island shrink (see the completion
-        // path); fall back to a fresh read for callers that don't pre-capture.
-        let beforeContext = precapturedContext ?? FocusedTextReader.current()
+        let beforeContext = FocusedTextReader.current()
         let appBundleID = AppContext.frontmostBundleID()
 
         let pb = NSPasteboard.general

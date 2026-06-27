@@ -172,6 +172,10 @@ private struct DictationHeroCard: View {
             // Fixed height keeps the banner stable inside the page ScrollView.
             .frame(height: 200)
         }
+        // Drive the dictation-state polling only while this card's window is
+        // actually on screen — otherwise the cached Home tree reacts to every
+        // dictation state change and janks the island's transition animation.
+        .background(WindowVisibilityObserver { state.setActive($0) })
     }
 }
 
@@ -234,14 +238,28 @@ private final class DictationState: ObservableObject {
 
     private var timer: Timer?
 
-    init() {
-        timer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            let rec = VoiceDictationController.shared.isRecording
-            let trans = VoiceDictationController.shared.isTranscribing
-            if rec != self.isRecording { self.isRecording = rec }
-            if trans != self.isTranscribing { self.isTranscribing = trans }
+    /// Poll only while the hero card's window is on screen. When it isn't (window
+    /// closed/occluded but its SwiftUI tree still cached), this timer + the orb's
+    /// re-render/pulse would otherwise fire on every dictation state change and
+    /// stall the dictation island's transition animation on the main thread.
+    func setActive(_ active: Bool) {
+        if active {
+            guard timer == nil else { return }
+            sync()
+            timer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
+                self?.sync()
+            }
+        } else {
+            timer?.invalidate()
+            timer = nil
         }
+    }
+
+    private func sync() {
+        let rec = VoiceDictationController.shared.isRecording
+        let trans = VoiceDictationController.shared.isTranscribing
+        if rec != isRecording { isRecording = rec }
+        if trans != isTranscribing { isTranscribing = trans }
     }
 
     deinit { timer?.invalidate() }
