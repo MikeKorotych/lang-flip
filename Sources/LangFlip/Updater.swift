@@ -16,6 +16,10 @@ final class Updater: NSObject, ObservableObject {
 
     private(set) var controller: SPUStandardUpdaterController!
 
+    /// Display version of a found-but-not-yet-installed update, or nil. Drives the
+    /// title-bar update button so an available update stays one click away.
+    @Published private(set) var availableVersion: String?
+
     private override init() {
         super.init()
         // startingUpdater: true → kicks off the periodic check Sparkle is
@@ -33,6 +37,13 @@ final class Updater: NSObject, ObservableObject {
     /// Sparkle EdDSA), relaunch into the new version.
     func checkForUpdates() {
         controller.checkForUpdates(nil)
+    }
+
+    /// Silent appcast probe with no UI — used on launch to light up the title-bar
+    /// update button. Calls back into `didFindValidUpdate` / `updaterDidNotFindUpdate`.
+    func checkInBackground() {
+        guard controller.updater.canCheckForUpdates else { return }
+        controller.updater.checkForUpdateInformation()
     }
 
     var canCheckForUpdates: Bool {
@@ -59,12 +70,19 @@ extension Updater: SPUUpdaterDelegate {
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         let version = item.displayVersionString
         Task { @MainActor in
+            self.availableVersion = version
             AppNotifications.shared.post(
                 id: "update",
                 kind: .update,
                 title: "Update available",
-                body: "Sayful \(version) is ready — open Check for Updates to install it."
+                body: "Sayful \(version) is ready — click the update button in the header to install it."
             )
         }
+    }
+
+    /// Clear the title-bar indicator when a probe finds nothing new (e.g. after the
+    /// user updated by other means).
+    func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+        Task { @MainActor in self.availableVersion = nil }
     }
 }

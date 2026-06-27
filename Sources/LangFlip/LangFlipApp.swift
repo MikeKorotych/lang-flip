@@ -122,6 +122,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Always-on dictation island (Wispr-style) at the bottom of the screen.
         DictationIslandController.shared.startIfEnabled()
 
+        // Silent background check for updates shortly after launch, so the title-bar
+        // update button lights up if a new version is available.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            Updater.shared.checkInBackground()
+        }
+
         // If already signed in to the backend, load the account (role/quota) now
         // so the profile menu is correct from launch — not only after opening AI settings.
         if SupabaseBackendAuth.shared.isSignedIn {

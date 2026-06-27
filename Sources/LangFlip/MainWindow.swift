@@ -310,13 +310,45 @@ private struct TitlebarTrailingControls: View {
     @ObservedObject private var theme = ThemeManager.shared
     var body: some View {
         HStack(spacing: 2) {
+            UpdateButton()
             NotificationsButton()
             TopIconButton(icon: theme.isDark ? "sun.max" : "moon") {
                 theme.isDark.toggle()
             }
             ProfileButton()
         }
+        // Leading inset so the update button's filled background isn't clipped by
+        // the title-bar accessory's left edge.
+        .padding(.leading, 8)
         .padding(.trailing, 8)
+    }
+}
+
+/// Title-bar update button — appears only when Sparkle has found a newer version,
+/// in the accent colour so it stands out next to the muted icons. Clicking it
+/// opens Sparkle's install flow (release notes → download → relaunch).
+private struct UpdateButton: View {
+    @ObservedObject private var updater = Updater.shared
+    @State private var hovering = false
+
+    var body: some View {
+        if let version = updater.availableVersion {
+            Button { updater.checkForUpdates() } label: {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 24, height: 22)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(FlowTheme.accent.opacity(hovering ? 1 : 0.88))
+                    )
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .onHover { hovering = $0 }
+            .help("Update to \(version)")
+            .transition(.scale(scale: 0.6).combined(with: .opacity))
+        }
     }
 }
 
@@ -355,6 +387,7 @@ private struct NotificationsButton: View {
                 if !center.items.isEmpty {
                     Button("Clear") { center.clear() }
                         .buttonStyle(.plain)
+                        .focusable(false)
                         .font(.system(size: 12))
                         .foregroundColor(FlowTheme.inkSecondary)
                 }

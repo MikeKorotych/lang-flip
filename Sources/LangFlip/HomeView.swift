@@ -623,7 +623,7 @@ private struct DictationRow: View {
                     Text(entry.isRetrying ? "Retrying" : "Retry")
                 }
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.black)
+                .foregroundColor(.white)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(Capsule().fill(FlowTheme.accent))
