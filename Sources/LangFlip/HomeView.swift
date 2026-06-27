@@ -128,141 +128,36 @@ private struct StatsCard: View {
 // MARK: - Dictation hero
 
 private struct DictationHeroCard: View {
-    @StateObject private var state = DictationState()
-
-    private var statusText: String {
-        if state.isTranscribing { return "Transcribing…" }
-        if state.isRecording { return "Listening… click to stop" }
-        return "Click the mic, or hold \(compactShortcut(Settings.shared.dictationHandsFreeShortcut.displayName))"
-    }
-
     var body: some View {
         FlowHeroSurface {
-            HStack(spacing: 18) {
-                VStack(alignment: .leading, spacing: 10) {
-                    (
-                        Text("Speak - ")
-                            .font(.system(size: 30, weight: .semibold, design: .serif))
-                        + Text("It types")
-                            .font(.system(size: 30, weight: .semibold, design: .serif))
-                            .italic()
-                    )
-                    .foregroundColor(.white)
+            VStack(alignment: .leading, spacing: 10) {
+                (
+                    Text("Speak - ")
+                        .font(.system(size: 30, weight: .semibold, design: .serif))
+                    + Text("It types")
+                        .font(.system(size: 30, weight: .semibold, design: .serif))
+                        .italic()
+                )
+                .foregroundColor(.white)
+                .fixedSize(horizontal: false, vertical: true)
+
+                Text("Dictate in any app and Sayful writes it wherever your cursor is.")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.8))
                     .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Dictate in any app and Sayful writes it wherever your cursor is.")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.8))
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text(statusText)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white.opacity(0.95))
-                        .padding(.top, 6)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                DictationOrb(isRecording: state.isRecording,
-                             isTranscribing: state.isTranscribing) {
-                    VoiceDictationController.shared.toggleRecording()
-                }
+                Text("Press \(compactShortcut(Settings.shared.dictationHandsFreeShortcut.displayName)) anywhere to dictate, or use the island at the bottom of the screen.")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.95))
+                    .padding(.top, 6)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(24)
             // Fixed height keeps the banner stable inside the page ScrollView.
             .frame(height: 200)
         }
-        // Drive the dictation-state polling only while this card's window is
-        // actually on screen — otherwise the cached Home tree reacts to every
-        // dictation state change and janks the island's transition animation.
-        .background(WindowVisibilityObserver { state.setActive($0) })
     }
-}
-
-/// Circular mic button reflecting dictation state with a pulsing ring while
-/// recording and a spinner while transcribing.
-private struct DictationOrb: View {
-    let isRecording: Bool
-    let isTranscribing: Bool
-    let action: () -> Void
-
-    @State private var pulse = false
-
-    var body: some View {
-        Button(action: action) {
-            ZStack {
-                if isRecording {
-                    Circle()
-                        .stroke(Color.white.opacity(0.5), lineWidth: 2)
-                        .scaleEffect(pulse ? 1.35 : 1.0)
-                        .opacity(pulse ? 0 : 0.7)
-                }
-                Circle()
-                    .fill(isRecording ? Color(red: 0.85, green: 0.32, blue: 0.30) : FlowTheme.accent)
-                    .frame(width: 86, height: 86)
-                    .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
-
-                if isTranscribing {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .controlSize(.large)
-                        .tint(.white)
-                } else {
-                    Image(systemName: isRecording ? "stop.fill" : "mic.fill")
-                        .font(.system(size: 30, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-            }
-            .frame(width: 96, height: 96)
-        }
-        .buttonStyle(.plain)
-        .disabled(isTranscribing)
-        .onChange(of: isRecording) { recording in
-            if recording {
-                withAnimation(.easeOut(duration: 1.0).repeatForever(autoreverses: false)) {
-                    pulse = true
-                }
-            } else {
-                pulse = false
-            }
-        }
-    }
-}
-
-/// Polls `VoiceDictationController` so SwiftUI reflects recording/transcribing
-/// state. The controller isn't observable; a lightweight timer keeps the orb
-/// honest without invasive changes to the audio pipeline.
-private final class DictationState: ObservableObject {
-    @Published var isRecording = false
-    @Published var isTranscribing = false
-
-    private var timer: Timer?
-
-    /// Poll only while the hero card's window is on screen. When it isn't (window
-    /// closed/occluded but its SwiftUI tree still cached), this timer + the orb's
-    /// re-render/pulse would otherwise fire on every dictation state change and
-    /// stall the dictation island's transition animation on the main thread.
-    func setActive(_ active: Bool) {
-        if active {
-            guard timer == nil else { return }
-            sync()
-            timer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
-                self?.sync()
-            }
-        } else {
-            timer?.invalidate()
-            timer = nil
-        }
-    }
-
-    private func sync() {
-        let rec = VoiceDictationController.shared.isRecording
-        let trans = VoiceDictationController.shared.isTranscribing
-        if rec != isRecording { isRecording = rec }
-        if trans != isTranscribing { isTranscribing = trans }
-    }
-
-    deinit { timer?.invalidate() }
 }
 
 // MARK: - Home history tabs
