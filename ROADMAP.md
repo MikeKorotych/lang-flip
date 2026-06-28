@@ -4,6 +4,25 @@ Living document. Updated 2026-05-06 after a deep dive into Caramba Switcher's
 internals — many ideas below are inspired by what makes Caramba feel "smart"
 without configuration screens.
 
+## Near-term backlog — do FIRST after the corporate rollout
+
+Deferred from the 2026-06-29 release-prep pass (release shipped with the lazy
+history list, delete controls, and the Share-logs button). These two are the
+top priority for the next iteration:
+
+1. **Remote crash/error reporting.** Today the app has *zero* remote
+   observability — `AppLog` writes to `~/Library/Logs/Sayful/Sayful.log` and
+   errors only flash in a banner. With ~300 employees we're blind to failures.
+   Decide Sentry vs. a `/v1/logs` endpoint on the existing Supabase/Railway
+   backend. MUST redact dictated/transformed text (privacy) — same redaction the
+   Share-logs button uses. See `AppLog.swift`, `AI/Backend/*`.
+2. **Verify & analyse learned "fixes."** `PersonalDictionaryStore` accumulates
+   automatic corrections from `DictationCorrectionLearner` using heuristics only
+   — nothing checks they're sensible. Add a periodic job that runs the automatic
+   entries through the backend LLM to prune nonsense and suggest "make this a
+   rule." A deeper-analysis pass (insights/ideas to improve the feature) is a
+   follow-up to that.
+
 ## Done
 
 - [x] Core EN ↔ UK / RU char-based conversion via physical-key map
