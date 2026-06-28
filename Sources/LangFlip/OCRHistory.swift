@@ -46,6 +46,21 @@ final class OCRHistory: ObservableObject {
         }
     }
 
+    func delete(entriesOn day: Date) {
+        DispatchQueue.main.async {
+            let cal = Calendar.current
+            self.entries.removeAll { cal.isDate($0.date, inSameDayAs: day) }
+            self.save()
+        }
+    }
+
+    func deleteAll() {
+        DispatchQueue.main.async {
+            self.entries.removeAll()
+            self.save()
+        }
+    }
+
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: key),
               let decoded = try? JSONDecoder().decode([OCRHistoryEntry].self, from: data)

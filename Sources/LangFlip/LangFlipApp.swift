@@ -52,6 +52,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // settings + data before anything reads UserDefaults or writes a log.
         IdentityMigration.runIfNeeded()
 
+        // Reclaim old dictation recordings (transcribed audio is deleted on
+        // success; this sweeps anything older than 30 days — e.g. never-retried
+        // failures). Off the main thread so it can't slow launch.
+        DispatchQueue.global(qos: .utility).async {
+            VoiceRecorder.purgeOldRecordings()
+        }
+
         // Status-bar accessory: no Dock icon, no main menu.
         // OnboardingWindowController and MainWindowController flip this to
         // .regular while their window is on screen, then back to .accessory

@@ -116,6 +116,48 @@ final class DictationHistory: ObservableObject {
         return entryID
     }
 
+    /// Removes one entry and, if it kept a recording on disk (failed/recovered
+    /// dictations do), deletes that `.wav` too so the file doesn't linger.
+    func delete(_ entry: DictationEntry) {
+        DispatchQueue.main.async {
+            self.entries.removeAll { $0.id == entry.id }
+            self.save()
+            if let path = entry.audioPath {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+        }
+    }
+
+    /// Removes every entry from a given day and deletes the recordings they kept.
+    func delete(entriesOn day: Date) {
+        DispatchQueue.main.async {
+            let cal = Calendar.current
+            let removed = self.entries.filter { cal.isDate($0.date, inSameDayAs: day) }
+            guard !removed.isEmpty else { return }
+            self.entries.removeAll { cal.isDate($0.date, inSameDayAs: day) }
+            self.save()
+            let paths = removed.compactMap(\.audioPath)
+            if !paths.isEmpty {
+                DispatchQueue.global(qos: .utility).async {
+                    paths.forEach { try? FileManager.default.removeItem(atPath: $0) }
+                }
+            }
+        }
+    }
+
+    /// Clears the whole list and reclaims every recording on disk — including
+    /// orphans left by successful dictations from before audio cleanup existed.
+    func deleteAll() {
+        DispatchQueue.main.async {
+            self.entries.removeAll()
+            self.save()
+        }
+        // Reclaiming the recordings is disk I/O — keep it off the main thread.
+        DispatchQueue.global(qos: .utility).async {
+            VoiceRecorder.purgeAllRecordings()
+        }
+    }
+
     func markRetrying(id: UUID) {
         DispatchQueue.main.async {
             guard let idx = self.entries.firstIndex(where: { $0.id == id }) else { return }

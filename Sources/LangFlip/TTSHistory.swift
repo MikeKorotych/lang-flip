@@ -63,6 +63,31 @@ final class TTSHistory: ObservableObject {
         }
     }
 
+    func delete(entriesOn day: Date) {
+        DispatchQueue.main.async {
+            let cal = Calendar.current
+            let removed = self.entries.filter { cal.isDate($0.date, inSameDayAs: day) }
+            guard !removed.isEmpty else { return }
+            self.entries.removeAll { cal.isDate($0.date, inSameDayAs: day) }
+            self.save()
+            let urls = removed.map(\.audioURL)
+            DispatchQueue.global(qos: .utility).async {
+                urls.forEach { try? FileManager.default.removeItem(at: $0) }
+            }
+        }
+    }
+
+    func deleteAll() {
+        DispatchQueue.main.async {
+            let urls = self.entries.map(\.audioURL)
+            self.entries.removeAll()
+            self.save()
+            DispatchQueue.global(qos: .utility).async {
+                urls.forEach { try? FileManager.default.removeItem(at: $0) }
+            }
+        }
+    }
+
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: key),
               let decoded = try? JSONDecoder().decode([TTSHistoryEntry].self, from: data)

@@ -316,14 +316,49 @@ final class VoiceRecorder: NSObject {
         return unmanagedName?.takeUnretainedValue() as String?
     }
 
-    private static func makeRecordingURL() throws -> URL {
-        let base = try FileManager.default.url(
+    /// Where dictation recordings are stored. Recordings are only needed until a
+    /// transcript is produced (then deleted on success) or for retrying a failed
+    /// one — see `purgeOldRecordings` / `purgeAllRecordings` for cleanup.
+    static var recordingsDirectory: URL {
+        let base = (try? FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
             create: true
-        )
-        let dir = base.appendingPathComponent("Sayful/Recordings", isDirectory: true)
+        )) ?? FileManager.default.temporaryDirectory
+        return base.appendingPathComponent("Sayful/Recordings", isDirectory: true)
+    }
+
+    /// Deletes recordings older than `maxAge` (default 30 days). Called at launch
+    /// so audio from saved transcripts — and stale failed-dictation files the
+    /// user never retried — can't accumulate indefinitely.
+    static func purgeOldRecordings(olderThan maxAge: TimeInterval = 30 * 24 * 60 * 60) {
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey]
+        ) else { return }
+        let cutoff = Date().addingTimeInterval(-maxAge)
+        for url in files {
+            let mod = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let mod, mod < cutoff {
+                try? fm.removeItem(at: url)
+            }
+        }
+    }
+
+    /// Removes every recording on disk. Backs "Delete all" in the history.
+    static func purgeAllRecordings() {
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        ) else { return }
+        for url in files { try? fm.removeItem(at: url) }
+    }
+
+    private static func makeRecordingURL() throws -> URL {
+        let dir = recordingsDirectory
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
         return dir.appendingPathComponent("dictation-\(stamp).wav")

@@ -184,6 +184,9 @@ final class VoiceDictationController {
                     self.failedTranscription = nil
                     self.isTranscribing = false
                     self.notifyStateChanged()
+                    // Transcript is saved — the recording is no longer needed.
+                    // (Failed dictations keep theirs for Retry; see the catch.)
+                    try? FileManager.default.removeItem(at: audioURL)
                     self.schedulePostTranscriptionSideEffects(text: text,
                                                               duration: duration,
                                                               app: app,
