@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.8.0 - Tidy history + shareable logs
+
+### Added
+
+- Manage your history: each day in the Dictation, Screen Text, and Speech tabs
+  now has a trash button that clears just that day or everything, and you can
+  delete a single entry on hover. Deleting also removes the saved recordings.
+- Share diagnostic logs from Settings → About — "Reveal Logs in Finder" or
+  "Copy Logs" — to send the team when something misbehaves. The log records what
+  happened, never what you typed or dictated.
+
+### Changed
+
+- The Home dictation list now opens to your 50 most recent entries with a "Show
+  older" control, so the tab stays quick and scannable.
+
+### Fixed
+
+- The Home tab could pin the CPU and freeze — a spinning loader, unresponsive
+  tabs — once the dictation history grew large. Scrolling and hover are now
+  smooth no matter how much history you have.
+
+### Improved
+
+- Dictation recordings are reclaimed automatically: each is deleted once its
+  transcript is saved, and anything older than 30 days is swept at launch, so
+  audio can't pile up on disk.
+
 ## 0.7.3 - One-click updates from the title bar
 
 ### Added
