@@ -23,6 +23,22 @@ top priority for the next iteration:
    rule." A deeper-analysis pass (insights/ideas to improve the feature) is a
    follow-up to that.
 
+3. **Smarter flip learning + flip analytics.** Two related ideas (added
+   2026-06-29):
+   - *Double-Shift → auto-flip (local, do this one).* Today nothing tracks what
+     the user flips; `BackspaceLearner` only learns what NOT to auto-flip. Add
+     the inverse: count words/phrases the user repeatedly fixes with Double
+     Shift and auto-promote the frequent ones to auto-flip (into
+     `AlwaysFlipRules` / `PersonalDictionaryStore`), so they stop pressing the
+     key. Stays on-device — privacy-safe.
+   - *Flip-feature analytics in Insights (local).* Insights covers only dictation
+     today; extend it with auto-flip / Double-Shift usage so we can see how the
+     LangFlip feature is actually used and where to improve it. Keep it local to
+     honor the existing "stats never leave your device" banner.
+   - *Fleet-wide flip/phrase analytics* (across ~300 employees) rides on item 1's
+     telemetry pipeline AND is a deliberate departure from the local-only privacy
+     promise — needs opt-in + aggregation/anonymization. Lower priority.
+
 ## Done
 
 - [x] Core EN ↔ UK / RU char-based conversion via physical-key map
