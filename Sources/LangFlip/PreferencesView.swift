@@ -2202,6 +2202,13 @@ struct AboutTab: View {
                     .frame(maxWidth: 460)
                     .padding(.vertical, 22)
 
+                diagnostics
+
+                Divider()
+                    .overlay(FlowTheme.cardStroke)
+                    .frame(maxWidth: 460)
+                    .padding(.vertical, 22)
+
                 appExclusions
             }
             .padding(.top, 40)
@@ -2248,6 +2255,40 @@ struct AboutTab: View {
             .foregroundColor(FlowTheme.inkSecondary.opacity(0.85))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 4)
+        }
+        .frame(maxWidth: 460)
+        .multilineTextAlignment(.center)
+    }
+
+    /// Bug-report helper: surfaces the diagnostic log so a user can hand it to
+    /// the team. The log carries no typed text — only event shapes, models, and
+    /// errors — so it's safe to share.
+    @State private var copiedLogs = false
+
+    private var diagnostics: some View {
+        VStack(spacing: 10) {
+            Text("DIAGNOSTICS")
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.8)
+                .foregroundColor(FlowTheme.inkSecondary)
+
+            Text("Hit a bug or odd behavior? Share the diagnostic log with the team. It records what happened — not what you typed or dictated.")
+                .font(.system(size: 11))
+                .foregroundColor(FlowTheme.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                FlowSmallButton(title: "Reveal Logs in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([AppLog.fileURL])
+                }
+                FlowSmallButton(title: copiedLogs ? "Copied" : "Copy Logs") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(AppLog.recentLogText(), forType: .string)
+                    copiedLogs = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copiedLogs = false }
+                }
+            }
+            .padding(.top, 2)
         }
         .frame(maxWidth: 460)
         .multilineTextAlignment(.center)

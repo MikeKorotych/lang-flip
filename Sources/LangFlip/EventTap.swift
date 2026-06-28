@@ -1163,7 +1163,9 @@ final class EventTap {
         source: Layout,
         target: Layout
     ) {
-        AppLog.write("auto-flip apply original='\(original)' converted='\(converted)' \(source)→\(target)")
+        // Log shapes, not the literal words — the log is user-shareable for bug
+        // reports and must not carry typed content.
+        AppLog.write("auto-flip apply originalLen=\(original.count) convertedLen=\(converted.count) \(source)→\(target)")
         let eraseCount = original.count + boundary.count
         postBackspaces(eraseCount)
         postUnicode(converted + boundary)
@@ -1329,7 +1331,7 @@ final class EventTap {
                 ? nsToken.substring(with: NSRange(location: replacementEnd, length: suffixLength))
                 : ""
 
-            AppLog.write("double-shift keyboard fallback original='\(original)' replacement='\(replacement.text)'")
+            AppLog.write("double-shift keyboard fallback originalLen=\(original.count) replacementLen=\(replacement.text.count)")
             pb.clearContents()
             pb.setString(prefix + replacement.text + suffix, forType: .string)
             self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
@@ -1690,7 +1692,7 @@ final class EventTap {
         let rangeNS = NSRange(location: replacement.range.location, length: replacement.range.length)
         let original = ns.substring(with: rangeNS)
         let bundleID = AppContext.frontmostBundleID() ?? "?"
-        AppLog.write("double-shift focus path: bundle=\(bundleID) cursor=\(context.selectedRange.location) range=(\(rangeNS.location),\(rangeNS.length)) original='\(original)' replacement='\(replacement.text)'")
+        AppLog.write("double-shift focus path: bundle=\(bundleID) cursor=\(context.selectedRange.location) range=(\(rangeNS.location),\(rangeNS.length)) originalLen=\(original.count) replacementLen=\(replacement.text.count)")
 
         let snapshot = PasteboardSnapshot.capture()
         if let source = detectLayout(original) {
