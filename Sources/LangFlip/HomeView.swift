@@ -196,10 +196,10 @@ private struct HomeHistoryPanel: View {
 private struct DictationHistoryList: View {
     @ObservedObject private var history = DictationHistory.shared
 
-    /// Lazy pagination: render only the newest `visibleCount` entries and reveal
-    /// the next page when the footer scrolls into view. Keeps the first paint
-    /// cheap even when the full history is large.
-    private static let pageSize = 25
+    /// Show the most recent page first and reveal older entries on demand, so the
+    /// tab opens to a bounded, scannable list rather than the whole history at
+    /// once. Rendering is already lazy — this is purely a UX cap.
+    private static let pageSize = 50
     @State private var visibleCount = DictationHistoryList.pageSize
 
     var body: some View {
@@ -215,51 +215,90 @@ private struct DictationHistoryList: View {
                 }
             }
         } else {
-            VStack(alignment: .leading, spacing: 18) {
-                ForEach(groups, id: \.label) { group in
-                    VStack(alignment: .leading, spacing: 12) {
-                        FlowSectionLabel(group.label)
-                        FlowCard(padding: 0) {
-                            VStack(spacing: 0) {
-                                ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
-                                    if index > 0 { Divider().overlay(FlowTheme.cardStroke) }
-                                    DictationRow(entry: entry)
-                                }
-                            }
-                        }
+            // One flat LazyVStack so only on-screen rows are realized. The
+            // history can hold hundreds of entries in a single day; a non-lazy
+            // stack laid every row out at once, which scaled scroll jank and
+            // hover lag with the entry count. Day grouping is preserved by
+            // drawing each row's card segment with rounded top/bottom ends.
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(items) { item in
+                    switch item {
+                    case .header(let label, let day):
+                        HistoryDayHeader(
+                            label: label,
+                            noun: "dictations",
+                            onDeleteDay: { history.delete(entriesOn: day) },
+                            onDeleteAll: { history.deleteAll() }
+                        )
+                        .padding(.top, 18)
+                        .padding(.bottom, 12)
+                    case .row(let entry, let isFirst, let isLast):
+                        rowCard(entry, isFirst: isFirst, isLast: isLast)
                     }
                 }
+
                 if visibleCount < history.entries.count {
-                    loadMoreFooter
+                    showMoreButton
                 }
             }
         }
     }
 
-    /// Sentinel at the bottom of the list. Re-created on each page increment
-    /// (via `.id`) so it fires `onAppear` again if it's still on screen —
-    /// chaining loads until the viewport is filled or everything is shown.
-    private var loadMoreFooter: some View {
-        HStack {
-            Spacer()
-            ProgressView().controlSize(.small)
-            Spacer()
+    private var showMoreButton: some View {
+        Button { visibleCount += Self.pageSize } label: {
+            HStack {
+                Spacer()
+                Text("Show older")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(FlowTheme.accent)
+                Spacer()
+            }
+            .frame(height: 44)
+            .contentShape(Rectangle())
         }
-        .frame(height: 36)
-        .id(visibleCount)
-        .onAppear {
-            visibleCount = min(visibleCount + Self.pageSize, history.entries.count)
-        }
+        .buttonStyle(.plain)
+        .focusable(false)
     }
 
-    private var groups: [(label: String, entries: [DictationEntry])] {
+    /// One row drawn as its day group's card segment: rounded only at the group's
+    /// top/bottom, with the 1px stroke doubling as the inter-row divider where
+    /// adjacent segments meet.
+    private func rowCard(_ entry: DictationEntry, isFirst: Bool, isLast: Bool) -> some View {
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: isFirst ? FlowTheme.cornerRadius : 0,
+            bottomLeadingRadius: isLast ? FlowTheme.cornerRadius : 0,
+            bottomTrailingRadius: isLast ? FlowTheme.cornerRadius : 0,
+            topTrailingRadius: isFirst ? FlowTheme.cornerRadius : 0,
+            style: .continuous
+        )
+        return DictationRow(entry: entry)
+            .background(shape.fill(FlowTheme.card))
+            .clipShape(shape)
+            .overlay(shape.stroke(FlowTheme.cardStroke, lineWidth: 1))
+    }
+
+    /// Headers + rows flattened into one sequence so the whole list is a single
+    /// LazyVStack. Each row carries its position in the day group for rounding.
+    private var items: [DictationListItem] {
+        var result: [DictationListItem] = []
+        for group in groups {
+            result.append(.header(label: group.label, day: group.day))
+            let last = group.entries.count - 1
+            for (i, entry) in group.entries.enumerated() {
+                result.append(.row(entry: entry, isFirst: i == 0, isLast: i == last))
+            }
+        }
+        return result
+    }
+
+    private var groups: [(label: String, day: Date, entries: [DictationEntry])] {
         let cal = Calendar.current
-        var result: [(label: String, entries: [DictationEntry])] = []
+        var result: [(label: String, day: Date, entries: [DictationEntry])] = []
         var currentDay: Date?
-        for entry in history.entries.prefix(visibleCount) { // newest first, paginated
+        for entry in history.entries.prefix(visibleCount) { // newest first, capped
             let day = cal.startOfDay(for: entry.date)
             if day != currentDay {
-                result.append((Self.dayLabel(day), []))
+                result.append((Self.dayLabel(day), day, []))
                 currentDay = day
             }
             result[result.count - 1].entries.append(entry)
@@ -277,6 +316,19 @@ private struct DictationHistoryList: View {
     }
 }
 
+/// Flattened list element for the dictation history's single LazyVStack.
+private enum DictationListItem: Identifiable {
+    case header(label: String, day: Date)
+    case row(entry: DictationEntry, isFirst: Bool, isLast: Bool)
+
+    var id: String {
+        switch self {
+        case .header(let label, _): return "h:\(label)"
+        case .row(let entry, _, _): return "r:\(entry.id.uuidString)"
+        }
+    }
+}
+
 // MARK: - OCR history
 
 private struct OCRHistoryList: View {
@@ -289,7 +341,12 @@ private struct OCRHistoryList: View {
             VStack(alignment: .leading, spacing: 18) {
                 ForEach(groups, id: \.label) { group in
                     VStack(alignment: .leading, spacing: 12) {
-                        FlowSectionLabel(group.label)
+                        HistoryDayHeader(
+                            label: group.label,
+                            noun: "captures",
+                            onDeleteDay: { history.delete(entriesOn: group.day) },
+                            onDeleteAll: { history.deleteAll() }
+                        )
                         FlowCard(padding: 0) {
                             VStack(spacing: 0) {
                                 ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
@@ -304,7 +361,7 @@ private struct OCRHistoryList: View {
         }
     }
 
-    private var groups: [(label: String, entries: [OCRHistoryEntry])] {
+    private var groups: [(label: String, day: Date, entries: [OCRHistoryEntry])] {
         groupedByDay(history.entries)
     }
 }
@@ -380,7 +437,12 @@ private struct TTSHistoryList: View {
             VStack(alignment: .leading, spacing: 18) {
                 ForEach(groups, id: \.label) { group in
                     VStack(alignment: .leading, spacing: 12) {
-                        FlowSectionLabel(group.label)
+                        HistoryDayHeader(
+                            label: group.label,
+                            noun: "recordings",
+                            onDeleteDay: { history.delete(entriesOn: group.day) },
+                            onDeleteAll: { history.deleteAll() }
+                        )
                         FlowCard(padding: 0) {
                             VStack(spacing: 0) {
                                 ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
@@ -395,7 +457,7 @@ private struct TTSHistoryList: View {
         }
     }
 
-    private var groups: [(label: String, entries: [TTSHistoryEntry])] {
+    private var groups: [(label: String, day: Date, entries: [TTSHistoryEntry])] {
         groupedByDay(history.entries)
     }
 }
@@ -479,6 +541,90 @@ private struct TTSHistoryRow: View {
     }
 }
 
+/// A day section header ("TODAY") with a quiet trash control on the trailing
+/// edge. Tapping it opens a small popover offering to clear just that day or the
+/// whole history — shared by the dictation / screen-text / speech lists so the
+/// affordance lives in the same spot on every tab.
+private struct HistoryDayHeader: View {
+    let label: String
+    let noun: String
+    let onDeleteDay: () -> Void
+    let onDeleteAll: () -> Void
+
+    @State private var showMenu = false
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            FlowSectionLabel(label)
+            Spacer()
+            Button { showMenu = true } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 11))
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .frame(width: 24, height: 20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(hovering ? FlowTheme.rowHover : .clear)
+                    )
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .onHover { hovering = $0 }
+            .help("Delete \(noun)")
+            .popover(isPresented: $showMenu, arrowEdge: .bottom) {
+                // No title and width-to-content: the two actions are
+                // self-explanatory, so the popover stays compact with no
+                // filler text or empty space.
+                VStack(alignment: .leading, spacing: 4) {
+                    MenuRowButton(icon: "calendar", title: "\(label) only") {
+                        showMenu = false
+                        onDeleteDay()
+                    }
+                    MenuRowButton(icon: "trash", title: "All \(noun)", destructive: true) {
+                        showMenu = false
+                        onDeleteAll()
+                    }
+                }
+                .padding(8)
+                .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+}
+
+/// One tappable row inside `HistoryDayHeader`'s popover.
+private struct MenuRowButton: View {
+    let icon: String
+    let title: String
+    var destructive = false
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: icon).font(.system(size: 12)).frame(width: 16)
+                Text(title).font(.system(size: 13))
+                Spacer(minLength: 0)
+            }
+            .foregroundColor(destructive ? .red.opacity(0.9) : FlowTheme.ink)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(hovering ? (destructive ? Color.red.opacity(0.12) : FlowTheme.rowHover) : .clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .onHover { hovering = $0 }
+    }
+}
+
 private struct EmptyHistoryCard: View {
     let icon: String
     let text: String
@@ -495,9 +641,9 @@ private struct EmptyHistoryCard: View {
     }
 }
 
-private func groupedByDay<Entry>(_ entries: [Entry]) -> [(label: String, entries: [Entry])] {
+private func groupedByDay<Entry>(_ entries: [Entry]) -> [(label: String, day: Date, entries: [Entry])] {
     let cal = Calendar.current
-    var result: [(label: String, entries: [Entry])] = []
+    var result: [(label: String, day: Date, entries: [Entry])] = []
     var currentDay: Date?
     for entry in entries {
         let date: Date
@@ -512,7 +658,7 @@ private func groupedByDay<Entry>(_ entries: [Entry]) -> [(label: String, entries
         }
         let day = cal.startOfDay(for: date)
         if day != currentDay {
-            result.append((dayLabel(day), []))
+            result.append((dayLabel(day), day, []))
             currentDay = day
         }
         result[result.count - 1].entries.append(entry)
@@ -588,7 +734,25 @@ private struct DictationRow: View {
             .focusable(false)
             .help("Copy transcript")
             .opacity(hovering ? 1 : 0)
+            deleteButton
         }
+    }
+
+    private var deleteButton: some View {
+        Button { DictationHistory.shared.delete(entry) } label: {
+            Image(systemName: "trash")
+                .font(.system(size: 12))
+                .foregroundColor(.red.opacity(0.75))
+                .frame(width: 26, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(hovering ? FlowTheme.rowHover : .clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .help("Delete")
+        .opacity(hovering ? 1 : 0)
     }
 
     private var retryableContent: some View {
@@ -632,6 +796,7 @@ private struct DictationRow: View {
             .focusable(false)
             .help("Retry transcription")
             .disabled(entry.isRetrying || entry.audioURL == nil)
+            deleteButton
         }
     }
 
