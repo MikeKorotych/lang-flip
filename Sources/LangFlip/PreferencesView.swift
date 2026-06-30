@@ -932,6 +932,102 @@ struct ModelsTab: View {
     }
 }
 
+struct DevToolsTab: View {
+    @ObservedObject private var auth = SupabaseBackendAuth.shared
+    @State private var selectedModel = Settings.shared.devTextCorrectionModel
+    @State private var promptTemplate = Settings.shared.textCorrectionPromptTemplate
+
+    private var isAllowed: Bool {
+        auth.currentUser?.email.localizedCaseInsensitiveCompare("mykhailo.korotych@uni.tech") == .orderedSame
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                if isAllowed {
+                    FlowSettingsGroup("Text correction model") {
+                        Picker("Backend override", selection: $selectedModel) {
+                            Text("Backend default").tag("")
+                            ForEach(CuratedTextCorrectionModel.curated) { model in
+                                Text(model.label).tag(model.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .onChange(of: selectedModel) { Settings.shared.devTextCorrectionModel = $0 }
+
+                        FlowTextField(
+                            placeholder: "Custom model id",
+                            text: Binding(
+                                get: { selectedModel },
+                                set: {
+                                    selectedModel = $0
+                                    Settings.shared.devTextCorrectionModel = $0
+                                }
+                            )
+                        )
+
+                        if let selected = CuratedTextCorrectionModel.curated.first(where: { $0.id == selectedModel }) {
+                            Text(selected.note)
+                                .font(.caption)
+                                .foregroundColor(FlowTheme.inkSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    FlowSettingsGroup("Text correction prompt", spacing: 12) {
+                        Text("Placeholders: \(TextCorrectionPrompt.languagePlaceholder), \(TextCorrectionPrompt.layoutRulePlaceholder)")
+                            .font(.caption)
+                            .foregroundColor(FlowTheme.inkSecondary)
+
+                        TextEditor(text: $promptTemplate)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minHeight: 420)
+                            .padding(8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(FlowTheme.paper)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(FlowTheme.cardStroke, lineWidth: 1)
+                            )
+                            .onChange(of: promptTemplate) { Settings.shared.textCorrectionPromptTemplate = $0 }
+
+                        HStack {
+                            FlowSmallButton(title: "Reset prompt") {
+                                promptTemplate = TextCorrectionPrompt.defaultTemplate
+                                Settings.shared.textCorrectionPromptTemplate = ""
+                            }
+                            Spacer()
+                            Text("\(TextCorrectionPrompt.preview().count) chars")
+                                .font(.caption)
+                                .foregroundColor(FlowTheme.inkSecondary)
+                        }
+                    }
+                } else {
+                    FlowSettingsGroup("DevTools") {
+                        Text("Signed in as \(auth.currentUser?.email ?? "unknown account").")
+                            .font(.callout)
+                            .foregroundColor(FlowTheme.inkSecondary)
+                    }
+                }
+            }
+            .padding(28)
+            .frame(maxWidth: 820, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .task {
+            if auth.isSignedIn && auth.currentUser == nil {
+                _ = try? await auth.refreshUser()
+            }
+        }
+        .onAppear {
+            selectedModel = Settings.shared.devTextCorrectionModel
+            promptTemplate = Settings.shared.textCorrectionPromptTemplate
+        }
+    }
+}
+
 private enum AICloudProvider: String, CaseIterable, Identifiable {
     case openRouter
     case openAI
@@ -1645,9 +1741,24 @@ private struct CuratedTextCorrectionModel: Identifiable {
             note: "Best default: fast, low-cost, strong multilingual proofreading, and useful for both selected text and last-sentence fixes."
         ),
         .init(
+            id: "google/gemini-2.5-flash-lite",
+            label: "Google: Gemini 2.5 Flash Lite - $0.10 / $0.40 per 1M",
+            note: "Cheaper Flash Lite baseline. Worth testing if latency matters more than catching every subtle grammar issue."
+        ),
+        .init(
+            id: "qwen/qwen3.5-flash-02-23",
+            label: "Qwen: Qwen3.5 Flash - $0.065 / $0.26 per 1M",
+            note: "Very cheap and likely quick. A good Slavic-language A/B candidate for short selected-text cleanup."
+        ),
+        .init(
             id: "openai/gpt-5-nano",
             label: "OpenAI: GPT-5 Nano - $0.05 / $0.40 per 1M",
             note: "Cheapest OpenAI option; good for short typo and punctuation cleanup when you want predictable OpenAI behavior."
+        ),
+        .init(
+            id: "openai/gpt-5.4-nano",
+            label: "OpenAI: GPT-5.4 Nano - $0.20 / $1.25 per 1M",
+            note: "Newer OpenAI nano candidate. Try this when GPT-5 Nano is too weak but Mini feels too slow or expensive."
         ),
         .init(
             id: "deepseek/deepseek-v4-flash",
@@ -1663,6 +1774,11 @@ private struct CuratedTextCorrectionModel: Identifiable {
             id: "openai/gpt-5-mini",
             label: "OpenAI: GPT-5 Mini - $0.25 / $2.00 per 1M",
             note: "Higher-quality OpenAI fallback when Nano misses nuance; still cheap enough for daily proofreading."
+        ),
+        .init(
+            id: "openai/gpt-5.4-mini",
+            label: "OpenAI: GPT-5.4 Mini - $0.75 / $4.50 per 1M",
+            note: "Higher-quality newer OpenAI comparison point. Use for harder grammar/polish samples, not necessarily as the default."
         ),
         .init(
             id: "mistralai/mistral-medium-3-5",

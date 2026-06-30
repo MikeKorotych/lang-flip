@@ -76,7 +76,13 @@ final class FoundationModelsAssistant: AIAssistant {
             completion(.unsupported)
             return
         }
-        let prompt = Self.buildFixSelectionPrompt(input: input)
+        let lang = input.activeLayout?.displayName ?? "the user's intended language"
+        let prompt = """
+        \(TextCorrectionPrompt.system(language: lang, allowLayoutRepair: true))
+
+        Selected text:
+        \(input.text)
+        """
         runInference(prompt: prompt) { result in
             switch result {
             case .none:
@@ -180,24 +186,6 @@ final class FoundationModelsAssistant: AIAssistant {
         Output ONLY the translation. No explanation, no quotes, no preamble, no source-language echo.
 
         Text to translate:
-        \(input.text)
-        """
-    }
-
-    private static func buildFixSelectionPrompt(input: AIFixRequest) -> String {
-        let lang = input.activeLayout.map { $0.displayName } ?? "the user's intended language"
-        return """
-        You are a Mac text-fixing utility. The user selected a chunk of text that may contain a mix of issues:
-          • typos and grammar mistakes
-          • text accidentally typed in the wrong keyboard layout (e.g. Cyrillic typed on a Latin keyboard or vice-versa, producing apparent gibberish)
-          • mid-sentence layout flips that left a word or two in the wrong script
-          • inconsistent punctuation or spacing
-
-        Fix everything you can while preserving the user's meaning, tone, and the language they were trying to write in. If the entire text is gibberish from a wrong-layout typing session, reflow it to what the keystrokes would have produced on \(lang). If only a few words are wrong-layout, repair them in place.
-
-        Output ONLY the corrected text. No explanation, no quotes, no preamble, no trailing commentary.
-
-        Selected text:
         \(input.text)
         """
     }

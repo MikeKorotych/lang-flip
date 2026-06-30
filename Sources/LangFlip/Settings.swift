@@ -642,6 +642,8 @@ final class Settings {
         static let ollamaModel = "lf.ollamaModel"
         static let openaiModel = "lf.openaiModel"
         static let openaiBaseURL = "lf.openaiBaseURL"
+        static let devTextCorrectionModel = "lf.dev.textCorrectionModel"
+        static let textCorrectionPromptTemplate = "lf.dev.textCorrectionPromptTemplate"
         static let cloudOCRModel = "lf.cloudOCRModel"
         static let ttsBackend = "lf.ttsBackend"
         static let speechVoiceIdentifier = "lf.speechVoiceIdentifier"
@@ -1368,6 +1370,41 @@ final class Settings {
             var trimmed = newValue.trimmingCharacters(in: .whitespaces)
             while trimmed.hasSuffix("/") { trimmed.removeLast() }
             defaults.set(trimmed, forKey: Keys.openaiBaseURL)
+        }
+    }
+
+    /// The text-correction model used by the cloud backend. Ships defaulting to
+    /// Gemini Flash Lite — the best all-round proofreader we found — so every
+    /// install uses it out of the box. The DevTools picker can override it; its
+    /// explicit empty string ("Backend default") is preserved and means "let the
+    /// server pick", which is why an *absent* key (fresh install) maps to the
+    /// default while a stored "" does not.
+    static let defaultTextCorrectionModel = "google/gemini-3.1-flash-lite"
+
+    var devTextCorrectionModel: String {
+        get {
+            guard let raw = defaults.string(forKey: Keys.devTextCorrectionModel) else {
+                return Self.defaultTextCorrectionModel
+            }
+            return raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        set {
+            defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Keys.devTextCorrectionModel)
+        }
+    }
+
+    var textCorrectionPromptTemplate: String {
+        get {
+            let raw = defaults.string(forKey: Keys.textCorrectionPromptTemplate) ?? ""
+            return raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? TextCorrectionPrompt.defaultTemplate : raw
+        }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed == TextCorrectionPrompt.defaultTemplate.trimmingCharacters(in: .whitespacesAndNewlines) || trimmed.isEmpty {
+                defaults.removeObject(forKey: Keys.textCorrectionPromptTemplate)
+            } else {
+                defaults.set(newValue, forKey: Keys.textCorrectionPromptTemplate)
+            }
         }
     }
 

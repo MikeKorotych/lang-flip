@@ -557,11 +557,13 @@ private struct SettingsHostView: View {
         case voice = "Voice"
         case about = "About"
         case developer = "Developer"
+        case devTools = "DevTools"
 
         var id: Self { self }
     }
 
     @State private var tab: Tab = .general
+    @ObservedObject private var auth = SupabaseBackendAuth.shared
     // The Developer tab holds engineering-only knobs (self-host / local models,
     // STT model override). End users never see it — it's revealed by the
     // "Self-host / local AI" toggle in General, so everything else in Settings
@@ -569,7 +571,15 @@ private struct SettingsHostView: View {
     @AppStorage("lf.showAdvancedAI") private var showAdvancedAI = false
 
     private var visibleTabs: [Tab] {
-        showAdvancedAI ? Tab.allCases : Tab.allCases.filter { $0 != .developer }
+        Tab.allCases.filter { item in
+            if item == .developer { return showAdvancedAI }
+            if item == .devTools { return isDevToolsUser }
+            return true
+        }
+    }
+
+    private var isDevToolsUser: Bool {
+        auth.currentUser?.email.localizedCaseInsensitiveCompare("mykhailo.korotych@uni.tech") == .orderedSame
     }
 
     var body: some View {
@@ -585,6 +595,9 @@ private struct SettingsHostView: View {
                         // If Advanced is turned off while the Developer tab is open,
                         // fall back to General so we don't show a tab that's gone.
                         if !advanced, tab == .developer { tab = .general }
+                    }
+                    .onChange(of: auth.currentUser?.email ?? "") { _ in
+                        if !visibleTabs.contains(tab) { tab = .general }
                     }
             }
             // Cap + center the header column so it tracks the tab content
@@ -604,11 +617,17 @@ private struct SettingsHostView: View {
                 case .voice:     VoiceTab()
                 case .about:     AboutTab()
                 case .developer: ModelsTab()
+                case .devTools:  DevToolsTab()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(FlowTheme.paper)
+        .task {
+            if auth.isSignedIn && auth.currentUser == nil {
+                _ = try? await auth.refreshUser()
+            }
+        }
     }
 }
