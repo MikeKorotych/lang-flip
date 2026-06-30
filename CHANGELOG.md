@@ -21,6 +21,10 @@
 - The Home tab could pin the CPU and freeze — a spinning loader, unresponsive
   tabs — once the dictation history grew large. Scrolling and hover are now
   smooth no matter how much history you have.
+- The dictation island now stays above the Dock on the empty desktop too. A
+  fullscreen app on a second monitor could make the island drop flush onto the
+  Dock until you opened a window; it now clears the Dock whenever the Dock is
+  visible.
 
 ### Improved
 
