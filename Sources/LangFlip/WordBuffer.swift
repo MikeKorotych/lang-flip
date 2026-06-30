@@ -12,6 +12,7 @@ final class WordBuffer {
     }
 
     private(set) var current: String = ""
+    private(set) var lastCompleted: CompletedWord?
 
     /// Most recent completed words, oldest → newest. Used by the AI
     /// assistant to give Foundation Models / LMs a few words of context
@@ -56,6 +57,7 @@ final class WordBuffer {
                             completed = next
                         }
                         appendToHistory(next.word)
+                        lastCompleted = next
                     }
                 }
                 current.removeAll(keepingCapacity: true)
@@ -91,10 +93,12 @@ final class WordBuffer {
     }
 
     func backspace() {
+        lastCompleted = nil
         if !current.isEmpty { current.removeLast() }
     }
 
     func reset() {
         current.removeAll(keepingCapacity: true)
+        lastCompleted = nil
     }
 }

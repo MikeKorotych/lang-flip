@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.1 - Hotkey fixes
+
+### Fixed
+
+- Dictation hotkeys now keep working when LangFlip is disabled. Push-to-talk and
+  hands-free dictation are controlled only by their toggles in Hotkeys.
+- Double Shift now flips only the last word before the cursor, using spaces,
+  newlines, or the cursor as word boundaries. Punctuation keys that map to
+  Cyrillic letters, such as "," in ",hfnbr", are included in the flip.
+
 ## 0.8.0 - Tidy history + shareable logs
 
 ### Added

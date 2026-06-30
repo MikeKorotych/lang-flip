@@ -137,9 +137,6 @@ final class EventTap {
             return Unmanaged.passUnretained(event)
         }
 
-        // Master kill-switch from menubar.
-        guard Settings.shared.enabled else { return Unmanaged.passUnretained(event) }
-
         let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags
 
@@ -160,6 +157,14 @@ final class EventTap {
         }
 
         DictationCorrectionLearner.shared.noteUserKey(keyCode: keyCode, flags: flags)
+
+        // `Flip enabled` controls layout-flip behavior only. Dictation's
+        // modifier hotkeys stay governed by their own toggles in Hotkeys, but
+        // keyDowns still need to cancel pending push-to-talk candidates.
+        guard Settings.shared.enabled else {
+            cancelSpeechModifierCandidates()
+            return Unmanaged.passUnretained(event)
+        }
 
         // Screen text capture hotkey: Shift+Command+S. Only intercept it
         // when the selected local model can actually handle images; this
@@ -342,16 +347,21 @@ final class EventTap {
     }
 
     private func handleFlagsChanged(keyCode: CGKeyCode, flags: CGEventFlags) {
+        if handleSpeechModifierGesture(keyCode: keyCode, flags: flags) {
+            return
+        }
+
+        guard Settings.shared.enabled else {
+            resetFlipGestureState()
+            return
+        }
+
         // Both-Shifts gesture (left+right Shift together) — runs the bound
         // transform (Prompt Engineer by default), regardless of hotkey preset.
         // Pause/resume lives in the menu-bar now.
         let isShiftKey = (keyCode == CGKeyCode(kVK_Shift) || keyCode == CGKeyCode(kVK_RightShift))
         if isShiftKey {
             updateBothShiftsGesture(flags: flags)
-        }
-
-        if handleSpeechModifierGesture(keyCode: keyCode, flags: flags) {
-            return
         }
 
         // Now route the event through the configurable hotkey-tap counter.
@@ -614,6 +624,18 @@ final class EventTap {
         tapCount = 0
         lastShiftReleaseTime = nil
         cancelSpeculativeGrammar()
+    }
+
+    private func resetFlipGestureState() {
+        cancelPendingTaps()
+        hotkeyCurrentlyHeld = false
+        hotkeyUsedAsModifier = false
+        watchedKeyHeld.removeAll()
+        watchedKeyDownTime.removeAll()
+        leftShiftHeld = false
+        rightShiftHeld = false
+        leftShiftDownTime = nil
+        rightShiftDownTime = nil
     }
 
     private func fire(taps: Int) {
@@ -1296,6 +1318,14 @@ final class EventTap {
 
 
     private func tryKeyboardLineDoubleShiftFallback(targetNonEnglish: Layout) -> Bool {
+        if let buffered = bufferedKeyboardFlipTarget(targetNonEnglish: targetNonEnglish) {
+            return tryBufferedKeyboardDoubleShiftFallback(buffered, targetNonEnglish: targetNonEnglish)
+        }
+
+        return trySystemKeyboardLineDoubleShiftFallback(targetNonEnglish: targetNonEnglish)
+    }
+
+    private func trySystemKeyboardLineDoubleShiftFallback(targetNonEnglish: Layout) -> Bool {
         let pb = NSPasteboard.general
         let snapshot = PasteboardSnapshot.capture(pb)
         let countBefore = pb.changeCount
@@ -1307,7 +1337,7 @@ final class EventTap {
 
             guard let selectedToken,
                   !selectedToken.contains(where: { $0.isNewline }),
-                  let replacement = self.lastWrongLayoutRunBeforeCursor(
+                  let replacement = self.lastWrongLayoutWordBeforeCursor(
                       in: selectedToken,
                       cursorUTF16: selectedToken.utf16.count,
                       targetNonEnglish: targetNonEnglish
@@ -1340,6 +1370,70 @@ final class EventTap {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
                     InputSource.switchTo(self.resolveTarget(source: source, configured: targetNonEnglish))
                 }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
+                snapshot.restore(to: pb)
+            }
+        }
+        return true
+    }
+
+    private struct BufferedKeyboardFlipTarget {
+        let selectedText: String
+        let replacementText: String
+        let source: Layout
+        let target: Layout
+    }
+
+    private func bufferedKeyboardFlipTarget(targetNonEnglish: Layout) -> BufferedKeyboardFlipTarget? {
+        let word: String
+        let boundary: String
+        if !buffer.current.isEmpty {
+            word = buffer.current
+            boundary = ""
+        } else if let completed = buffer.lastCompleted {
+            word = completed.word
+            boundary = completed.boundary
+        } else {
+            return nil
+        }
+
+        guard let candidate = manualFlipCandidate(for: word, targetNonEnglish: targetNonEnglish, requireConfidence: false) else {
+            return nil
+        }
+        return BufferedKeyboardFlipTarget(
+            selectedText: word + boundary,
+            replacementText: candidate.converted + boundary,
+            source: candidate.source,
+            target: candidate.target
+        )
+    }
+
+    private func tryBufferedKeyboardDoubleShiftFallback(_ target: BufferedKeyboardFlipTarget, targetNonEnglish: Layout) -> Bool {
+        let pb = NSPasteboard.general
+        let snapshot = PasteboardSnapshot.capture(pb)
+        let countBefore = pb.changeCount
+
+        AppLog.write("double-shift buffered keyboard fallback selectedLen=\(target.selectedText.count) replacementLen=\(target.replacementText.count)")
+        selectPreviousCharacters(target.selectedText.count)
+        tryCopyAfterKeyboardSelection(countBefore: countBefore) { [weak self] selectedText in
+            guard let self else { return }
+            guard selectedText == target.selectedText else {
+                AppLog.write("double-shift buffered keyboard fallback selection mismatch")
+                self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
+                snapshot.restore(to: pb)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+                    _ = self.trySystemKeyboardLineDoubleShiftFallback(targetNonEnglish: targetNonEnglish)
+                }
+                return
+            }
+
+            pb.clearContents()
+            pb.setString(target.replacementText, forType: .string)
+            self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
+            self.playRewriteFeedback()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                InputSource.switchTo(target.target)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
                 snapshot.restore(to: pb)
@@ -1569,7 +1663,7 @@ final class EventTap {
     }
 
 
-    private func lastWrongLayoutRunBeforeCursor(
+    private func lastWrongLayoutWordBeforeCursor(
         in value: String,
         cursorUTF16: Int,
         targetNonEnglish: Layout
@@ -1588,35 +1682,17 @@ final class EventTap {
         let lastToken = ns.substring(with: lastTokenRange)
         guard let last = manualFlipCandidate(for: lastToken, targetNonEnglish: targetNonEnglish, requireConfidence: false) else { return nil }
 
-        var runStart = lastTokenRange.location
-        let runEnd = lastTokenRange.location + lastTokenRange.length
-        var tokensIncluded = 1
-
-        while tokensIncluded < 8,
-              let previousRange = whitespaceTokenRangeBefore(runStart, in: ns) {
-            let token = ns.substring(with: previousRange)
-            guard let previous = manualFlipCandidate(for: token, targetNonEnglish: targetNonEnglish, requireConfidence: true),
-                  previous.source == last.source,
-                  previous.target == last.target
-            else {
-                break
-            }
-            runStart = previousRange.location
-            tokensIncluded += 1
-        }
-
         // Manual no-selection double/triple Shift is an explicit layout
         // conversion, not dictionary auto-flip. Convert the last
-        // whitespace-delimited wrong-layout run:
+        // whitespace-delimited word only:
         //   - English source: double -> primary, triple -> secondary.
         //   - Non-English source: always -> English.
-        let runRange = NSRange(location: runStart, length: runEnd - runStart)
-        let originalRun = ns.substring(with: runRange)
-        let convertedRun = convert(originalRun, from: last.source, to: last.target)
-        guard convertedRun != originalRun else { return nil }
+        let originalWord = ns.substring(with: lastTokenRange)
+        let convertedWord = convert(originalWord, from: last.source, to: last.target)
+        guard convertedWord != originalWord else { return nil }
         return FocusedTextSlice(
-            range: CFRange(location: runRange.location, length: runRange.length),
-            text: convertedRun
+            range: CFRange(location: lastTokenRange.location, length: lastTokenRange.length),
+            text: convertedWord
         )
     }
 
@@ -1664,22 +1740,10 @@ final class EventTap {
         return NSRange(location: start, length: end - start)
     }
 
-    private func whitespaceTokenRangeBefore(_ location: Int, in ns: NSString) -> NSRange? {
-        var end = min(max(location, 0), ns.length)
-        var crossedNewline = false
-        while end > 0, isWhitespaceOrNewline(ns.character(at: end - 1)) {
-            crossedNewline = crossedNewline || isNewline(ns.character(at: end - 1))
-            end -= 1
-        }
-        guard !crossedNewline, end > 0 else { return nil }
-        let range = whitespaceTokenRangeEnding(at: end, in: ns)
-        return range.length > 0 ? range : nil
-    }
-
     private func flipFocusedLastWords(targetNonEnglish: Layout) -> Bool {
         guard let context = focusedTextContext(),
               context.selectedRange.length == 0,
-              let replacement = lastWrongLayoutRunBeforeCursor(
+              let replacement = lastWrongLayoutWordBeforeCursor(
                   in: context.value,
                   cursorUTF16: context.selectedRange.location,
                   targetNonEnglish: targetNonEnglish
