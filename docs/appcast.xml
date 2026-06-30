@@ -26,6 +26,29 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.8.0</title>
+      <pubDate>Tue, 30 Jun 2026 08:33:39 +0000</pubDate>
+      <sparkle:version>0.8.0</sparkle:version>
+      <sparkle:shortVersionString>0.8.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Tidy history + shareable logs</h2>
+        <ul>
+          <li>Manage your history — each day in the Dictation, Screen Text, and Speech tabs has a trash button to clear that day or everything (single entries deletable on hover); recordings are removed too.</li>
+          <li>Share diagnostic logs from Settings → About. The log records what happened, never what you typed or dictated.</li>
+          <li>The Home dictation list opens to your 50 most recent entries with a "Show older" control.</li>
+          <li>Fixed: the Home tab could freeze (spinning loader, dead tabs) with a large history — scrolling and hover are now smooth.</li>
+          <li>Fixed: the dictation island now stays above the Dock on the empty desktop too.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.0/Sayful-0.8.0.dmg"
+        length="6725431"
+        type="application/octet-stream"
+        sparkle:edSignature="dQCFCWGJZP99rJE/7+JKGwefEg4stNayN7YhUbbFYBN0LceZrQt2thWwh1kxH7W5v1Fy0k+pQ5D6omRrcJgQCw==" />
+    </item>
+
+    <item>
       <title>v0.7.3</title>
       <pubDate>Sat, 27 Jun 2026 11:29:49 +0000</pubDate>
       <sparkle:version>0.7.3</sparkle:version>
