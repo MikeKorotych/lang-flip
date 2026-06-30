@@ -346,17 +346,26 @@ final class DictationIslandController {
             return false
         }
 
+        // Match the backdrop to *this* display by position and size — not size
+        // alone. CGWindow bounds and CGDisplayBounds share the global, top-left
+        // coordinate space, so a fullscreen Space on a second monitor of equal
+        // size no longer false-positives here and drop the island onto the Dock.
+        let bounds = CGDisplayBounds(screen.displayID)
         let tolerance: CGFloat = 2
         return windows.contains { window in
             guard (window[kCGWindowOwnerName as String] as? String) == "Dock",
                   (window[kCGWindowName as String] as? String) == "Fullscreen Backdrop",
                   let boundsDict = window[kCGWindowBounds as String] as? [String: Any],
+                  let x = boundsDict["X"] as? CGFloat,
+                  let y = boundsDict["Y"] as? CGFloat,
                   let width = boundsDict["Width"] as? CGFloat,
                   let height = boundsDict["Height"] as? CGFloat
             else { return false }
 
-            return abs(width - screen.frame.width) <= tolerance
-                && abs(height - screen.frame.height) <= tolerance
+            return abs(x - bounds.minX) <= tolerance
+                && abs(y - bounds.minY) <= tolerance
+                && abs(width - bounds.width) <= tolerance
+                && abs(height - bounds.height) <= tolerance
         }
     }
 }
