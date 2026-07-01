@@ -35,3 +35,30 @@ struct PasteboardSnapshot {
         }
     }
 }
+
+enum TransientPasteboard {
+    static let defaultRestoreDelay: TimeInterval = 0.30
+
+    /// Temporarily places a string on the pasteboard for a synthesized paste,
+    /// then restores the user's previous pasteboard if nothing else changed it.
+    static func pasteString(
+        _ string: String,
+        to pb: NSPasteboard = .general,
+        restoreAfter delay: TimeInterval = defaultRestoreDelay,
+        restoreOriginalClipboard: Bool = true,
+        paste: () -> Void
+    ) {
+        let snapshot = PasteboardSnapshot.capture(pb)
+        pb.clearContents()
+        pb.setString(string, forType: .string)
+        let transientChangeCount = pb.changeCount
+
+        paste()
+
+        guard restoreOriginalClipboard else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard pb.changeCount == transientChangeCount else { return }
+            snapshot.restore(to: pb)
+        }
+    }
+}

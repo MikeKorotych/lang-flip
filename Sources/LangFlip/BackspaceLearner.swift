@@ -18,7 +18,7 @@ final class BackspaceLearner {
     private static let watchWindow: TimeInterval = 2.0
 
     /// UserDefaults key for the persisted exception set.
-    private static let exceptionsKey = "lf.flipExceptions"
+    static let exceptionsKey = "lf.flipExceptions"
 
     /// State held only between an auto-flip and the user's next move.
     private struct PendingFlip {
@@ -44,8 +44,13 @@ final class BackspaceLearner {
     private let defaults = UserDefaults.standard
 
     private init() {
-        let saved = defaults.array(forKey: Self.exceptionsKey) as? [String] ?? []
-        exceptions = Set(saved.map { $0.lowercased() })
+        if LocalContentPrivacy.allowsAutomaticLearning {
+            let saved = defaults.array(forKey: Self.exceptionsKey) as? [String] ?? []
+            exceptions = Set(saved.map { $0.lowercased() })
+        } else {
+            defaults.removeObject(forKey: Self.exceptionsKey)
+            exceptions = []
+        }
     }
 
     /// Called from EventTap right after a successful auto-flip — starts
@@ -65,8 +70,8 @@ final class BackspaceLearner {
 
     /// Call on every Backspace key event. Returns a `RollbackRequest` only
     /// when the user has erased the entire flipped word (strong signal).
-    /// On the first backspace inside the window the word is silently added
-    /// to the exception list.
+    /// On the first backspace inside the window the word is added to the
+    /// exception list and the user gets a privacy-safe notification.
     func handleBackspace() -> RollbackRequest? {
         guard var p = pending else { return nil }
 
@@ -80,7 +85,14 @@ final class BackspaceLearner {
         // Loose signal: even one backspace within the window means "I didn't
         // want that flip" — remember the word so it isn't auto-flipped again.
         if !p.addedException {
-            addException(p.originalWord)
+            if LocalContentPrivacy.allowsAutomaticLearning {
+                if addException(p.originalWord) {
+                    Notifications.show(
+                        title: "Auto-flip exception added",
+                        body: Self.exceptionNotificationBody(for: p.originalWord)
+                    )
+                }
+            }
             p.addedException = true
         }
 
@@ -121,13 +133,17 @@ final class BackspaceLearner {
     /// Add an exception manually from Preferences. Useful for product
     /// names, nicknames, commands, and other words the app should never
     /// auto-flip.
-    func addException(_ word: String) {
+    @discardableResult
+    func addException(_ word: String) -> Bool {
+        guard LocalContentPrivacy.allowsAutomaticLearning else { return false }
         let lower = word.lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !lower.isEmpty else { return }
+        guard !lower.isEmpty else { return false }
         if exceptions.insert(lower).inserted {
             saveExceptions()
+            return true
         }
+        return false
     }
 
     func removeException(_ word: String) {
@@ -139,5 +155,9 @@ final class BackspaceLearner {
 
     private func saveExceptions() {
         defaults.set(Array(exceptions).sorted(), forKey: Self.exceptionsKey)
+    }
+
+    static func exceptionNotificationBody(for word: String) -> String {
+        "Added \"\(word)\" to exceptions. Sayful will leave it as typed."
     }
 }

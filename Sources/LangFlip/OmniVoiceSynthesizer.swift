@@ -114,7 +114,7 @@ final class OmniVoiceSynthesizer {
 
     func play(_ url: URL) {
         lastOutputURL = url
-        _ = AudioFilePlayer.shared.play(url)
+        _ = AudioFilePlayer.shared.play(url, deleteOnStop: !LocalContentPrivacy.retainsLocalContentHistory)
     }
 
     private func generateSingle(text: String, outputURL: URL, executableURL: URL) async throws {

@@ -19,6 +19,9 @@ final class AutoFlip {
     private var enWords: Set<String> = []
     private var ukCommon: Set<String> = []
     private var ruCommon: Set<String> = []
+    private static let ukFalsePositiveWords: Set<String> = [
+        "біл",
+    ]
     /// False until the background `reloadDictionaries` finishes. The
     /// EmbeddedDicts seed is too small (only a few hundred high-freq
     /// UK/RU words, no English) to power dictionary-based scoring —
@@ -84,6 +87,7 @@ final class AutoFlip {
         var newRu = Self.loadResource(name: "ru-words", fallback: EmbeddedDicts.russian)
         newUk.formUnion(DictionaryManager.installedWords(for: .uk))
         newRu.formUnion(DictionaryManager.installedWords(for: .ru))
+        newUk.subtract(Self.ukFalsePositiveWords)
 
         // Atomically swap. Readers will see either old or new sets,
         // never a partially-populated state.
@@ -99,6 +103,14 @@ final class AutoFlip {
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .langFlipDictionariesReloaded, object: nil)
         }
+    }
+
+    /// Ensure dictionary-scored paths are ready before typing starts. EventTap
+    /// calls this during startup so the first completed word does not silently
+    /// miss auto-flip while the background load is still warming up.
+    func ensureReadyForTyping() {
+        if isReady { return }
+        reloadDictionaries()
     }
 
     /// Snapshot the three sets under the lock and return references.

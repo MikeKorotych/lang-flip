@@ -26,8 +26,9 @@ extension Notification.Name {
     /// island so it reacts instantly instead of polling tightly.
     static let langFlipDictationStateChanged = Notification.Name("LangFlipDictationStateChanged")
 
-    /// Posted when an in-progress dictation is cancelled (discarded without
-    /// transcribing). The island shows a "Transcript cancelled" toast.
+    /// Posted when an in-progress dictation is cancelled without transcribing.
+    /// The island shows a "Transcript cancelled" toast; the recording is
+    /// discarded when the toast expires unless the user taps Undo.
     static let langFlipDictationCancelled = Notification.Name("LangFlipDictationCancelled")
 
     /// Posted when transcription fails but the recording file is still available.

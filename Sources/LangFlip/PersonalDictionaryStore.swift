@@ -35,10 +35,11 @@ struct PersonalDictionaryEntry: Identifiable, Codable, Equatable {
 
 final class PersonalDictionaryStore: ObservableObject {
     static let shared = PersonalDictionaryStore()
+    static let storageKey = "lf.personalDictionary.entries"
 
     @Published private(set) var entries: [PersonalDictionaryEntry] = []
 
-    private let key = "lf.personalDictionary.entries"
+    private let key = PersonalDictionaryStore.storageKey
     private let maxEntries = 250
     private let maxVariantsPerEntry = 12
 
@@ -49,6 +50,7 @@ final class PersonalDictionaryStore: ObservableObject {
     }
 
     func addAutomatic(canonical: String, variant: String) {
+        guard LocalContentPrivacy.allowsAutomaticLearning else { return }
         add(canonical: canonical, variants: [variant], source: .automatic)
     }
 
@@ -94,6 +96,7 @@ final class PersonalDictionaryStore: ObservableObject {
     }
 
     private func add(canonical rawCanonical: String, variants rawVariants: [String], source: PersonalDictionaryEntry.Source) {
+        guard source != .automatic || LocalContentPrivacy.allowsAutomaticLearning else { return }
         let canonical = Self.cleanedTerm(rawCanonical)
         guard Self.isUsefulCanonical(canonical) else { return }
 
@@ -157,8 +160,19 @@ final class PersonalDictionaryStore: ObservableObject {
 
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: key),
-              let decoded = try? JSONDecoder().decode([PersonalDictionaryEntry].self, from: data)
+              var decoded = try? JSONDecoder().decode([PersonalDictionaryEntry].self, from: data)
         else { return }
+        if !LocalContentPrivacy.allowsAutomaticLearning {
+            let before = decoded.count
+            decoded.removeAll { $0.source == .automatic }
+            if decoded.count != before {
+                if let data = try? JSONEncoder().encode(decoded) {
+                    UserDefaults.standard.set(data, forKey: key)
+                } else {
+                    UserDefaults.standard.removeObject(forKey: key)
+                }
+            }
+        }
         entries = decoded
     }
 

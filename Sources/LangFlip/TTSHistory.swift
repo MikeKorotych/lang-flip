@@ -32,22 +32,27 @@ struct TTSHistoryEntry: Identifiable, Codable {
 
 final class TTSHistory: ObservableObject {
     static let shared = TTSHistory()
+    static let storageKey = "lf.ttsHistory"
 
     @Published private(set) var entries: [TTSHistoryEntry] = []
 
-    private let key = "lf.ttsHistory"
+    private let key = TTSHistory.storageKey
     private let maxEntries = 200
 
     private init() { load() }
 
     func add(text: String, audioURL: URL, model: String? = nil, voice: String? = nil) {
+        guard LocalContentPrivacy.retainsLocalContentHistory else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let entry = TTSHistoryEntry(text: trimmed, audioURL: audioURL, model: model, voice: voice)
         DispatchQueue.main.async {
             self.entries.insert(entry, at: 0)
             if self.entries.count > self.maxEntries {
-                self.entries.removeLast(self.entries.count - self.maxEntries)
+                let overflow = self.entries.count - self.maxEntries
+                let removed = Array(self.entries.suffix(overflow))
+                self.entries.removeLast(overflow)
+                Self.deleteAudioFiles(for: removed)
             }
             self.save()
         }
@@ -82,13 +87,26 @@ final class TTSHistory: ObservableObject {
             let urls = self.entries.map(\.audioURL)
             self.entries.removeAll()
             self.save()
-            DispatchQueue.global(qos: .utility).async {
-                urls.forEach { try? FileManager.default.removeItem(at: $0) }
-            }
+            Self.deleteAudioFiles(at: urls)
+        }
+    }
+
+    private static func deleteAudioFiles(for entries: [TTSHistoryEntry]) {
+        deleteAudioFiles(at: entries.map(\.audioURL))
+    }
+
+    private static func deleteAudioFiles(at urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        DispatchQueue.global(qos: .utility).async {
+            urls.forEach { try? FileManager.default.removeItem(at: $0) }
         }
     }
 
     private func load() {
+        guard LocalContentPrivacy.retainsLocalContentHistory else {
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
         guard let data = UserDefaults.standard.data(forKey: key),
               let decoded = try? JSONDecoder().decode([TTSHistoryEntry].self, from: data)
         else { return }
@@ -96,6 +114,10 @@ final class TTSHistory: ObservableObject {
     }
 
     private func save() {
+        guard LocalContentPrivacy.retainsLocalContentHistory else {
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
         if let data = try? JSONEncoder().encode(entries) {
             UserDefaults.standard.set(data, forKey: key)
         }

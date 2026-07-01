@@ -15,20 +15,15 @@ import Foundation
 enum BackendConfig {
     /// Supabase project (branch A). The anon key is a PUBLIC client key
     /// (protected by RLS) — safe to embed; it is NOT the provider key.
-    /// An optional UserDefaults override (`lf.backendSupabaseURL`) lets us point
-    /// at a different project without a rebuild.
     static let defaultSupabaseURL = "https://bpxsmfdpmbfsvdckndpw.supabase.co"
+    static let trustedSupabaseHost = "bpxsmfdpmbfsvdckndpw.supabase.co"
     static let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJweHNtZmRwbWJmc3ZkY2tuZHB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMDI5NDAsImV4cCI6MjA5Nzg3ODk0MH0.FzxlUqw7iH0PhmSVrHKOfd6MMhoEL_tyhaSqXf6-VHY"
 
     /// OAuth callback (reverse-DNS scheme, registered in Info.plist).
     static let callbackScheme = "com.antonpinkevych.sayful"
     static let callbackURL = "com.antonpinkevych.sayful://auth-callback"
 
-    static var supabaseURL: String {
-        let raw = UserDefaults.standard.string(forKey: "lf.backendSupabaseURL")?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return raw.isEmpty ? defaultSupabaseURL : raw
-    }
+    static var supabaseURL: String { defaultSupabaseURL }
 
     /// GoTrue auth endpoints (sign-in, refresh).
     static var authBaseURL: URL { URL(string: supabaseURL + "/auth/v1")! }
@@ -36,6 +31,23 @@ enum BackendConfig {
     static var functionsBaseURL: URL { URL(string: supabaseURL + "/functions/v1")! }
 
     static var isConfigured: Bool { !supabaseURL.isEmpty }
+
+    static func isTrustedBackendURL(_ url: URL) -> Bool {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.scheme?.lowercased() == "https",
+              components.host?.lowercased() == trustedSupabaseHost else {
+            return false
+        }
+        return components.user == nil && components.password == nil
+    }
+
+    static func requireTrustedBackendURL(_ url: URL) throws {
+        guard isTrustedBackendURL(url) else {
+            throw BackendError(
+                code: .notConfigured,
+                message: "Refusing to send backend credentials to an untrusted host")
+        }
+    }
 }
 
 // MARK: - JSON
@@ -135,6 +147,7 @@ struct BackendTranscribeRequest {
     let audio: Data
     let filename: String
     var language: String?
+    var prompt: String?
     var model: String?
     var reservationID: String? = nil
 }
@@ -172,6 +185,7 @@ struct BackendError: Error, Equatable {
 
 // MARK: - Auth (spec §5.1, §7) — Supabase vs custom Railway behind one protocol
 
+@MainActor
 protocol BackendAuth: AnyObject {
     var isSignedIn: Bool { get }
 

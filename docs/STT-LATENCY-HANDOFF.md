@@ -28,9 +28,10 @@ App pastes the text.
 
 - BYOK/Advanced mode exists too (`CloudTranscriber.swift`, base64-JSON to OpenRouter) but is NOT
   the user's path.
-- The model the backend uses is set by `DEFAULT_STT_MODEL` env, overridable per-request via the
-  multipart `model` field (the app sends it only for Advanced users; the Developer-tab picker writes
-  `Settings.shared.cloudSTTModel`).
+- The model the backend uses is set by `DEFAULT_STT_MODEL` env. The app no
+  longer sends arbitrary Developer-tab `Settings.shared.cloudSTTModel` values in
+  Sayful Cloud mode; it sends no model for Fast, or the fixed Quality enum model.
+  The backend must still enforce its own model allowlist.
 
 ## 4. What was achieved
 

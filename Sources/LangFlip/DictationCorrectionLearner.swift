@@ -28,6 +28,7 @@ final class DictationCorrectionLearner {
         beforeContext: FocusedTextReader.Context?,
         appBundleID: String?
     ) {
+        guard LocalContentPrivacy.allowsAutomaticLearning else { return }
         let inserted = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard inserted.count >= 2 else { return }
 
@@ -107,6 +108,7 @@ final class DictationCorrectionLearner {
         let corrected = Self.substring(context.value, range: currentExpanded)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
+        guard LocalContentPrivacy.allowsAutomaticLearning else { return }
         guard Self.shouldLearn(original: original, corrected: corrected) else { return }
         PersonalDictionaryStore.shared.addAutomatic(canonical: corrected, variant: original)
 

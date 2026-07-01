@@ -153,6 +153,19 @@ final class VoiceRecorder: NSObject {
         notify()
     }
 
+    func discardRecording(at url: URL) {
+        if lastRecordingURL == url {
+            lastRecordingURL = nil
+        }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    func clearLastRecording(if url: URL) {
+        if lastRecordingURL == url {
+            lastRecordingURL = nil
+        }
+    }
+
     /// Stop recording and close the file. Order matters: remove the tap first so
     /// no new buffers are delivered, stop the engine, then release the file +
     /// converter UNDER the lock — so a buffer already in flight on the render

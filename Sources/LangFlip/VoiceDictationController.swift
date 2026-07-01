@@ -19,6 +19,7 @@ final class VoiceDictationController {
     private var sttReservation: BackendSTTReserveResult?
     private var sttReservationTask: Task<Void, Never>?
     private var failedTranscription: FailedTranscription?
+    private var pendingCancelledRecordingURL: URL?
 
     private struct FailedTranscription {
         let audioURL: URL
@@ -53,15 +54,9 @@ final class VoiceDictationController {
         recordingApp = NSWorkspace.shared.frontmostApplication?.localizedName
         notifyStateChanged()
         Sound.playFlip()
-        // No FlipOverlay here — the dictation island is the visual feedback for
-        // speech-to-text (live waves while recording). FlipOverlay is reserved for
-        // layout-flip / AI text fixes. The routine banner is opt-in (off by default).
-        if Settings.shared.dictationNotifications {
-            let body = mode == .pushToTalk
-                ? "Recording while \(Settings.shared.dictationPushToTalkShortcut.displayName) is held."
-                : "Recording. Press \(Settings.shared.dictationHandsFreeShortcut.displayName) to stop."
-            Notifications.show(title: "Dictation", body: body)
-        }
+        // No FlipOverlay or system banner here — the dictation island is the
+        // visual feedback for speech-to-text. Notifications are reserved for
+        // actionable failures such as no recognized speech.
     }
 
     func stopAndTranscribe() {
@@ -91,7 +86,9 @@ final class VoiceDictationController {
                 guard let audioURL else {
                     self.isTranscribing = false
                     self.notifyStateChanged()
-                    Notifications.show(title: "Dictation failed", body: "No recording was saved.")
+                    if Settings.shared.dictationNotifications {
+                        Notifications.show(title: "Dictation failed", body: "No recording was saved.")
+                    }
                     return
                 }
                 self.beginTranscription(audioURL: audioURL,
@@ -103,13 +100,20 @@ final class VoiceDictationController {
         }
     }
 
-    /// Re-run transcription on the last recording after a cancel — backs the
-    /// island's "Transcript cancelled / Undo" toast. `cancel()` only stops the
-    /// recorder, so the audio file is still on disk.
+    /// Re-run transcription on a just-cancelled recording while the island's
+    /// Undo toast is still visible. When the toast expires, the file is deleted.
     func undoCancel() {
         guard !isRecording, !isTranscribing,
-              let audioURL = VoiceRecorder.shared.lastRecordingURL else { return }
+              let audioURL = pendingCancelledRecordingURL
+        else { return }
+        pendingCancelledRecordingURL = nil
         beginTranscription(audioURL: audioURL, duration: nil, app: nil, reservationID: nil)
+    }
+
+    func discardPendingCancelledRecording() {
+        guard let audioURL = pendingCancelledRecordingURL else { return }
+        pendingCancelledRecordingURL = nil
+        VoiceRecorder.shared.discardRecording(at: audioURL)
     }
 
     func retryFailedTranscription() {
@@ -158,12 +162,8 @@ final class VoiceDictationController {
         if !isTranscribing {
             isTranscribing = true
         }
-        // The island shows the transcribing state; the banner is opt-in.
         if !stateAlreadyTranscribing {
             notifyStateChanged()
-        }
-        if Settings.shared.dictationNotifications {
-            Notifications.show(title: "Dictation", body: "Transcribing...")
         }
 
         Task {
@@ -184,9 +184,13 @@ final class VoiceDictationController {
                     self.failedTranscription = nil
                     self.isTranscribing = false
                     self.notifyStateChanged()
-                    // Transcript is saved — the recording is no longer needed.
+                    // Transcript is saved — unless a developer is preserving
+                    // WAVs for STT prompt A/B tests, the recording is no longer needed.
                     // (Failed dictations keep theirs for Retry; see the catch.)
-                    try? FileManager.default.removeItem(at: audioURL)
+                    if !Settings.shared.keepSuccessfulDictationRecordings {
+                        try? FileManager.default.removeItem(at: audioURL)
+                        VoiceRecorder.shared.clearLastRecording(if: audioURL)
+                    }
                     self.schedulePostTranscriptionSideEffects(text: text,
                                                               duration: duration,
                                                               app: app,
@@ -199,18 +203,29 @@ final class VoiceDictationController {
                         audioURL: audioURL,
                         duration: duration,
                         app: app,
-                        error: error.localizedDescription,
+                        error: SensitiveLogRedactor.redact(error.localizedDescription),
                         replacing: replacingHistoryEntryID
                     )
-                    self.failedTranscription = FailedTranscription(audioURL: audioURL,
-                                                                   duration: duration,
-                                                                   app: app,
-                                                                   historyEntryID: failureID,
-                                                                   insertOnSuccess: insertOnSuccess)
+                    if let failureID {
+                        self.failedTranscription = FailedTranscription(audioURL: audioURL,
+                                                                       duration: duration,
+                                                                       app: app,
+                                                                       historyEntryID: failureID,
+                                                                       insertOnSuccess: insertOnSuccess)
+                    } else {
+                        self.failedTranscription = nil
+                    }
                     self.isTranscribing = false
                     self.notifyStateChanged()
-                    NotificationCenter.default.post(name: .langFlipDictationTranscriptionFailed, object: nil)
-                    Notifications.show(title: "Transcription failed", body: "Click Retry on the dictation island.")
+                    if failureID != nil {
+                        NotificationCenter.default.post(name: .langFlipDictationTranscriptionFailed, object: nil)
+                    }
+                    let body = failureID == nil
+                        ? "Recording was discarded because local history is off."
+                        : "Click Retry on the dictation island."
+                    if Settings.shared.dictationNotifications {
+                        Notifications.show(title: "Transcription failed", body: body)
+                    }
                     AppLog.write("STT failed: \(error.localizedDescription)")
                 }
             }
@@ -232,7 +247,6 @@ final class VoiceDictationController {
             } else if let replacingHistoryEntryID {
                 DictationHistory.shared.replaceFailed(id: replacingHistoryEntryID, with: text, duration: duration, app: app)
                 Sound.playFlip()
-                Notifications.show(title: "Transcript ready", body: "Saved in Home history.")
             }
         }
     }
@@ -242,6 +256,8 @@ final class VoiceDictationController {
     func cancel() {
         guard isRecording else { return }
         VoiceRecorder.shared.stop()
+        discardPendingCancelledRecording()
+        pendingCancelledRecordingURL = VoiceRecorder.shared.lastRecordingURL
         sttReservationTask?.cancel()
         sttReservationTask = nil
         sttReservation = nil
@@ -271,7 +287,7 @@ final class VoiceDictationController {
     /// DNS+TCP+TLS handshake. Mirrors the routing in `transcribe(audioURL:)`.
     private static func prewarmSTTConnection() {
         if Settings.shared.aiMode == .backend {
-            guard SupabaseBackendAuth.shared.isSignedIn else { return }
+            guard SupabaseBackendAuth.hasStoredSession else { return }
             ConnectionWarmer.warm(BackendConfig.functionsBaseURL, label: "STT")
         } else if let url = URL(string: Settings.shared.cloudSTTBaseURL) {
             ConnectionWarmer.warm(url, label: "STT")
@@ -282,7 +298,7 @@ final class VoiceDictationController {
         sttReservationTask?.cancel()
         sttReservation = nil
         guard Settings.shared.aiMode == .backend,
-              SupabaseBackendAuth.shared.isSignedIn
+              SupabaseBackendAuth.hasStoredSession
         else { return }
 
         let modelOverride = Self.backendSTTModelOverride()
@@ -313,7 +329,7 @@ final class VoiceDictationController {
         // Dictation is cloud-only. Sayful Cloud → backend proxy (no provider
         // key; requires sign-in). Advanced/BYOK → the user's own key.
         if Settings.shared.aiMode == .backend {
-            guard SupabaseBackendAuth.shared.isSignedIn else {
+            guard SupabaseBackendAuth.hasStoredSession else {
                 throw CloudTranscriptionError.notSignedIn
             }
             let upload = try STTAudioUploadPreparer.prepareBackendUpload(from: audioURL)
@@ -328,6 +344,7 @@ final class VoiceDictationController {
             let request = BackendTranscribeRequest(audio: upload.data,
                                                    filename: upload.filename,
                                                    language: nil,
+                                                   prompt: STTTranscriptionPrompt.current(),
                                                    model: modelOverride,
                                                    reservationID: reservationID)
             let result: BackendTextResult
@@ -342,6 +359,7 @@ final class VoiceDictationController {
                     BackendTranscribeRequest(audio: upload.data,
                                              filename: upload.filename,
                                              language: nil,
+                                             prompt: STTTranscriptionPrompt.current(),
                                              model: modelOverride)
                 )
             }
@@ -390,7 +408,9 @@ final class VoiceDictationController {
     private func insert(_ text: String, duration: Double? = nil, app: String? = nil, replacingHistoryEntryID: UUID? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            Notifications.show(title: "Dictation", body: "No speech was recognized.")
+            if Settings.shared.dictationNotifications {
+                Notifications.show(title: "Dictation", body: "No speech was recognized.")
+            }
             return
         }
 
@@ -399,10 +419,10 @@ final class VoiceDictationController {
         let beforeContext = FocusedTextReader.current()
         let appBundleID = AppContext.frontmostBundleID()
 
-        let pb = NSPasteboard.general
-        pb.clearContents()
-        pb.setString(cleaned, forType: .string)
-        postCommandV()
+        let shouldRestoreClipboard = beforeContext != nil
+        TransientPasteboard.pasteString(cleaned, restoreOriginalClipboard: shouldRestoreClipboard) {
+            postCommandV()
+        }
         Sound.playFlip()
         DictationCorrectionLearner.shared.recordInsertion(
             text: cleaned,
@@ -414,11 +434,8 @@ final class VoiceDictationController {
         } else {
             DictationHistory.shared.add(cleaned, duration: duration, app: app)
         }
-        // The text appears at the cursor and the sound confirms it — the "inserted"
-        // banner is opt-in (off by default) to keep dictation quiet.
-        if Settings.shared.dictationNotifications {
-            Notifications.show(title: "Dictation inserted", body: String(cleaned.prefix(80)))
-        }
+        // The text appears at the cursor and the sound confirms success; no
+        // system banner is needed for successful dictation.
     }
 
     /// Put `text` on the clipboard and paste it into the frontmost app. Used by
@@ -427,10 +444,10 @@ final class VoiceDictationController {
     func pasteText(_ text: String) {
         let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return }
-        let pb = NSPasteboard.general
-        pb.clearContents()
-        pb.setString(cleaned, forType: .string)
-        postCommandV()
+        let shouldRestoreClipboard = FocusedTextReader.current() != nil
+        TransientPasteboard.pasteString(cleaned, restoreOriginalClipboard: shouldRestoreClipboard) {
+            postCommandV()
+        }
     }
 
     private func postCommandV() {

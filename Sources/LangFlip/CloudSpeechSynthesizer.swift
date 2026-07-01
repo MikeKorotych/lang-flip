@@ -82,7 +82,7 @@ final class CloudSpeechSynthesizer {
 
         // Sayful Cloud → backend proxy (no provider key); requires sign-in.
         if Settings.shared.aiMode == .backend {
-            guard SupabaseBackendAuth.shared.isSignedIn else {
+            guard SupabaseBackendAuth.hasStoredSession else {
                 throw CloudSpeechError.notSignedIn
             }
             return try await generateViaBackend(clean)
@@ -165,10 +165,12 @@ final class CloudSpeechSynthesizer {
     /// (WAV for Gemini / MP3 otherwise); afplay sniffs the format from content.
     private func generateViaBackend(_ text: String) async throws -> URL {
         let instructions = Settings.shared.cloudTTSInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = BackendModelPolicy.ttsModelOverride()
+        let modelLog = BackendModelPolicy.displayName(model)
         let bytes = try await HTTPBackendClient.shared.tts(
             BackendTTSRequest(text: text,
                               voice: Settings.shared.cloudTTSVoice,
-                              model: Settings.shared.cloudTTSModel,
+                              model: model,
                               speed: Settings.shared.cloudTTSSpeed,
                               instructions: instructions.isEmpty ? nil : instructions))
         guard !bytes.isEmpty else { throw CloudSpeechError.emptyAudio }
@@ -177,13 +179,13 @@ final class CloudSpeechSynthesizer {
         let writeStart = DispatchTime.now()
         try bytes.write(to: outputURL, options: .atomic)
         NetworkLatency.log.info(
-            "TTS write=\(String(format: "%.0f", NetworkLatency.elapsedMs(since: writeStart)), privacy: .public)ms audio=\(bytes.count, privacy: .public)B model=\(Settings.shared.cloudTTSModel, privacy: .public)"
+            "TTS write=\(String(format: "%.0f", NetworkLatency.elapsedMs(since: writeStart)), privacy: .public)ms audio=\(bytes.count, privacy: .public)B model=\(modelLog, privacy: .public)"
         )
         await MainActor.run {
             self.lastOutputURL = outputURL
             TTSHistory.shared.add(text: text,
                                   audioURL: outputURL,
-                                  model: Settings.shared.cloudTTSModel,
+                                  model: modelLog,
                                   voice: Settings.shared.cloudTTSVoice)
         }
         return outputURL
@@ -193,6 +195,8 @@ final class CloudSpeechSynthesizer {
     /// s16le PCM chunks; we feed them to AVAudioEngine as they arrive.
     private func streamViaBackend(_ text: String) async throws {
         let instructions = Settings.shared.cloudTTSInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = BackendModelPolicy.ttsModelOverride()
+        let modelLog = BackendModelPolicy.displayName(model)
         let started = DispatchTime.now()
         var player: PCMStreamPlayer?
         var firstAudioAt: Date?
@@ -200,7 +204,7 @@ final class CloudSpeechSynthesizer {
         let info = try await HTTPBackendClient.shared.ttsPCMStream(
             BackendTTSRequest(text: text,
                               voice: Settings.shared.cloudTTSVoice,
-                              model: Settings.shared.cloudTTSModel,
+                              model: model,
                               speed: Settings.shared.cloudTTSSpeed,
                               instructions: instructions.isEmpty ? nil : instructions)
         ) { info in
@@ -213,7 +217,7 @@ final class CloudSpeechSynthesizer {
             if firstAudioAt == nil {
                 firstAudioAt = Date()
                 NetworkLatency.log.info(
-                    "TTS stream firstAudio=\(String(format: "%.0f", NetworkLatency.elapsedMs(since: started)), privacy: .public)ms chunk=\(chunk.count, privacy: .public)B model=\(Settings.shared.cloudTTSModel, privacy: .public)"
+                    "TTS stream firstAudio=\(String(format: "%.0f", NetworkLatency.elapsedMs(since: started)), privacy: .public)ms chunk=\(chunk.count, privacy: .public)B model=\(modelLog, privacy: .public)"
                 )
                 Task { @MainActor in self.setBuffering(false) }
             }
@@ -236,7 +240,7 @@ final class CloudSpeechSynthesizer {
 
     func play(_ url: URL) {
         lastOutputURL = url
-        _ = AudioFilePlayer.shared.play(url)
+        _ = AudioFilePlayer.shared.play(url, deleteOnStop: !LocalContentPrivacy.retainsLocalContentHistory)
     }
 
     func stop() {
@@ -258,13 +262,14 @@ final class CloudSpeechSynthesizer {
     private static func errorMessage(from data: Data) -> String {
         if let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let error = parsed["error"] as? [String: Any] {
-                if let message = error["message"] as? String { return message }
-                return String(describing: error)
+                if let message = error["message"] as? String { return SensitiveLogRedactor.redact(message) }
+                return SensitiveLogRedactor.redact(String(describing: error))
             }
-            if let message = parsed["message"] as? String { return message }
+            if let message = parsed["message"] as? String { return SensitiveLogRedactor.redact(message) }
         }
-        return String(data: data, encoding: .utf8)?
+        let message = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return SensitiveLogRedactor.redact(message)
     }
 }
 
@@ -346,11 +351,12 @@ enum CloudSpeechError: LocalizedError {
         case .missingAPIKey:
             return "Add an OpenRouter or OpenAI API key in Voice settings."
         case .invalidBaseURL(let value):
-            return "Invalid TTS base URL: \(value)"
+            return "Invalid TTS base URL: \(SensitiveLogRedactor.redact(value))"
         case .noResponse:
             return "The TTS provider did not return a valid response."
         case .httpStatus(let status, let message):
-            return message.isEmpty ? "TTS provider returned HTTP \(status)." : "TTS provider returned HTTP \(status): \(message)"
+            let redacted = SensitiveLogRedactor.redact(message)
+            return redacted.isEmpty ? "TTS provider returned HTTP \(status)." : "TTS provider returned HTTP \(status): \(redacted)"
         case .emptyAudio:
             return "The TTS provider returned an empty audio file."
         }

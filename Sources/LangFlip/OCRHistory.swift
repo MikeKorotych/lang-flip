@@ -18,15 +18,17 @@ struct OCRHistoryEntry: Identifiable, Codable {
 
 final class OCRHistory: ObservableObject {
     static let shared = OCRHistory()
+    static let storageKey = "lf.ocrHistory"
 
     @Published private(set) var entries: [OCRHistoryEntry] = []
 
-    private let key = "lf.ocrHistory"
+    private let key = OCRHistory.storageKey
     private let maxEntries = 300
 
     private init() { load() }
 
     func add(_ text: String) {
+        guard LocalContentPrivacy.retainsLocalContentHistory else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let entry = OCRHistoryEntry(text: trimmed)
@@ -62,6 +64,10 @@ final class OCRHistory: ObservableObject {
     }
 
     private func load() {
+        guard LocalContentPrivacy.retainsLocalContentHistory else {
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
         guard let data = UserDefaults.standard.data(forKey: key),
               let decoded = try? JSONDecoder().decode([OCRHistoryEntry].self, from: data)
         else { return }
@@ -69,6 +75,10 @@ final class OCRHistory: ObservableObject {
     }
 
     private func save() {
+        guard LocalContentPrivacy.retainsLocalContentHistory else {
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
         if let data = try? JSONEncoder().encode(entries) {
             UserDefaults.standard.set(data, forKey: key)
         }

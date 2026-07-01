@@ -16,7 +16,10 @@ The user-visible capture UI (`/usr/sbin/screencapture -i`) is interactive and ou
 - OpenRouter OCR requests now set `provider.sort = "latency"` and `reasoning.exclude = true`.
 - Backend OCR now routes models prefixed with `groq/` directly to Groq. The Groq API key stays server-side; the app only sends the model id.
 - Groq Qwen OCR uses `reasoning_format = "hidden"` server-side, so `<think>` output does not leak into OCR text.
-- Backend app OCR now sends `Settings.shared.cloudOCRModel`, so the Developer vision-model picker actually controls backend OCR.
+- Security follow-up: Sayful Cloud OCR no longer sends arbitrary
+  `Settings.shared.cloudOCRModel` values from the app. The Developer
+  vision-model picker remains for BYOK/direct-provider mode; backend OCR should
+  choose from server-side allowed defaults.
 - Added `Scripts/ocr-bench.sh` for reproducible backend/OpenRouter OCR latency checks.
 - Updated the Developer OCR test copy so it no longer says Ollama-only.
 

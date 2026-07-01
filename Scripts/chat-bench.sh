@@ -52,7 +52,10 @@ esac
 [[ -z "${KEY:-}" ]] && { echo "✗ no API key for preset '$PRESET'" >&2; exit 1; }
 
 # Build the request body for this shape (JSON-escape system/input via a heredoc + jq).
-PAYLOAD="$(mktemp)"; BODY="$(mktemp)"; trap 'rm -f "$PAYLOAD" "$BODY"' EXIT
+PAYLOAD="$(mktemp)"; BODY="$(mktemp)"
+AUTH_CONFIG="$(mktemp)"; chmod 600 "$AUTH_CONFIG"
+printf 'header = "Authorization: Bearer %s"\n' "$KEY" > "$AUTH_CONFIG"
+trap 'rm -f "$PAYLOAD" "$BODY" "$AUTH_CONFIG"' EXIT
 if [[ "$SHAPE" == "backend" ]]; then
   jq -n --arg s "$SYSTEM" --arg i "$INPUT" --arg m "$MODEL" --argjson mt "$MAXTOKENS" \
     '{system:$s, input:$i, maxTokens:$mt} + (if $m=="" then {} else {model:$m} end)' > "$PAYLOAD"
@@ -71,7 +74,7 @@ printf " %s\n" "------------------------------"
 ts=()
 for i in $(seq 1 "$RUNS"); do
   read -r total code < <(curl -s -o "$BODY" -w '%{time_total} %{http_code}\n' \
-    -X POST "$EP" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+    --config "$AUTH_CONFIG" -X POST "$EP" -H "Content-Type: application/json" \
     ${EXTRA_HEADERS[@]+"${EXTRA_HEADERS[@]}"} --data @"$PAYLOAD")
   tot=$(awk -v t="$total" 'BEGIN{printf "%.0f", t*1000}'); ts+=("$tot")
   printf " %-4s %7sms %5s\n" "$i" "$tot" "$code"

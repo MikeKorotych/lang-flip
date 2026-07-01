@@ -9,8 +9,9 @@ Sayful Cloud text-to-speech uses:
 App `CloudSpeechSynthesizer` -> Supabase Edge Function `/tts` -> provider.
 
 The backend calls OpenRouter's OpenAI-compatible `/audio/speech` endpoint. The
-provider API key stays server-side. The app sends text, voice, speed, optional
-instructions, and now the selected model.
+provider API key stays server-side. The app sends text, voice, speed, and
+optional instructions. For corporate safety, the app no longer sends arbitrary
+TTS model ids in Sayful Cloud mode; the backend chooses the allowed default.
 
 ## Changes Landed
 
@@ -32,8 +33,9 @@ Kore
 
 - The app's cloud TTS defaults and Developer settings were migrated from the
   removed OpenAI model to Gemini/Kore.
-- The app now sends `Settings.shared.cloudTTSModel` on backend TTS requests
-  instead of letting the backend silently choose.
+- Security follow-up: Sayful Cloud now lets the backend choose the allowed TTS
+  model. `Settings.shared.cloudTTSModel` remains for BYOK/direct-provider mode,
+  not for arbitrary backend model selection.
 - Added `Scripts/tts-bench.sh` for repeatable backend/direct TTS latency tests.
 
 ## Important Finding

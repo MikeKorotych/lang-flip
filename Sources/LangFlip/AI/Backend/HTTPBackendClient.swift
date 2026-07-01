@@ -6,10 +6,12 @@ import Foundation
 final class HTTPBackendClient: BackendClient {
     static let shared = HTTPBackendClient()
 
-    private let auth: SupabaseBackendAuth
+    private let authProvider: @MainActor () -> SupabaseBackendAuth
     private let base = BackendConfig.functionsBaseURL
 
-    init(auth: SupabaseBackendAuth = .shared) { self.auth = auth }
+    init(authProvider: @escaping @MainActor () -> SupabaseBackendAuth = { SupabaseBackendAuth.shared }) {
+        self.authProvider = authProvider
+    }
 
     // MARK: BackendClient
 
@@ -41,6 +43,8 @@ final class HTTPBackendClient: BackendClient {
         body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
         body.append(request.audio)
         body.append("\r\n".data(using: .utf8)!)
+        if let language = request.language { field("language", language) }
+        if let prompt = request.prompt { field("prompt", prompt) }
         if let model = request.model { field("model", model) }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
 
@@ -76,8 +80,11 @@ final class HTTPBackendClient: BackendClient {
         return try await send(path, rawBody: data, contentType: "application/json")
     }
 
-    private func makeRequest(path: String, token: String, rawBody: Data, contentType: String, extraHeaders: [String: String] = [:]) -> URLRequest {
-        var req = URLRequest(url: base.appendingPathComponent(path))
+    private func makeRequest(path: String, token: String, rawBody: Data, contentType: String, extraHeaders: [String: String] = [:]) throws -> URLRequest {
+        let url = base.appendingPathComponent(path)
+        try BackendConfig.requireTrustedBackendURL(url)
+
+        var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.timeoutInterval = 60
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -91,14 +98,15 @@ final class HTTPBackendClient: BackendClient {
     }
 
     private func send(_ path: String, rawBody: Data, contentType: String, extraHeaders: [String: String] = [:], isRetry: Bool = false) async throws -> Data {
+        let auth = await MainActor.run { authProvider() }
         let token = try await auth.currentBearerToken()
-        let req = makeRequest(path: path, token: token, rawBody: rawBody, contentType: contentType, extraHeaders: extraHeaders)
+        let req = try makeRequest(path: path, token: token, rawBody: rawBody, contentType: contentType, extraHeaders: extraHeaders)
 
         let (data, response): (Data, URLResponse)
         do {
             (data, response) = try await URLSession.shared.measuredData(for: req, label: latencyLabel(for: path))
         } catch {
-            throw BackendError(code: .network, message: error.localizedDescription)
+            throw BackendError(code: .network, message: SensitiveLogRedactor.redact(error.localizedDescription))
         }
         guard let http = response as? HTTPURLResponse else {
             throw BackendError(code: .network, message: "No response")
@@ -137,15 +145,16 @@ final class HTTPBackendClient: BackendClient {
         onResponse: (BackendPCMStreamInfo) throws -> Void,
         onChunk: (Data) throws -> Void
     ) async throws -> BackendPCMStreamInfo {
+        let auth = await MainActor.run { authProvider() }
         let token = try await auth.currentBearerToken()
-        let req = makeRequest(path: path, token: token, rawBody: rawBody, contentType: contentType)
+        let req = try makeRequest(path: path, token: token, rawBody: rawBody, contentType: contentType)
 
         let bytes: URLSession.AsyncBytes
         let response: URLResponse
         do {
             (bytes, response) = try await URLSession.shared.bytes(for: req)
         } catch {
-            throw BackendError(code: .network, message: error.localizedDescription)
+            throw BackendError(code: .network, message: SensitiveLogRedactor.redact(error.localizedDescription))
         }
         guard let http = response as? HTTPURLResponse else {
             throw BackendError(code: .network, message: "No response")
@@ -210,6 +219,6 @@ final class HTTPBackendClient: BackendClient {
             return BackendError(code: status == 429 ? .rateLimited : .server, message: "Request failed (\(status))")
         }
         let code = BackendError.Code(rawValue: env.error.code) ?? (status == 429 ? .quotaExceeded : .server)
-        return BackendError(code: code, message: env.error.message, resetAt: env.error.details?.resetAt)
+        return BackendError(code: code, message: SensitiveLogRedactor.redact(env.error.message), resetAt: env.error.details?.resetAt)
     }
 }

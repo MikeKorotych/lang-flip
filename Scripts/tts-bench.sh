@@ -41,7 +41,9 @@ esac
 [[ -z "${KEY:-}" ]] && { echo "✗ no API key for preset '$PRESET'" >&2; exit 1; }
 
 PAYLOAD="$(mktemp)"; BODY="$(mktemp)"
-trap 'rm -f "$PAYLOAD" "$BODY"' EXIT
+AUTH_CONFIG="$(mktemp)"; chmod 600 "$AUTH_CONFIG"
+printf 'header = "Authorization: Bearer %s"\n' "$KEY" > "$AUTH_CONFIG"
+trap 'rm -f "$PAYLOAD" "$BODY" "$AUTH_CONFIG"' EXIT
 
 if [[ "$SHAPE" == "backend" ]]; then
   jq -n --arg text "$TEXT" --arg model "$MODEL" --arg voice "$VOICE" --argjson speed "$SPEED" \
@@ -63,8 +65,8 @@ totals=(); ttfbs=()
 for i in $(seq 1 "$RUNS"); do
   read -r start total bytes code ctype < <(curl -s -o "$BODY" \
     -w '%{time_starttransfer} %{time_total} %{size_download} %{http_code} %{content_type}\n' \
+    --config "$AUTH_CONFIG" \
     -X POST "$EP" \
-    -H "Authorization: Bearer $KEY" \
     -H "Content-Type: application/json" \
     ${EXTRA_HEADERS[@]+"${EXTRA_HEADERS[@]}"} \
     --data @"$PAYLOAD")

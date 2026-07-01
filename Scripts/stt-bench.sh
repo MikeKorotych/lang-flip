@@ -27,6 +27,7 @@
 #   PHRASE   text spoken into the fixture   (default: canonical ~8s dictation)
 #   FIXTURE  path to the wav                 (default: /tmp/sayful-stt-fixture.wav)
 #   RUNS     number of requests             (default: 10, or 2nd positional arg)
+#   STT_PROMPT optional transcription guidance sent as the provider `prompt`
 #   STT_BASE_URL / STT_MODEL / STT_API_KEY / STT_MODE   (for preset=custom)
 #
 # The OpenRouter key is read from the app's Keychain automatically
@@ -48,6 +49,7 @@ PRESET="${1:-openrouter-json}"
 RUNS="${2:-${RUNS:-10}}"
 FIXTURE="${FIXTURE:-/tmp/sayful-stt-fixture.wav}"
 PHRASE="${PHRASE:-Hey team, quick update on the project. I finished the latency instrumentation today and the next step is to benchmark the speech to text pipeline.}"
+STT_PROMPT="${STT_PROMPT:-Українська. Русский. English. Суржик. затестить фічу переводить язык но. GitHub Sayful speech-to-text pipeline.}"
 
 keychain_openrouter_key() {
   security find-generic-password -s com.antonpinkevych.lang-flip -a cloud-ai-api-key -w 2>/dev/null || true
@@ -92,6 +94,9 @@ if [[ -z "${API_KEY:-}" ]]; then
   exit 1
 fi
 
+AUTH_CONFIG="$(mktemp)"; chmod 600 "$AUTH_CONFIG"
+printf 'header = "Authorization: Bearer %s"\n' "$API_KEY" > "$AUTH_CONFIG"
+
 # ---- Generate the deterministic fixture once --------------------------------
 # VOICE picks the `say` voice — e.g. Lesya (uk_UA) / Milena (ru_RU) for Cyrillic
 # fixtures, so we can compare STT models on the user's actual languages.
@@ -112,12 +117,13 @@ echo "════════════════════════�
 
 ENDPOINT="$BASE_URL/$EP_PATH"
 BODY="$(mktemp)"; PAYLOAD="$(mktemp)"
-trap 'rm -f "$BODY" "$PAYLOAD"' EXIT
+trap 'rm -f "$BODY" "$PAYLOAD" "$AUTH_CONFIG"' EXIT
 
 # Pre-build the JSON payload (base64 audio) once for json mode.
 if [[ "$MODE" == "json" ]]; then
   B64=$(base64 -i "$FIXTURE" | tr -d '\n')
-  printf '{"model":"%s","input_audio":{"data":"%s","format":"wav"}}' "$MODEL" "$B64" > "$PAYLOAD"
+  jq -n --arg model "$MODEL" --arg data "$B64" --arg prompt "$STT_PROMPT" \
+    '{model:$model,prompt:$prompt,input_audio:{data:$data,format:"wav"}}' > "$PAYLOAD"
 fi
 
 # Trailing \n matters: `read` returns non-zero at EOF with no newline, which
@@ -137,8 +143,7 @@ for i in $(seq 1 "$RUNS"); do
     else
       printf '{}' > "$RESERVE_BODY"
     fi
-    RID=$(curl -s -X POST "$RESERVE_ENDPOINT" \
-      -H "Authorization: Bearer $API_KEY" \
+    RID=$(curl -s --config "$AUTH_CONFIG" -X POST "$RESERVE_ENDPOINT" \
       ${EXTRA_HEADERS[@]+"${EXTRA_HEADERS[@]}"} \
       -H "Content-Type: application/json" \
       --data @"$RESERVE_BODY" | jq -r '.reservation.id // empty')
@@ -151,11 +156,13 @@ for i in $(seq 1 "$RUNS"); do
   # Only send `model` when one is set (backend default = empty → server picks).
   MODEL_FIELD=()
   if [[ -n "$MODEL" ]]; then MODEL_FIELD=(-F "model=$MODEL"); fi
+  PROMPT_FIELD=()
+  if [[ -n "$STT_PROMPT" ]]; then PROMPT_FIELD=(-F "prompt=$STT_PROMPT"); fi
   # bash 3.2 + `set -u`: guard empty-array expansion with the [@]+ idiom.
   if [[ "$MODE" == "json" ]]; then
     read -r dns conn appc pre start total up code < <(curl -s -o "$BODY" -w "$WFMT" \
+      --config "$AUTH_CONFIG" \
       -X POST "$ENDPOINT" \
-      -H "Authorization: Bearer $API_KEY" \
       -H "Content-Type: application/json" \
       ${EXTRA_HEADERS[@]+"${EXTRA_HEADERS[@]}"} \
       ${RESERVE_HEADER[@]+"${RESERVE_HEADER[@]}"} \
@@ -163,12 +170,14 @@ for i in $(seq 1 "$RUNS"); do
       --data @"$PAYLOAD")
   else
     read -r dns conn appc pre start total up code < <(curl -s -o "$BODY" -w "$WFMT" \
+      --config "$AUTH_CONFIG" \
       -X POST "$ENDPOINT" \
-      -H "Authorization: Bearer $API_KEY" \
       ${EXTRA_HEADERS[@]+"${EXTRA_HEADERS[@]}"} \
       ${RESERVE_HEADER[@]+"${RESERVE_HEADER[@]}"} \
       -H "X-Title: Sayful" -H "HTTP-Referer: https://github.com/MikeKorotych/lang-flip" \
-      -F "$FILE_FIELD=@$FIXTURE" ${MODEL_FIELD[@]+"${MODEL_FIELD[@]}"})
+      -F "$FILE_FIELD=@$FIXTURE" \
+      ${MODEL_FIELD[@]+"${MODEL_FIELD[@]}"} \
+      ${PROMPT_FIELD[@]+"${PROMPT_FIELD[@]}"})
   fi
 
   # cumulative seconds → per-phase milliseconds

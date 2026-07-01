@@ -56,7 +56,7 @@ final class AIAssistantManager {
             openaiModel:    mode == .openai  ? Settings.shared.openaiModel : nil,
             openaiBaseURL:  mode == .openai  ? Settings.shared.openaiBaseURL : nil,
             openaiHasKey:   mode == .openai  ? !(Settings.shared.openaiAPIKey?.isEmpty ?? true) : false,
-            backendSignedIn: mode == .backend ? SupabaseBackendAuth.shared.isSignedIn : false
+            backendSignedIn: mode == .backend ? SupabaseBackendAuth.hasStoredSession : false
         )
     }
 

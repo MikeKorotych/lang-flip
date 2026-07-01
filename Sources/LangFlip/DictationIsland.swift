@@ -218,10 +218,14 @@ final class DictationIslandController {
     }
 
     func dismissToast() {
+        let shouldDiscardCancelledRecording = state.showCancelledToast
         toastTimer?.invalidate()
         toastTimer = nil
         state.showCancelledToast = false
         state.showFailedToast = false
+        if shouldDiscardCancelledRecording {
+            VoiceDictationController.shared.discardPendingCancelledRecording()
+        }
         updateHover()
     }
 

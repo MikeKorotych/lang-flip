@@ -4,7 +4,26 @@ build/
 *.xcodeproj/
 DerivedData/
 .DS_Store
-Package.resolved
 release-notes.md
+
+# Local secrets / environment. Bench scripts intentionally load secrets from
+# ~/.sayful-bench.env outside the repo; keep accidental local copies out.
+.env
+.env.*
+*.env
+.sayful-bench.env
+
+# Apple signing / notarization material. These must live in Keychain,
+# developer machines, or CI secret storage, never in git.
+*.p8
+*.p12
+*.pem
+*.cer
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
+*.xcarchive
+*.dSYM/
+
 # Internal-only strategy doc — kept local, not for the public repo.
 docs/INTERNAL-RELAUNCH-PLAN.md

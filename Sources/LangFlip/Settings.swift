@@ -643,6 +643,9 @@ final class Settings {
         static let openaiModel = "lf.openaiModel"
         static let openaiBaseURL = "lf.openaiBaseURL"
         static let devTextCorrectionModel = "lf.dev.textCorrectionModel"
+        static let keepSuccessfulDictationRecordings = "lf.dev.keepSuccessfulDictationRecordings"
+        static let sttTranscriptionPromptTemplate = "lf.dev.sttTranscriptionPromptTemplate"
+        static let dictationFormatPromptTemplate = "lf.dev.dictationFormatPromptTemplate"
         static let textCorrectionPromptTemplate = "lf.dev.textCorrectionPromptTemplate"
         static let cloudOCRModel = "lf.cloudOCRModel"
         static let ttsBackend = "lf.ttsBackend"
@@ -840,11 +843,11 @@ final class Settings {
         set { defaults.set(newValue, forKey: Keys.accountAvatarPath) }
     }
 
-    /// Routine dictation banners (recording started / transcribing / inserted).
-    /// Off by default — the island already shows live state, so the banners are
-    /// just noise; users who want them can opt in. Error banners ignore this.
+    /// Actionable dictation banners (no speech recognized / transcription failed).
+    /// On by default; routine progress and successful insertion stay quiet because
+    /// the island and insertion itself already provide feedback.
     var dictationNotifications: Bool {
-        get { defaults.object(forKey: Keys.dictationNotifications) as? Bool ?? false }
+        get { defaults.object(forKey: Keys.dictationNotifications) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.dictationNotifications) }
     }
 
@@ -1287,13 +1290,7 @@ final class Settings {
     }
 
     var backendSTTModelOverride: String? {
-        if defaults.bool(forKey: "lf.showAdvancedAI") {
-            let model = cloudSTTModel.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !model.isEmpty, model != DictationTranscriptionMode.fastModelID {
-                return model
-            }
-        }
-        return dictationTranscriptionMode.backendModelOverride
+        BackendModelPolicy.sttModelOverride(for: dictationTranscriptionMode)
     }
 
     /// Default target language for menu-driven translate-selection.
@@ -1393,6 +1390,11 @@ final class Settings {
         }
     }
 
+    var keepSuccessfulDictationRecordings: Bool {
+        get { defaults.bool(forKey: Keys.keepSuccessfulDictationRecordings) }
+        set { defaults.set(newValue, forKey: Keys.keepSuccessfulDictationRecordings) }
+    }
+
     var textCorrectionPromptTemplate: String {
         get {
             let raw = defaults.string(forKey: Keys.textCorrectionPromptTemplate) ?? ""
@@ -1404,6 +1406,36 @@ final class Settings {
                 defaults.removeObject(forKey: Keys.textCorrectionPromptTemplate)
             } else {
                 defaults.set(newValue, forKey: Keys.textCorrectionPromptTemplate)
+            }
+        }
+    }
+
+    var sttTranscriptionPromptTemplate: String {
+        get {
+            let raw = defaults.string(forKey: Keys.sttTranscriptionPromptTemplate) ?? ""
+            return raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? STTTranscriptionPrompt.defaultText : raw
+        }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed == STTTranscriptionPrompt.defaultText.trimmingCharacters(in: .whitespacesAndNewlines) || trimmed.isEmpty {
+                defaults.removeObject(forKey: Keys.sttTranscriptionPromptTemplate)
+            } else {
+                defaults.set(newValue, forKey: Keys.sttTranscriptionPromptTemplate)
+            }
+        }
+    }
+
+    var dictationFormatPromptTemplate: String {
+        get {
+            let raw = defaults.string(forKey: Keys.dictationFormatPromptTemplate) ?? ""
+            return raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? BackendAssistant.defaultDictationFormatPrompt : raw
+        }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed == BackendAssistant.defaultDictationFormatPrompt.trimmingCharacters(in: .whitespacesAndNewlines) || trimmed.isEmpty {
+                defaults.removeObject(forKey: Keys.dictationFormatPromptTemplate)
+            } else {
+                defaults.set(newValue, forKey: Keys.dictationFormatPromptTemplate)
             }
         }
     }

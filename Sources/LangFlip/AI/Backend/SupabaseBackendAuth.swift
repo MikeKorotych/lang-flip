@@ -1,6 +1,7 @@
 import AppKit
 import AuthenticationServices
 import Foundation
+import Security
 
 /// `BackendAuth` for the Supabase branch. Drives Google sign-in via Supabase
 /// GoTrue + `ASWebAuthenticationSession` (no SDK dependency), stores the
@@ -21,8 +22,12 @@ final class SupabaseBackendAuth: NSObject, ObservableObject, BackendAuth {
 
     // MARK: BackendAuth
 
-    nonisolated var isSignedIn: Bool {
+    nonisolated static var hasStoredSession: Bool {
         KeychainStore.getString(account: KeychainStore.backendAccessToken)?.isEmpty == false
+    }
+
+    nonisolated var isSignedIn: Bool {
+        Self.hasStoredSession
     }
 
     func currentBearerToken() async throws -> String {
@@ -35,16 +40,10 @@ final class SupabaseBackendAuth: NSObject, ObservableObject, BackendAuth {
     /// Google sign-in through Supabase. Opens the system auth sheet, captures
     /// the token fragment from the callback, persists it, then loads `/me`.
     func signIn() async throws -> BackendUser {
-        var comps = URLComponents(url: BackendConfig.authBaseURL.appendingPathComponent("authorize"), resolvingAgainstBaseURL: false)!
-        comps.queryItems = [
-            .init(name: "provider", value: "google"),
-            .init(name: "redirect_to", value: BackendConfig.callbackURL),
-        ]
-        guard let authURL = comps.url else {
-            throw BackendError(code: .unknown, message: "Could not build the sign-in URL")
-        }
-
+        let state = try SupabaseOAuthFlow.makeState()
+        let authURL = try SupabaseOAuthFlow.authorizeURL(state: state)
         let callback = try await presentWebAuth(url: authURL)
+        try SupabaseOAuthFlow.validateCallback(callback, expectedState: state)
         let tokens = try parseTokens(from: callback)
         store(tokens)
         return try await refreshUser()
@@ -52,7 +51,10 @@ final class SupabaseBackendAuth: NSObject, ObservableObject, BackendAuth {
 
     func refreshUser() async throws -> BackendUser {
         let token = try await currentBearerToken()
-        var req = URLRequest(url: BackendConfig.functionsBaseURL.appendingPathComponent("me"))
+        let url = BackendConfig.functionsBaseURL.appendingPathComponent("me")
+        try BackendConfig.requireTrustedBackendURL(url)
+
+        var req = URLRequest(url: url)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue(BackendConfig.anonKey, forHTTPHeaderField: "apikey")
 
@@ -104,6 +106,7 @@ final class SupabaseBackendAuth: NSObject, ObservableObject, BackendAuth {
         req.url = URLComponents(url: req.url!, resolvingAgainstBaseURL: false).map {
             var c = $0; c.queryItems = [.init(name: "grant_type", value: "refresh_token")]; return c
         }?.url
+        try BackendConfig.requireTrustedBackendURL(req.url!)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue(BackendConfig.anonKey, forHTTPHeaderField: "apikey")
@@ -179,5 +182,64 @@ final class SupabaseBackendAuth: NSObject, ObservableObject, BackendAuth {
 extension SupabaseBackendAuth: ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         NSApp.windows.first(where: { $0.isVisible }) ?? NSApp.keyWindow ?? NSWindow()
+    }
+}
+
+enum SupabaseOAuthFlow {
+    static let callbackStateParameter = "lf_state"
+
+    static func makeState(byteCount: Int = 32) throws -> String {
+        var bytes = [UInt8](repeating: 0, count: byteCount)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        guard status == errSecSuccess else {
+            throw BackendError(code: .unknown, message: "Could not prepare sign-in")
+        }
+        return Data(bytes)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    static func authorizeURL(state: String) throws -> URL {
+        var comps = URLComponents(
+            url: BackendConfig.authBaseURL.appendingPathComponent("authorize"),
+            resolvingAgainstBaseURL: false)!
+        comps.queryItems = [
+            .init(name: "provider", value: "google"),
+            .init(name: "redirect_to", value: try callbackURL(state: state)),
+        ]
+        guard let url = comps.url else {
+            throw BackendError(code: .unknown, message: "Could not build the sign-in URL")
+        }
+        try BackendConfig.requireTrustedBackendURL(url)
+        return url
+    }
+
+    static func callbackURL(state: String) throws -> String {
+        guard !state.isEmpty,
+              var comps = URLComponents(string: BackendConfig.callbackURL) else {
+            throw BackendError(code: .unknown, message: "Could not build the sign-in callback")
+        }
+        comps.queryItems = [.init(name: callbackStateParameter, value: state)]
+        guard let url = comps.url else {
+            throw BackendError(code: .unknown, message: "Could not build the sign-in callback")
+        }
+        return url.absoluteString
+    }
+
+    static func validateCallback(_ callback: URL, expectedState: String) throws {
+        guard let expected = URLComponents(string: BackendConfig.callbackURL),
+              let actual = URLComponents(url: callback, resolvingAgainstBaseURL: false),
+              actual.scheme == expected.scheme,
+              actual.host == expected.host,
+              actual.path == expected.path else {
+            throw BackendError(code: .unauthenticated, message: "Invalid sign-in callback")
+        }
+
+        let state = actual.queryItems?.first { $0.name == callbackStateParameter }?.value
+        guard !expectedState.isEmpty, state == expectedState else {
+            throw BackendError(code: .unauthenticated, message: "Invalid sign-in state")
+        }
     }
 }

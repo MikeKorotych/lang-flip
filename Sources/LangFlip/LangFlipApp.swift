@@ -52,6 +52,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // settings + data before anything reads UserDefaults or writes a log.
         IdentityMigration.runIfNeeded()
 
+        // If a privacy-sensitive deployment disables local retention/learning,
+        // enforce that opt-out before any history or learned terms are loaded.
+        LocalContentPrivacy.enforceOnLaunch()
+
         // Reclaim old dictation recordings (transcribed audio is deleted on
         // success; this sweeps anything older than 30 days — e.g. never-retried
         // failures). Off the main thread so it can't slow launch.
@@ -137,7 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // If already signed in to the backend, load the account (role/quota) now
         // so the profile menu is correct from launch — not only after opening AI settings.
-        if SupabaseBackendAuth.shared.isSignedIn {
+        if SupabaseBackendAuth.hasStoredSession {
             Task { @MainActor in _ = try? await SupabaseBackendAuth.shared.refreshUser() }
         }
 

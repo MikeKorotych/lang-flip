@@ -19,6 +19,10 @@ enum FocusedTextReader {
         }
 
         let element = focusedRef as! AXUIElement
+        guard !FocusedTextPrivacy.isSensitive(element: element) else {
+            return nil
+        }
+
         var valueRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
               let value = valueRef as? String else {

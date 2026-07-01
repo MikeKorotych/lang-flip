@@ -99,7 +99,7 @@ final class EventTap {
         // singleton is first touched only after the user completes a word, that
         // first word can miss dictionary-scored auto-flip while the background
         // load is starting.
-        _ = AutoFlip.shared
+        AutoFlip.shared.ensureReadyForTyping()
 
         let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.flagsChanged.rawValue)
         let opaque = Unmanaged.passUnretained(self).toOpaque()
@@ -266,7 +266,7 @@ final class EventTap {
                     if Settings.shared.doubleCapsFix,
                        suppression == nil,
                        let fixed = DoubleCapsFix.correction(for: word) {
-                        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: double-caps fix '\(word)' → '\(fixed)'\n".utf8)) }
+                        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: double-caps fix wordLen=\(word.count) fixedLen=\(fixed.count)\n".utf8)) }
                         rewriteCompletedWord(originalLength: word.count, replacement: fixed, boundary: boundary)
                         FlipOverlay.shared.show()
                         word = fixed
@@ -279,7 +279,7 @@ final class EventTap {
                        suppression == nil,
                        !BackspaceLearner.shared.isExcluded(word),
                        let cross = CrossLayoutFix.correction(for: word, recentContext: buffer.recentHistory) {
-                        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: cross-layout fix '\(word)' → '\(cross.corrected)' (\(cross.target))\n".utf8)) }
+                        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: cross-layout fix wordLen=\(word.count) correctedLen=\(cross.corrected.count) target=\(cross.target)\n".utf8)) }
                         applyCrossLayoutFix(original: word, fix: cross, boundary: boundary)
                         word = cross.corrected
                     }
@@ -293,7 +293,7 @@ final class EventTap {
                                 case .userApp(let id):    reason = "user-blocked (\(id))"
                                 case .fullscreen:         reason = "fullscreen window"
                                 }
-                                FileHandle.standardError.write(Data("lang-flip[debug]: auto-flip suppressed: \(reason); word='\(word)'\n".utf8))
+                                FileHandle.standardError.write(Data("lang-flip[debug]: auto-flip suppressed: \(reason); wordLen=\(word.count)\n".utf8))
                             }
                         } else {
                             autoFlipIfNeeded(completedWord: word, boundary: boundary)
@@ -335,7 +335,7 @@ final class EventTap {
     /// the event-tap callback (main thread); switching the input source and
     /// posting events is fine here.
     private func performRollback(_ req: BackspaceLearner.RollbackRequest) {
-        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: rollback to '\(req.originalWord)' (\(req.sourceLayout))\n".utf8)) }
+        if debug { FileHandle.standardError.write(Data("lang-flip[debug]: rollback originalLen=\(req.originalWord.count) source=\(req.sourceLayout)\n".utf8)) }
         InputSource.switchTo(req.sourceLayout)
         postUnicode(req.originalWord + req.boundary)
         Sound.playFlip()
@@ -666,6 +666,10 @@ final class EventTap {
         convertSelectionIfPresent(targetNonEnglish: targetNonEnglish) { [weak self] didConvertSelection in
             guard let self else { return }
             if !didConvertSelection {
+                if self.focusedElementIsSensitive() {
+                    AppLog.write("double-shift skipped: focused sensitive text field")
+                    return
+                }
                 if Settings.shared.flipLastWordsOnDoubleShift,
                    self.flipFocusedLastWords(targetNonEnglish: targetNonEnglish) {
                     return
@@ -694,6 +698,12 @@ final class EventTap {
     // MARK: - Selection-based flip (Cmd+C / convert / Cmd+V)
 
     private func convertSelectionIfPresent(targetNonEnglish: Layout, completion: @escaping (Bool) -> Void) {
+        if focusedElementIsSensitive() {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: focused sensitive text field — skipped\n".utf8)) }
+            completion(false)
+            return
+        }
+
         switch focusedSelectionState() {
         case .none:
             completion(false)
@@ -758,7 +768,7 @@ final class EventTap {
                 }
 
                 guard let from = detectLayout(text) else {
-                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: detectLayout returned nil — no alphabetic chars in '\(text.prefix(40))'\n".utf8)) }
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: selection: detectLayout returned nil — \(SensitiveLogRedactor.contentSummary(text))\n".utf8)) }
                     snapshot.restore(to: pb)
                     completion(false)
                     return
@@ -775,8 +785,8 @@ final class EventTap {
 
                 if self.debug {
                     FileHandle.standardError.write(Data("lang-flip[debug]: selection \(from)→\(to), \(text.count) chars\n".utf8))
-                    FileHandle.standardError.write(Data("lang-flip[debug]:   in:  '\(text.prefix(80))\(text.count > 80 ? "…" : "")'\n".utf8))
-                    FileHandle.standardError.write(Data("lang-flip[debug]:   out: '\(converted.prefix(80))\(converted.count > 80 ? "…" : "")'\n".utf8))
+                    FileHandle.standardError.write(Data("lang-flip[debug]:   in:  \(SensitiveLogRedactor.contentSummary(text))\n".utf8))
+                    FileHandle.standardError.write(Data("lang-flip[debug]:   out: \(SensitiveLogRedactor.contentSummary(converted))\n".utf8))
                 }
 
                 pb.clearContents()
@@ -812,6 +822,12 @@ final class EventTap {
         let pb = NSPasteboard.general
         let snapshot = PasteboardSnapshot.capture(pb)
         let countBefore = pb.changeCount
+
+        guard !focusedElementIsSensitive() else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: focused sensitive text field — skipped\n".utf8)) }
+            snapshot.restore(to: pb)
+            return
+        }
 
         guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: AI not ready\n".utf8)) }
@@ -865,8 +881,8 @@ final class EventTap {
                                 case .translated(let translated):
                                     if self.debug {
                                         FileHandle.standardError.write(Data("lang-flip[debug]: translate \(text.count)→\(translated.count) chars\n".utf8))
-                                        FileHandle.standardError.write(Data("lang-flip[debug]:   in:  '\(text.prefix(80))\(text.count > 80 ? "…" : "")'\n".utf8))
-                                        FileHandle.standardError.write(Data("lang-flip[debug]:   out: '\(translated.prefix(80))\(translated.count > 80 ? "…" : "")'\n".utf8))
+                                        FileHandle.standardError.write(Data("lang-flip[debug]:   in:  \(SensitiveLogRedactor.contentSummary(text))\n".utf8))
+                                        FileHandle.standardError.write(Data("lang-flip[debug]:   out: \(SensitiveLogRedactor.contentSummary(translated))\n".utf8))
                                     }
                                     self.pasteTextThenRestoreClipboard(translated, snapshot: snapshot)
                                     Sound.playFlip()
@@ -879,7 +895,7 @@ final class EventTap {
                                         snapshot.restore()
                                     }
                                 case .failed(let reason):
-                                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: failed (\(reason))\n".utf8)) }
+                                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: translate: failed reasonLen=\(reason.count)\n".utf8)) }
                                     if didCutSelection {
                                         self.pasteTextThenRestoreClipboard(text, snapshot: snapshot)
                                     } else {
@@ -912,6 +928,12 @@ final class EventTap {
         let pb = NSPasteboard.general
         let snapshot = PasteboardSnapshot.capture(pb)
         let countBefore = pb.changeCount
+
+        guard !focusedElementIsSensitive() else {
+            snapshot.restore(to: pb)
+            Notifications.show(title: transform.name, body: "Focused field is protected.")
+            return
+        }
 
         guard Settings.shared.aiMode != .off, AIAssistantManager.shared.isReady else {
             Notifications.show(title: "Transform", body: Self.aiUnavailableHint())
@@ -1083,13 +1105,12 @@ final class EventTap {
                             pb.clearContents()
                             pb.setString(trimmed, forType: .string)
                             Sound.playFlip()
-                            let preview = String(trimmed.prefix(60)).replacingOccurrences(of: "\n", with: " ")
-                            Notifications.show(title: "Text copied", body: trimmed.count > 60 ? "\(preview)…" : preview)
+                            Notifications.show(title: "Text copied", body: "Copied \(trimmed.count) characters from the selected screen area.")
                         case .unsupported:
                             if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: assistant doesn't support OCR\n".utf8)) }
                             Notifications.show(title: "Sayful", body: "Copy text from screenshot needs a vision-capable model. Switch to Ollama with Qwen 3.5 in Preferences.")
                         case .failed(let reason):
-                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: failed: \(reason)\n".utf8)) }
+                            if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: ocr: failed reasonLen=\(reason.count)\n".utf8)) }
                             Notifications.show(title: "Copy text from screenshot failed", body: reason)
                         }
                     }
@@ -1153,7 +1174,7 @@ final class EventTap {
                 switch decision {
                 case .dontFlip:
                     if self.debug {
-                        FileHandle.standardError.write(Data("lang-flip[debug]: AI vetoed flip '\(original)' → '\(converted)'\n".utf8))
+                        FileHandle.standardError.write(Data("lang-flip[debug]: AI vetoed flip originalLen=\(original.count) convertedLen=\(converted.count)\n".utf8))
                     }
                 case .flip, .unknown:
                     self.applyAutoFlip(
@@ -1235,6 +1256,11 @@ final class EventTap {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift grammar skipped: AI not ready\n".utf8)) }
             return
         }
+        guard !focusedElementIsSensitive() else {
+            AppLog.write("single-shift grammar skipped: focused sensitive text field")
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift grammar skipped: focused sensitive text field\n".utf8)) }
+            return
+        }
 
         let pb = NSPasteboard.general
         let snapshot = PasteboardSnapshot.capture(pb)
@@ -1308,8 +1334,8 @@ final class EventTap {
                     if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift selection grammar — unsupported\n".utf8)) }
                     snapshot.restore(to: pb)
                 case .failed(let reason):
-                    AppLog.write("single-shift selection failed: \(reason)")
-                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift selection grammar — failed: \(reason)\n".utf8)) }
+                    AppLog.write("single-shift selection failed reasonLen=\(reason.count)")
+                    if self.debug { FileHandle.standardError.write(Data("lang-flip[debug]: single-shift selection grammar — failed reasonLen=\(reason.count)\n".utf8)) }
                     snapshot.restore(to: pb)
                 }
             }
@@ -1318,6 +1344,11 @@ final class EventTap {
 
 
     private func tryKeyboardLineDoubleShiftFallback(targetNonEnglish: Layout) -> Bool {
+        guard !AppContext.frontmostAppIsTerminal() else {
+            AppLog.write("double-shift no-selection fallback skipped in terminal")
+            return false
+        }
+
         if let buffered = bufferedKeyboardFlipTarget(targetNonEnglish: targetNonEnglish) {
             return tryBufferedKeyboardDoubleShiftFallback(buffered, targetNonEnglish: targetNonEnglish)
         }
@@ -1529,6 +1560,7 @@ final class EventTap {
 
     private func focusedSelectionState() -> FocusedSelectionState {
         guard let element = focusedElement() else { return .unknown }
+        guard !FocusedTextPrivacy.isSensitive(element: element) else { return .none }
 
         var selectedTextRef: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &selectedTextRef) == .success,
@@ -1546,6 +1578,10 @@ final class EventTap {
     private func focusedTextContext() -> FocusedTextContext? {
         guard let element = focusedElement() else {
             if debug { FileHandle.standardError.write(Data("lang-flip[debug]: focused text: no focused AX element\n".utf8)) }
+            return nil
+        }
+        guard !FocusedTextPrivacy.isSensitive(element: element) else {
+            if debug { FileHandle.standardError.write(Data("lang-flip[debug]: focused text: sensitive AX element — skipped\n".utf8)) }
             return nil
         }
 
@@ -1570,6 +1606,11 @@ final class EventTap {
         range.location = max(0, min(range.location, value.utf16.count))
         range.length = max(0, min(range.length, value.utf16.count - range.location))
         return FocusedTextContext(element: element, value: value, selectedRange: range)
+    }
+
+    private func focusedElementIsSensitive() -> Bool {
+        guard let element = focusedElement() else { return false }
+        return FocusedTextPrivacy.isSensitive(element: element)
     }
 
     private func setFocusedSelection(_ range: CFRange, in element: AXUIElement) -> Bool {
@@ -1698,7 +1739,7 @@ final class EventTap {
 
     private func manualFlipCandidate(for token: String, targetNonEnglish: Layout, requireConfidence: Bool) -> ManualFlipCandidate? {
         guard let source = detectLayout(token) else { return nil }
-        let target = resolveTarget(source: source, configured: targetNonEnglish)
+        let target = resolveManualTarget(source: source, token: token, configured: targetNonEnglish)
         let converted = convert(token, from: source, to: target)
         guard converted != token else { return nil }
         if requireConfidence,
@@ -1706,6 +1747,28 @@ final class EventTap {
             return nil
         }
         return ManualFlipCandidate(source: source, target: target, converted: converted)
+    }
+
+    func resolveManualTarget(source: Layout, token: String, configured: Layout) -> Layout {
+        guard source == .en else {
+            return .en
+        }
+        guard AutoFlip.shared.isReady else {
+            return configured
+        }
+
+        let configuredLexeme = dictionaryLexeme(convert(token, from: source, to: configured))
+        if AutoFlip.shared.isKnown(configuredLexeme, in: configured) {
+            return configured
+        }
+
+        for alternate in Layout.nonEnglish where alternate != configured {
+            let alternateLexeme = dictionaryLexeme(convert(token, from: source, to: alternate))
+            if AutoFlip.shared.isKnown(alternateLexeme, in: alternate) {
+                return alternate
+            }
+        }
+        return configured
     }
 
     private func isConfidentManualRunToken(original: String, source: Layout, converted: String, target: Layout) -> Bool {
@@ -1921,7 +1984,7 @@ private extension EventTap {
     }
 
     static func aiUnavailableHint() -> String {
-        if Settings.shared.aiMode == .backend && !SupabaseBackendAuth.shared.isSignedIn {
+        if Settings.shared.aiMode == .backend && !SupabaseBackendAuth.hasStoredSession {
             return "Sign in to Sayful Cloud to use AI — open the profile menu (top-right of the window)."
         }
         return "AI isn't set up yet. Configure it in Settings → AI."
@@ -1934,7 +1997,7 @@ private extension EventTap {
         case .openai:
             return !(Settings.shared.openaiAPIKey?.isEmpty ?? true)
         case .backend:
-            return SupabaseBackendAuth.shared.isSignedIn
+            return SupabaseBackendAuth.hasStoredSession
         case .off, .appleFoundation, .bundledModel:
             return false
         }

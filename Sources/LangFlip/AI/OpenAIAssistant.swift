@@ -286,7 +286,7 @@ final class OpenAIAssistant: AIAssistant {
                 "\(label, privacy: .public) wall=\(String(format: "%.0f", NetworkLatency.elapsedMs(since: started)), privacy: .public)ms resp=\(data?.count ?? 0, privacy: .public)B"
             )
             if let error {
-                completion(.failure("network: \(error.localizedDescription)"))
+                completion(.failure("network: \(SensitiveLogRedactor.redact(error.localizedDescription))"))
                 return
             }
             guard let http = response as? HTTPURLResponse else {
@@ -302,7 +302,7 @@ final class OpenAIAssistant: AIAssistant {
             if !(200..<300).contains(http.statusCode) {
                 if let err = parsed?["error"] as? [String: Any],
                    let msg = err["message"] as? String {
-                    completion(.failure("HTTP \(http.statusCode): \(msg)"))
+                    completion(.failure("HTTP \(http.statusCode): \(SensitiveLogRedactor.redact(msg))"))
                 } else {
                     completion(.failure("HTTP \(http.statusCode)"))
                 }

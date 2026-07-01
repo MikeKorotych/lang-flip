@@ -76,15 +76,17 @@ struct DictationEntry: Identifiable, Codable {
 /// archive.
 final class DictationHistory: ObservableObject {
     static let shared = DictationHistory()
+    static let storageKey = "lf.dictationHistory"
 
     @Published private(set) var entries: [DictationEntry] = []
 
-    private let key = "lf.dictationHistory"
+    private let key = DictationHistory.storageKey
     private let maxEntries = 500
 
     private init() { load() }
 
     func add(_ text: String, duration: Double? = nil, app: String? = nil) {
+        guard LocalContentPrivacy.retainsLocalContentHistory else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let entry = DictationEntry(text: trimmed, duration: duration, app: app)
@@ -94,7 +96,12 @@ final class DictationHistory: ObservableObject {
     }
 
     @discardableResult
-    func recordFailure(audioURL: URL, duration: Double?, app: String?, error: String, replacing id: UUID? = nil) -> UUID {
+    func recordFailure(audioURL: URL, duration: Double?, app: String?, error: String, replacing id: UUID? = nil) -> UUID? {
+        guard LocalContentPrivacy.retainsLocalContentHistory else {
+            try? FileManager.default.removeItem(at: audioURL)
+            VoiceRecorder.shared.clearLastRecording(if: audioURL)
+            return nil
+        }
         let entryID = id ?? UUID()
         let entry = DictationEntry(
             id: entryID,
@@ -103,7 +110,7 @@ final class DictationHistory: ObservableObject {
             app: app,
             status: .failed,
             audioPath: audioURL.path,
-            errorMessage: error
+            errorMessage: SensitiveLogRedactor.redact(error)
         )
         DispatchQueue.main.async {
             if let idx = self.entries.firstIndex(where: { $0.id == entryID }) {
@@ -159,6 +166,7 @@ final class DictationHistory: ObservableObject {
     }
 
     func markRetrying(id: UUID) {
+        guard LocalContentPrivacy.retainsLocalContentHistory else { return }
         DispatchQueue.main.async {
             guard let idx = self.entries.firstIndex(where: { $0.id == id }) else { return }
             let previous = self.entries[idx]
@@ -177,6 +185,7 @@ final class DictationHistory: ObservableObject {
     }
 
     func replaceFailed(id: UUID, with text: String, duration: Double? = nil, app: String? = nil) {
+        guard LocalContentPrivacy.retainsLocalContentHistory else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         DispatchQueue.main.async {
@@ -199,6 +208,10 @@ final class DictationHistory: ObservableObject {
     }
 
     private func load() {
+        guard LocalContentPrivacy.retainsLocalContentHistory else {
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
         guard let data = UserDefaults.standard.data(forKey: key),
               let decoded = try? JSONDecoder().decode([DictationEntry].self, from: data)
         else { return }
@@ -223,6 +236,10 @@ final class DictationHistory: ObservableObject {
     }
 
     private func save() {
+        guard LocalContentPrivacy.retainsLocalContentHistory else {
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
         if let data = try? JSONEncoder().encode(entries) {
             UserDefaults.standard.set(data, forKey: key)
         }
@@ -231,8 +248,19 @@ final class DictationHistory: ObservableObject {
     private func insert(_ entry: DictationEntry) {
         entries.insert(entry, at: 0)
         if entries.count > maxEntries {
-            entries.removeLast(entries.count - maxEntries)
+            let overflow = entries.count - maxEntries
+            let removed = Array(entries.suffix(overflow))
+            entries.removeLast(overflow)
+            Self.deleteAudioFiles(for: removed)
         }
         save()
+    }
+
+    private static func deleteAudioFiles(for entries: [DictationEntry]) {
+        let urls = entries.compactMap(\.audioURL)
+        guard !urls.isEmpty else { return }
+        DispatchQueue.global(qos: .utility).async {
+            urls.forEach { try? FileManager.default.removeItem(at: $0) }
+        }
     }
 }

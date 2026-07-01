@@ -19,8 +19,7 @@ enum AppContext {
     /// markdown, docs) with code, and a blanket block makes the app useless
     /// to anyone living in their editor. Users who want them silenced can
     /// add them via the "Disable auto-flip in [App]" menu item.
-    private static let builtinBlocklist: Set<String> = [
-        // Terminals
+    private static let terminalBundleIDs: Set<String> = [
         "com.apple.Terminal",
         "com.googlecode.iterm2",
         "dev.warp.Warp-Stable",
@@ -30,7 +29,9 @@ enum AppContext {
         "io.alacritty",
         "net.kovidgoyal.kitty",
         "com.tabby",
+    ]
 
+    private static let builtinBlocklist: Set<String> = terminalBundleIDs.union([
         // Password managers (defence-in-depth — substring rules below also catch them)
         "com.1password.1password",
         "com.1password.1password7",
@@ -42,7 +43,7 @@ enum AppContext {
         "com.dashlane.Dashlane",
         "com.bitwarden.desktop",
         "io.keepassxc.KeePassXC",
-    ]
+    ])
 
     /// Substrings that, when contained anywhere in the lowercased bundle ID,
     /// are an unambiguous signal to stay quiet (catches plugin-style IDs
@@ -63,6 +64,15 @@ enum AppContext {
     /// focus, so this stays correct even while our menu is open.
     static func frontmostBundleID() -> String? {
         return NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+    }
+
+    static func isTerminalBundleID(_ bundleID: String) -> Bool {
+        return terminalBundleIDs.contains(bundleID)
+    }
+
+    static func frontmostAppIsTerminal() -> Bool {
+        guard let bundleID = frontmostBundleID() else { return false }
+        return isTerminalBundleID(bundleID)
     }
 
     /// Localised name of the focused application, for display in our menu.

@@ -17,7 +17,7 @@ enum AppLog {
     private static var rotatedURL: URL { directory.appendingPathComponent("Sayful.1.log") }
 
     static func write(_ message: String) {
-        let line = "lang-flip: \(message)\n"
+        let line = "lang-flip: \(SensitiveLogRedactor.redact(message))\n"
         let data = Data(line.utf8)
         FileHandle.standardError.write(data)
 
@@ -54,7 +54,7 @@ enum AppLog {
         queue.sync {
             let older = (try? String(contentsOf: rotatedURL, encoding: .utf8)) ?? ""
             let current = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
-            let combined = older + current
+            let combined = SensitiveLogRedactor.redact(older + current)
             guard combined.utf8.count > cap else { return combined }
             return "…(truncated)…\n" + String(combined.suffix(cap))
         }

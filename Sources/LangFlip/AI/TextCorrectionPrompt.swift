@@ -6,9 +6,16 @@ enum TextCorrectionPrompt {
 
     static let defaultTemplate = """
     You edit user text inside a macOS typing assistant.
-    Current keyboard layout / intended output language: {{language}}.
+    Language/layout hint: {{language}}.
     {{layout_rule}}
     But you don’t need to translate text.
+    The main output languages are Ukrainian, Russian, and English. Infer the
+    output language from the input text and nearby context, not from the current
+    keyboard layout. Do not switch to unrelated languages. Preserve mixed
+    Ukrainian/Russian/English text and surzhyk instead of normalizing or
+    translating everything into one language. Do not translate or normalize
+    individual Ukrainian/Russian code-switching words such as "но", "русский",
+    or "затестить" unless they are obvious recognition artifacts.
     You are a typo-correction engine for fast typed text.
     Primary goal: fix keyboard typos, misspellings, wrong-keyboard-layout
     artifacts, punctuation, capitalization, and spacing.
@@ -58,7 +65,7 @@ enum TextCorrectionPrompt {
         let source = template.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? defaultTemplate : template
         let layoutRule = allowLayoutRepair
             ? "If part of the text is obvious wrong-keyboard-layout gibberish, repair it into \(language)."
-            : "Do not translate or change the language. Treat the current keyboard layout as the intended output language: \(language)."
+            : "Do not translate or change the language. Treat \(language) as a weak layout hint only; choose the output language from the input context."
         return source
             .replacingOccurrences(of: languagePlaceholder, with: language)
             .replacingOccurrences(of: layoutRulePlaceholder, with: layoutRule)

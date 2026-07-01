@@ -25,6 +25,7 @@ enum CloudTranscriber {
 
         let body: [String: Any] = [
             "model": Settings.shared.cloudSTTModel,
+            "prompt": STTTranscriptionPrompt.current(),
             "input_audio": [
                 "data": encoded,
                 "format": format,
@@ -64,20 +65,21 @@ enum CloudTranscriber {
     private static func errorMessage(from data: Data) -> String {
         if let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let error = parsed["error"] as? [String: Any] {
-                if let message = error["message"] as? String { return message }
+                if let message = error["message"] as? String { return SensitiveLogRedactor.redact(message) }
                 if let metadata = error["metadata"] as? [String: Any] {
-                    if let raw = metadata["raw"] as? String { return raw }
+                    if let raw = metadata["raw"] as? String { return SensitiveLogRedactor.redact(raw) }
                     if let providerName = metadata["provider_name"] as? String {
-                        return "\(providerName): \(metadata)"
+                        return SensitiveLogRedactor.redact("\(providerName): \(metadata)")
                     }
                 }
-                return String(describing: error)
+                return SensitiveLogRedactor.redact(String(describing: error))
             }
-            if let message = parsed["message"] as? String { return message }
-            if let detail = parsed["detail"] as? String { return detail }
+            if let message = parsed["message"] as? String { return SensitiveLogRedactor.redact(message) }
+            if let detail = parsed["detail"] as? String { return SensitiveLogRedactor.redact(detail) }
         }
-        return String(data: data, encoding: .utf8)?
+        let message = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return SensitiveLogRedactor.redact(message)
     }
 }
 
@@ -97,11 +99,12 @@ enum CloudTranscriptionError: LocalizedError {
         case .notSignedIn:
             return "Sign in to Sayful Cloud to use cloud dictation (profile menu, top-right)."
         case .invalidBaseURL(let value):
-            return "Invalid STT base URL: \(value)"
+            return "Invalid STT base URL: \(SensitiveLogRedactor.redact(value))"
         case .noResponse:
             return "The transcription provider did not return a valid response."
         case .httpStatus(let status, let message):
-            return message.isEmpty ? "Transcription provider returned HTTP \(status)." : "Transcription provider returned HTTP \(status): \(message)"
+            let redacted = SensitiveLogRedactor.redact(message)
+            return redacted.isEmpty ? "Transcription provider returned HTTP \(status)." : "Transcription provider returned HTTP \(status): \(redacted)"
         case .malformedResponse:
             return "The transcription provider returned an unexpected response."
         case .emptyResult:

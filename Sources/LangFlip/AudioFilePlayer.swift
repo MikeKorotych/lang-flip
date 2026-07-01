@@ -7,6 +7,7 @@ final class AudioFilePlayer: NSObject, AVAudioPlayerDelegate {
     private var player: AVAudioPlayer?
     private(set) var currentURL: URL?
     private(set) var isPaused = false
+    private var deleteCurrentOnStop = false
 
     private override init() {}
 
@@ -19,7 +20,7 @@ final class AudioFilePlayer: NSObject, AVAudioPlayerDelegate {
     }
 
     @discardableResult
-    func play(_ url: URL) -> Bool {
+    func play(_ url: URL, deleteOnStop: Bool = false) -> Bool {
         stop()
         do {
             let next = try AVAudioPlayer(contentsOf: url)
@@ -28,6 +29,7 @@ final class AudioFilePlayer: NSObject, AVAudioPlayerDelegate {
             player = next
             currentURL = url.standardizedFileURL
             isPaused = false
+            deleteCurrentOnStop = deleteOnStop
             let started = next.play()
             notify()
             return started
@@ -60,29 +62,36 @@ final class AudioFilePlayer: NSObject, AVAudioPlayerDelegate {
         if let player {
             player.stop()
         }
-        player = nil
-        currentURL = nil
-        isPaused = false
-        notify()
+        clearCurrent(deleteFile: deleteCurrentOnStop)
     }
 
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         if self.player === player {
-            self.player = nil
-            currentURL = nil
-            isPaused = false
-            notify()
+            clearCurrent(deleteFile: deleteCurrentOnStop)
         }
     }
 
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
         if self.player === player {
-            self.player = nil
-            currentURL = nil
-            isPaused = false
+            let shouldDelete = deleteCurrentOnStop
+            clearCurrent(deleteFile: shouldDelete, notifyChange: false)
             if let error {
                 Notifications.show(title: "Audio playback failed", body: error.localizedDescription)
             }
+            notify()
+        }
+    }
+
+    private func clearCurrent(deleteFile: Bool, notifyChange: Bool = true) {
+        let url = currentURL
+        player = nil
+        currentURL = nil
+        isPaused = false
+        deleteCurrentOnStop = false
+        if deleteFile, let url {
+            try? FileManager.default.removeItem(at: url)
+        }
+        if notifyChange {
             notify()
         }
     }

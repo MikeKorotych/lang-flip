@@ -24,6 +24,11 @@ enum KeychainStore {
     /// unchanged means existing API keys are still found (no Keychain migration).
     static let service = "com.antonpinkevych.lang-flip"
 
+    /// Secrets should stay on this Mac and should not be readable while the
+    /// user session is locked. This matches the app's interactive use: dictation,
+    /// text fixes, and account refreshes happen only after the user is present.
+    static let accessibility = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+
     /// Store (or replace) a string under (`service`, `account`).
     /// Passing nil deletes the entry. Returns true on success.
     @discardableResult
@@ -33,36 +38,23 @@ enum KeychainStore {
         }
         let data = Data(value.utf8)
 
-        let baseQuery: [String: Any] = [
-            kSecClass as String:        kSecClassGenericPassword,
-            kSecAttrService as String:  service,
-            kSecAttrAccount as String:  account,
-        ]
+        let baseQuery = baseQuery(account: account)
 
         // Update if entry exists, otherwise add.
-        let updateAttrs: [String: Any] = [
-            kSecValueData as String: data,
-        ]
+        let updateAttrs = storageAttributes(data: data)
         let updateStatus = SecItemUpdate(baseQuery as CFDictionary, updateAttrs as CFDictionary)
         if updateStatus == errSecSuccess { return true }
 
-        var addQuery = baseQuery
-        addQuery[kSecValueData as String] = data
-        // Restrict to this user's keychain — no iCloud sync.
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        let addQuery = addQuery(account: account, data: data)
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
         return addStatus == errSecSuccess
     }
 
     /// Read the stored string for `account`, or nil if missing.
     static func getString(account: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String:        kSecClassGenericPassword,
-            kSecAttrService as String:  service,
-            kSecAttrAccount as String:  account,
-            kSecReturnData as String:   true,
-            kSecMatchLimit as String:   kSecMatchLimitOne,
-        ]
+        var query = baseQuery(account: account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess, let data = item as? Data else { return nil }
@@ -73,13 +65,34 @@ enum KeychainStore {
     /// or when the entry didn't exist.
     @discardableResult
     static func delete(account: String) -> Bool {
-        let query: [String: Any] = [
-            kSecClass as String:        kSecClassGenericPassword,
-            kSecAttrService as String:  service,
-            kSecAttrAccount as String:  account,
-        ]
+        let query = baseQuery(account: account)
         let status = SecItemDelete(query as CFDictionary)
         return status == errSecSuccess || status == errSecItemNotFound
+    }
+
+    static func baseQuery(account: String) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecAttrSynchronizable as String: false,
+        ]
+    }
+
+    static func storageAttributes(data: Data) -> [String: Any] {
+        [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: accessibility,
+            kSecAttrSynchronizable as String: false,
+        ]
+    }
+
+    static func addQuery(account: String, data: Data) -> [String: Any] {
+        var query = baseQuery(account: account)
+        for (key, value) in storageAttributes(data: data) {
+            query[key] = value
+        }
+        return query
     }
 
     // MARK: - Account name constants

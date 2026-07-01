@@ -80,7 +80,8 @@ acquires a bearer token differs between branches.
 
 - **AuthN:** Google OAuth 2.0 (PKCE) from the native app.
 - **AuthZ + buckets:** backend maps verified email domain → role.
-- **Metering:** backend counts words and decrements the user's weekly quota.
+- **Metering:** backend counts feature usage as weighted quota units and
+  decrements the user's weekly quota server-side.
 - **Secrets:** `OPENROUTER_API_KEY` in server env only.
 
 ---
@@ -113,6 +114,7 @@ Base URL differs per branch/env (`API_BASE_URL`). All `/v1/*` require
 
 All return `429 { error.code: "quota_exceeded", details: { resetAt } }` when quota
 exhausted. All include headers `X-Quota-Used`, `X-Quota-Limit`, `X-Quota-Reset`.
+Quota headers use weighted quota units, not raw words.
 
 - `POST /v1/transcribe` — **multipart/form-data**: `audio` (m4a/wav/mp3), `language?`, `model?` → 200 `{ "text", "words" }`. Meters by returned word count.
 - `POST /v1/chat` — `{ "system","input","temperature?","maxTokens?","model?" }` → 200 `{ "text","words" }`. Meters by output words.
@@ -122,9 +124,21 @@ exhausted. All include headers `X-Quota-Used`, `X-Quota-Limit`, `X-Quota-Reset`.
 ### 5.3 Metering rule (precise)
 
 - **Word** = maximal run of non-whitespace (`text.split(/\s+/).filter(Boolean).length`), counted on output text (transcribe/ocr/chat) or input text (tts).
-- Decrement **after** a successful provider call (don't charge failures).
+- **Quota unit** = raw word count × feature weight, rounded up.
+- Default weights:
+  - `transcribe`: `STT_WORD_WEIGHT=1`
+  - `chat`: `CHAT_WORD_WEIGHT=1`
+  - `ocr`: `OCR_BASE_UNITS=20` plus extracted words × `OCR_WORD_WEIGHT=1`
+  - `tts`: `TTS_WORD_WEIGHT=14`
+- OCR has a small base charge because image input has a fixed provider cost
+  even when the screenshot contains very little text.
+- TTS reserves its weighted quota before the provider call and refunds it if
+  the provider fails, because generated speech is materially more expensive.
+- Output-metered features (transcribe/ocr/chat) decrement **after** a successful
+  provider call. Usage increments must be atomic in Postgres; never overwrite a
+  stale `used + words` client/server snapshot.
 - Quota window = **calendar week, UTC Monday** (`period_start`). `resetAt` = next Monday 00:00 UTC.
-- `limit` = `FREE_WEEKLY_WORDS` (free) or `CORP_WEEKLY_WORDS` (corporate).
+- `limit` = `FREE_WEEKLY_WORDS` (free) or `CORP_WEEKLY_WORDS` (corporate), interpreted as weighted quota units.
 
 ### 5.4 Limits / validation
 

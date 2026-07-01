@@ -127,12 +127,16 @@ final class SpeechReader: NSObject, NSSpeechSynthesizerDelegate {
             NotificationCenter.default.post(name: .langFlipTTSStateChanged, object: nil)
             return true
         }
-        if lastBackend == .cloud, let url = CloudSpeechSynthesizer.shared.lastOutputURL {
+        if lastBackend == .cloud,
+           let url = CloudSpeechSynthesizer.shared.lastOutputURL,
+           FileManager.default.fileExists(atPath: url.path) {
             isPaused = false
             CloudSpeechSynthesizer.shared.play(url)
             return true
         }
-        if lastBackend == .omniVoice, let url = OmniVoiceSynthesizer.shared.lastOutputURL {
+        if lastBackend == .omniVoice,
+           let url = OmniVoiceSynthesizer.shared.lastOutputURL,
+           FileManager.default.fileExists(atPath: url.path) {
             isPaused = false
             OmniVoiceSynthesizer.shared.play(url)
             return true

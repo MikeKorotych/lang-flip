@@ -86,7 +86,9 @@ esac
 B64="$(base64 -i "$IMAGE" | tr -d '\n')"
 BYTES="$(stat -f%z "$IMAGE")"
 PAYLOAD="$(mktemp)"; BODY="$(mktemp)"
-trap 'rm -f "$PAYLOAD" "$BODY" ${GEN_SWIFT:-}' EXIT
+AUTH_CONFIG="$(mktemp)"; chmod 600 "$AUTH_CONFIG"
+printf 'header = "Authorization: Bearer %s"\n' "$KEY" > "$AUTH_CONFIG"
+trap 'rm -f "$PAYLOAD" "$BODY" "$AUTH_CONFIG" ${GEN_SWIFT:-}' EXIT
 
 if [[ "$SHAPE" == "backend" ]]; then
   jq -n --arg img "$B64" --arg model "$MODEL" '{imageBase64:$img, model:$model}' > "$PAYLOAD"
@@ -129,8 +131,8 @@ printf " %s\n" "------------------------------"
 ts=()
 for i in $(seq 1 "$RUNS"); do
   read -r total code < <(curl -s -o "$BODY" -w '%{time_total} %{http_code}\n' \
+    --config "$AUTH_CONFIG" \
     -X POST "$EP" \
-    -H "Authorization: Bearer $KEY" \
     -H "Content-Type: application/json" \
     ${EXTRA_HEADERS[@]+"${EXTRA_HEADERS[@]}"} \
     --data @"$PAYLOAD")

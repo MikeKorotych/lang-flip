@@ -14,6 +14,8 @@ import UniformTypeIdentifiers
 struct GeneralTab: View {
     @AppStorage("lf.soundEnabled") private var soundEnabled = false
     @AppStorage("lf.preferredInputDeviceUID") private var preferredInputDeviceUID = ""
+    @AppStorage(LocalContentPrivacy.retainLocalContentHistoryKey) private var retainLocalContentHistory = LocalContentPrivacy.defaultRetainsLocalContentHistory
+    @AppStorage(LocalContentPrivacy.automaticLearningKey) private var automaticLearning = LocalContentPrivacy.defaultAllowsAutomaticLearning
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var hasScreenRecording = PermissionStatus.hasScreenRecording()
     @State private var microphoneStatus = PermissionStatus.microphoneAuthorizationStatus()
@@ -39,6 +41,32 @@ struct GeneralTab: View {
                         }
                     ))
                     FlowToggleRow(title: "Sound feedback", isOn: $soundEnabled)
+                }
+
+                FlowSettingsGroup("Privacy") {
+                    FlowToggleRow(
+                        title: "Keep local content history",
+                        detail: "Stores recent dictations, screen-text captures, generated speech metadata, and reusable TTS audio locally on this Mac. Turning it off deletes existing histories and saved audio.",
+                        isOn: Binding(
+                            get: { retainLocalContentHistory },
+                            set: { newValue in
+                                retainLocalContentHistory = newValue
+                                LocalContentPrivacy.setRetainsLocalContentHistory(newValue)
+                            }
+                        )
+                    )
+
+                    FlowToggleRow(
+                        title: "Learn personal corrections automatically",
+                        detail: "Stores corrected names, product terms, and rejected auto-flips locally so Sayful can reuse them later. Turning it off deletes automatically learned terms.",
+                        isOn: Binding(
+                            get: { automaticLearning },
+                            set: { newValue in
+                                automaticLearning = newValue
+                                LocalContentPrivacy.setAllowsAutomaticLearning(newValue)
+                            }
+                        )
+                    )
                 }
 
                 FlowSettingsGroup("Microphone") {
@@ -109,7 +137,7 @@ struct VoiceTab: View {
     @AppStorage("lf.readSelectionHotkeyPreset") private var readSelectionHotkeyPreset = GlobalShortcutPreset.commandShiftX.rawValue
     @AppStorage("lf.readSelectionHotkeyCustom") private var readSelectionHotkeyCustom = ""
     @AppStorage("lf.showDictationIsland") private var showDictationIsland = true
-    @AppStorage("lf.dictationNotifications") private var dictationNotifications = false
+    @AppStorage("lf.dictationNotifications") private var dictationNotifications = true
     @AppStorage("lf.dictationAutoFormat") private var dictationAutoFormat = true
     @AppStorage("lf.cloudSTTBaseURL") private var cloudSTTBaseURL = "https://openrouter.ai/api/v1"
     @AppStorage("lf.cloudSTTModel") private var cloudSTTModel = "groq/whisper-large-v3"
@@ -333,7 +361,7 @@ struct VoiceTab: View {
 
             FlowToggleRow(
                 title: "Dictation notifications",
-                detail: "Show a banner when recording starts, while transcribing, and when text is inserted. Off by default — the island already shows live state. Errors always notify.",
+                detail: "Show banners only when dictation needs attention, such as no speech recognized or transcription failed. Successful dictations stay quiet.",
                 isOn: $dictationNotifications
             )
 
@@ -580,7 +608,7 @@ struct VoiceTab: View {
 
     private var testTranscriptionDisabled: Bool {
         if isTranscribing || lastRecordingURL == nil { return true }
-        if usesSayfulCloud { return !SupabaseBackendAuth.shared.isSignedIn }
+        if usesSayfulCloud { return !SupabaseBackendAuth.hasStoredSession }
         return !hasCloudTTSKey || cloudSTTModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -646,7 +674,7 @@ struct VoiceTab: View {
     private func transcribeWithSelectedBackend(audioURL: URL) async throws -> String {
         // Sayful Cloud (signed in) → backend proxy (no key); else Advanced/BYOK.
         if usesSayfulCloud {
-            guard SupabaseBackendAuth.shared.isSignedIn else {
+            guard SupabaseBackendAuth.hasStoredSession else {
                 throw CloudTranscriptionError.notSignedIn
             }
             let upload = try STTAudioUploadPreparer.prepareBackendUpload(from: audioURL)
@@ -654,6 +682,7 @@ struct VoiceTab: View {
             let result = try await HTTPBackendClient.shared.transcribe(
                 BackendTranscribeRequest(audio: upload.data, filename: upload.filename,
                                          language: nil,
+                                         prompt: STTTranscriptionPrompt.current(),
                                          model: Settings.shared.backendSTTModelOverride))
             return result.text
         }
@@ -935,7 +964,10 @@ struct ModelsTab: View {
 struct DevToolsTab: View {
     @ObservedObject private var auth = SupabaseBackendAuth.shared
     @State private var selectedModel = Settings.shared.devTextCorrectionModel
-    @State private var promptTemplate = Settings.shared.textCorrectionPromptTemplate
+    @State private var keepSuccessfulDictationRecordings = Settings.shared.keepSuccessfulDictationRecordings
+    @State private var sttPromptTemplate = Settings.shared.sttTranscriptionPromptTemplate
+    @State private var dictationPromptTemplate = Settings.shared.dictationFormatPromptTemplate
+    @State private var textCorrectionPromptTemplate = Settings.shared.textCorrectionPromptTemplate
 
     private var isAllowed: Bool {
         auth.currentUser?.email.localizedCaseInsensitiveCompare("mykhailo.korotych@uni.tech") == .orderedSame
@@ -974,36 +1006,46 @@ struct DevToolsTab: View {
                         }
                     }
 
-                    FlowSettingsGroup("Text correction prompt", spacing: 12) {
-                        Text("Placeholders: \(TextCorrectionPrompt.languagePlaceholder), \(TextCorrectionPrompt.layoutRulePlaceholder)")
-                            .font(.caption)
-                            .foregroundColor(FlowTheme.inkSecondary)
-
-                        TextEditor(text: $promptTemplate)
-                            .font(.system(.body, design: .monospaced))
-                            .frame(minHeight: 420)
-                            .padding(8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(FlowTheme.paper)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(FlowTheme.cardStroke, lineWidth: 1)
-                            )
-                            .onChange(of: promptTemplate) { Settings.shared.textCorrectionPromptTemplate = $0 }
-
-                        HStack {
-                            FlowSmallButton(title: "Reset prompt") {
-                                promptTemplate = TextCorrectionPrompt.defaultTemplate
-                                Settings.shared.textCorrectionPromptTemplate = ""
-                            }
-                            Spacer()
-                            Text("\(TextCorrectionPrompt.preview().count) chars")
-                                .font(.caption)
-                                .foregroundColor(FlowTheme.inkSecondary)
+                    FlowSettingsGroup("STT testing") {
+                        FlowToggleRow(
+                            title: "Keep successful dictation recordings",
+                            detail: "Temporarily preserves successful WAV files in ~/Library/Application Support/Sayful/Recordings for prompt A/B tests.",
+                            isOn: $keepSuccessfulDictationRecordings
+                        )
+                        .onChange(of: keepSuccessfulDictationRecordings) {
+                            Settings.shared.keepSuccessfulDictationRecordings = $0
                         }
                     }
+
+                    promptEditor(
+                        title: "1. STT transcription prompt",
+                        note: "Sent with the audio transcription request before the first transcript is produced.",
+                        text: $sttPromptTemplate,
+                        minHeight: 150,
+                        defaultText: STTTranscriptionPrompt.defaultText,
+                        onChange: { Settings.shared.sttTranscriptionPromptTemplate = $0 },
+                        onReset: { Settings.shared.sttTranscriptionPromptTemplate = "" }
+                    )
+
+                    promptEditor(
+                        title: "2. Long dictation polish prompt",
+                        note: "Used after longer dictations to format punctuation, paragraphs, lists, and quotes.",
+                        text: $dictationPromptTemplate,
+                        minHeight: 360,
+                        defaultText: BackendAssistant.defaultDictationFormatPrompt,
+                        onChange: { Settings.shared.dictationFormatPromptTemplate = $0 },
+                        onReset: { Settings.shared.dictationFormatPromptTemplate = "" }
+                    )
+
+                    promptEditor(
+                        title: "3. Selected text correction prompt",
+                        note: "Used for selected text correction and sentence cleanup. Placeholders: \(TextCorrectionPrompt.languagePlaceholder), \(TextCorrectionPrompt.layoutRulePlaceholder)",
+                        text: $textCorrectionPromptTemplate,
+                        minHeight: 420,
+                        defaultText: TextCorrectionPrompt.defaultTemplate,
+                        onChange: { Settings.shared.textCorrectionPromptTemplate = $0 },
+                        onReset: { Settings.shared.textCorrectionPromptTemplate = "" }
+                    )
                 } else {
                     FlowSettingsGroup("DevTools") {
                         Text("Signed in as \(auth.currentUser?.email ?? "unknown account").")
@@ -1023,7 +1065,50 @@ struct DevToolsTab: View {
         }
         .onAppear {
             selectedModel = Settings.shared.devTextCorrectionModel
-            promptTemplate = Settings.shared.textCorrectionPromptTemplate
+            keepSuccessfulDictationRecordings = Settings.shared.keepSuccessfulDictationRecordings
+            sttPromptTemplate = Settings.shared.sttTranscriptionPromptTemplate
+            dictationPromptTemplate = Settings.shared.dictationFormatPromptTemplate
+            textCorrectionPromptTemplate = Settings.shared.textCorrectionPromptTemplate
+        }
+    }
+
+    private func promptEditor(title: String,
+                              note: String,
+                              text: Binding<String>,
+                              minHeight: CGFloat,
+                              defaultText: String,
+                              onChange: @escaping (String) -> Void,
+                              onReset: @escaping () -> Void) -> some View {
+        FlowSettingsGroup(title, spacing: 12) {
+            Text(note)
+                .font(.caption)
+                .foregroundColor(FlowTheme.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            TextEditor(text: text)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: minHeight)
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(FlowTheme.paper)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(FlowTheme.cardStroke, lineWidth: 1)
+                )
+                .onChange(of: text.wrappedValue, perform: onChange)
+
+            HStack {
+                FlowSmallButton(title: "Reset prompt") {
+                    text.wrappedValue = defaultText
+                    onReset()
+                }
+                Spacer()
+                Text("\(text.wrappedValue.count) chars")
+                    .font(.caption)
+                    .foregroundColor(FlowTheme.inkSecondary)
+            }
         }
     }
 }

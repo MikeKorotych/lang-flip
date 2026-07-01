@@ -9,7 +9,7 @@ final class BackendAssistant: AIAssistant {
 
     init(client: BackendClient = HTTPBackendClient.shared) { self.client = client }
 
-    var isReady: Bool { SupabaseBackendAuth.shared.isSignedIn }
+    var isReady: Bool { SupabaseBackendAuth.hasStoredSession }
 
     // The flip-arbiter is a keystroke hot-path; not worth a network round-trip.
     func review(candidateFlip: AICandidate, completion: @escaping (AIDecision) -> Void) {
@@ -87,7 +87,7 @@ final class BackendAssistant: AIAssistant {
 
     func formatDictation(_ input: AIDictationFormatRequest, completion: @escaping (AIDictationFormatResult) -> Void) {
         chat(
-            system: Self.dictationFormatPrompt,
+            system: Settings.shared.dictationFormatPromptTemplate,
             input: input.text,
             temperature: 0,
             maxTokens: Self.fastTextEditMaxTokens(inputCharacterCount: input.text.count, cap: 2048, padding: 256)
@@ -106,10 +106,9 @@ final class BackendAssistant: AIAssistant {
     func extractTextFromImage(_ input: AIOcrRequest, completion: @escaping (AIOcrResult) -> Void) {
         Task {
             do {
-                let model = Settings.shared.cloudOCRModel.trimmingCharacters(in: .whitespacesAndNewlines)
                 let result = try await client.ocr(BackendOCRRequest(
                     imageBase64: input.imageBase64,
-                    model: model.isEmpty ? nil : model
+                    model: BackendModelPolicy.ocrModelOverride()
                 ))
                 let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 completion(text.isEmpty ? .failed(reason: "model returned no text") : .extracted(text))
@@ -140,7 +139,7 @@ final class BackendAssistant: AIAssistant {
         case .quotaExceeded:   return "Weekly word limit reached"
         case .unauthenticated: return "Sign in to use AI"
         case .rateLimited:     return "Too many requests — slow down"
-        default:               return be.message
+        default:               return SensitiveLogRedactor.redact(be.message)
         }
     }
 
@@ -149,13 +148,12 @@ final class BackendAssistant: AIAssistant {
     }
 
     private static func devTextCorrectionModelOverride() -> String? {
-        let model = Settings.shared.devTextCorrectionModel
-        return model.isEmpty ? nil : model
+        BackendModelPolicy.textCorrectionModelOverride()
     }
 
     /// Structure-only cleanup of a dictation transcript. The hard rule is to
     /// preserve the speaker's exact words — only fix formatting.
-    private static let dictationFormatPrompt = """
+    static let defaultDictationFormatPrompt = """
     You format raw speech-to-text dictation inside a macOS dictation app.
     Treat this as the same minimal-edit text cleanup used for selected text,
     but stricter: speech transcripts should be formatted, not rewritten.
@@ -164,6 +162,14 @@ final class BackendAssistant: AIAssistant {
     list formatting, and quote formatting with the smallest possible edit.
     Merge fragments that were split only because the speaker paused into
     coherent sentences and paragraphs.
+
+    The main output languages are Ukrainian, Russian, and English. Infer the
+    output language from the spoken text and nearby context, not from the
+    current keyboard layout. Do not switch to unrelated languages. Preserve
+    mixed Ukrainian/Russian/English speech and surzhyk instead of normalizing
+    or translating everything into one language. Do not translate or normalize
+    individual Ukrainian/Russian code-switching words such as "но", "русский",
+    or "затестить" unless they are obvious speech-to-text recognition artifacts.
 
     For medium and long dictations, actively split the output into logical
     paragraphs. Prefer 2-5 compact paragraphs over one large wall of text. If

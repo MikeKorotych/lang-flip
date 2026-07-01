@@ -195,6 +195,7 @@ private struct HomeHistoryPanel: View {
 
 private struct DictationHistoryList: View {
     @ObservedObject private var history = DictationHistory.shared
+    @AppStorage(LocalContentPrivacy.retainLocalContentHistoryKey) private var retainLocalContentHistory = LocalContentPrivacy.defaultRetainsLocalContentHistory
 
     /// Show the most recent page first and reveal older entries on demand, so the
     /// tab opens to a bounded, scannable list rather than the whole history at
@@ -209,7 +210,7 @@ private struct DictationHistoryList: View {
                 FlowCard {
                     HStack(spacing: 12) {
                         Image(systemName: "text.bubble").foregroundColor(FlowTheme.inkSecondary)
-                        Text("Your recent dictations will show up here.")
+                        Text(retainLocalContentHistory ? "Your recent dictations will show up here." : "Local dictation history is off.")
                             .font(.system(size: 14)).foregroundColor(FlowTheme.inkSecondary)
                     }
                 }
@@ -333,10 +334,11 @@ private enum DictationListItem: Identifiable {
 
 private struct OCRHistoryList: View {
     @ObservedObject private var history = OCRHistory.shared
+    @AppStorage(LocalContentPrivacy.retainLocalContentHistoryKey) private var retainLocalContentHistory = LocalContentPrivacy.defaultRetainsLocalContentHistory
 
     var body: some View {
         if history.entries.isEmpty {
-            EmptyHistoryCard(icon: "viewfinder", text: "Captured screen text will show up here.")
+            EmptyHistoryCard(icon: "viewfinder", text: retainLocalContentHistory ? "Captured screen text will show up here." : "Local screen-text history is off.")
         } else {
             VStack(alignment: .leading, spacing: 18) {
                 ForEach(groups, id: \.label) { group in
@@ -429,10 +431,11 @@ private struct OCRHistoryRow: View {
 
 private struct TTSHistoryList: View {
     @ObservedObject private var history = TTSHistory.shared
+    @AppStorage(LocalContentPrivacy.retainLocalContentHistoryKey) private var retainLocalContentHistory = LocalContentPrivacy.defaultRetainsLocalContentHistory
 
     var body: some View {
         if history.entries.isEmpty {
-            EmptyHistoryCard(icon: "speaker.wave.2", text: "Generated speech files will show up here.")
+            EmptyHistoryCard(icon: "speaker.wave.2", text: retainLocalContentHistory ? "Generated speech files will show up here." : "Local generated-speech history is off.")
         } else {
             VStack(alignment: .leading, spacing: 18) {
                 ForEach(groups, id: \.label) { group in

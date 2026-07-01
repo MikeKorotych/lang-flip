@@ -5,9 +5,8 @@ let package = Package(
     name: "lang-flip",
     platforms: [.macOS(.v13)],
     dependencies: [
-        // Auto-update framework. Pinned to a known-good 2.x release.
-        // Bumping is fine within 2.x; 3.x will be a deliberate decision.
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+        // Auto-update framework. Release builds must resolve reproducibly.
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.3"),
     ],
     targets: [
         .executableTarget(
@@ -19,6 +18,11 @@ let package = Package(
             resources: [
                 .copy("Dictionaries"),
             ]
+        ),
+        .testTarget(
+            name: "LangFlipTests",
+            dependencies: ["LangFlip"],
+            path: "Tests/LangFlipTests"
         )
     ]
 )

@@ -32,7 +32,7 @@ final class AccountProfileSync {
             .store(in: &cancellables)
         // Already signed in from a previous launch? The token is on disk before
         // /me resolves, so we can fill names/avatar immediately.
-        if SupabaseBackendAuth.shared.isSignedIn { syncIfNeeded() }
+        if SupabaseBackendAuth.hasStoredSession { syncIfNeeded() }
     }
 
     private func syncIfNeeded() {
@@ -91,7 +91,7 @@ final class AccountProfileSync {
         }.resume()
     }
 
-    private static func avatarFileURL() -> URL? {
+    nonisolated private static func avatarFileURL() -> URL? {
         guard let base = try? FileManager.default.url(
             for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
         ) else { return nil }
