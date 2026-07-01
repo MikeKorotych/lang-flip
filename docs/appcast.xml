@@ -26,6 +26,29 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.8.2</title>
+      <pubDate>Wed, 01 Jul 2026 16:59:47 +0000</pubDate>
+      <sparkle:version>0.8.2</sparkle:version>
+      <sparkle:shortVersionString>0.8.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Enterprise privacy and quota hardening</h2>
+        <ul>
+          <li>Hardened token, clipboard, logging, OAuth, and sensitive-field handling for safer enterprise rollout.</li>
+          <li>Kept local history available by default while tightening cleanup for temporary dictation recordings and generated files.</li>
+          <li>Added backend-weighted quota accounting for dictation, screen text, chat, and text-to-speech.</li>
+          <li>Fixed dictation cancellation so Undo can restore a recording while the Undo island is visible, then clean it up afterward.</li>
+          <li>Added clearer notifications when words are added to layout-flip exceptions.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.2/Sayful-0.8.2.dmg"
+        length="6755919"
+        type="application/octet-stream"
+        sparkle:edSignature="K0F38rorGoXw5uqx3bNaOZIFN2EzBPygZNG7BpZoNgTV2UB2EgjTmxq22Y5XHdfKT6Oa4BCfKmnwqZOXbZXpAg==" />
+    </item>
+
+    <item>
       <title>v0.8.1</title>
       <pubDate>Tue, 30 Jun 2026 11:58:48 +0000</pubDate>
       <sparkle:version>0.8.1</sparkle:version>
