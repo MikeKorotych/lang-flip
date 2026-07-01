@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.8.2 - Enterprise privacy and quota hardening
+
+### Added
+
+- Added safer enterprise defaults for cloud usage, sensitive-field detection,
+  local history, dictation cleanup, and dictionary exception notifications.
+- Added backend-weighted quota accounting for dictation, screen text, chat, and
+  text-to-speech so expensive features consume the right amount of quota.
+
+### Fixed
+
+- Hardened token, clipboard, logging, and OAuth handling so transcripts, API
+  keys, and auth details are not exposed through debug surfaces.
+- Fixed dictation cancellation so Undo can still restore a recording while the
+  Undo island is visible, then cleans it up after the window expires.
+- Fixed usage metering to reserve and refund quota atomically across backend
+  functions, including OCR and text-to-speech.
+
 ## 0.8.1 - Hotkey fixes
 
 ### Fixed
