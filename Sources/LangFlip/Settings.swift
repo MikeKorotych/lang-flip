@@ -644,6 +644,7 @@ final class Settings {
         static let openaiBaseURL = "lf.openaiBaseURL"
         static let devTextCorrectionModel = "lf.dev.textCorrectionModel"
         static let keepSuccessfulDictationRecordings = "lf.dev.keepSuccessfulDictationRecordings"
+        static let devTeamPreviewTeammates = "lf.dev.teamPreviewTeammates"
         static let sttTranscriptionPromptTemplate = "lf.dev.sttTranscriptionPromptTemplate"
         static let dictationFormatPromptTemplate = "lf.dev.dictationFormatPromptTemplate"
         static let textCorrectionPromptTemplate = "lf.dev.textCorrectionPromptTemplate"
@@ -1393,6 +1394,15 @@ final class Settings {
     var keepSuccessfulDictationRecordings: Bool {
         get { defaults.bool(forKey: Keys.keepSuccessfulDictationRecordings) }
         set { defaults.set(newValue, forKey: Keys.keepSuccessfulDictationRecordings) }
+    }
+
+    /// Developer-only visual preview for the corporate Team dashboard. When on,
+    /// the client injects deterministic synthetic teammate rows locally so the
+    /// podium, full leaderboard, and pagination can be reviewed before the
+    /// backend leaderboard is deployed.
+    var devTeamPreviewTeammates: Bool {
+        get { defaults.bool(forKey: Keys.devTeamPreviewTeammates) }
+        set { defaults.set(newValue, forKey: Keys.devTeamPreviewTeammates) }
     }
 
     var textCorrectionPromptTemplate: String {

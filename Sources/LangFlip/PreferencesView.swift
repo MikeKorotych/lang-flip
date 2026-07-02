@@ -965,12 +965,14 @@ struct DevToolsTab: View {
     @ObservedObject private var auth = SupabaseBackendAuth.shared
     @State private var selectedModel = Settings.shared.devTextCorrectionModel
     @State private var keepSuccessfulDictationRecordings = Settings.shared.keepSuccessfulDictationRecordings
-    @State private var sttPromptTemplate = Settings.shared.sttTranscriptionPromptTemplate
-    @State private var savedSttPromptTemplate = Settings.shared.sttTranscriptionPromptTemplate
-    @State private var dictationPromptTemplate = Settings.shared.dictationFormatPromptTemplate
-    @State private var savedDictationPromptTemplate = Settings.shared.dictationFormatPromptTemplate
-    @State private var textCorrectionPromptTemplate = Settings.shared.textCorrectionPromptTemplate
-    @State private var savedTextCorrectionPromptTemplate = Settings.shared.textCorrectionPromptTemplate
+    @State private var devTeamPreviewTeammates = Settings.shared.devTeamPreviewTeammates
+    @State private var showPromptEditors = false
+    @State private var sttPromptTemplate = ""
+    @State private var savedSttPromptTemplate = ""
+    @State private var dictationPromptTemplate = ""
+    @State private var savedDictationPromptTemplate = ""
+    @State private var textCorrectionPromptTemplate = ""
+    @State private var savedTextCorrectionPromptTemplate = ""
 
     private var isAllowed: Bool {
         auth.currentUser?.email.localizedCaseInsensitiveCompare("mykhailo.korotych@uni.tech") == .orderedSame
@@ -1020,44 +1022,78 @@ struct DevToolsTab: View {
                         }
                     }
 
-                    promptEditor(
-                        title: "1. STT transcription prompt",
-                        note: "Sent with the audio transcription request before the first transcript is produced.",
-                        text: $sttPromptTemplate,
-                        minHeight: 150,
-                        savedText: savedSttPromptTemplate,
-                        defaultText: STTTranscriptionPrompt.defaultText,
-                        onSave: {
-                            Settings.shared.sttTranscriptionPromptTemplate = $0
-                            reloadPromptDrafts(overwriteUnsaved: true)
+                    FlowSettingsGroup("Team preview") {
+                        FlowToggleRow(
+                            title: "Show fake teammates in Team",
+                            detail: "Injects deterministic local teammate rows for reviewing the podium, ranking list, and pagination before the live leaderboard ships.",
+                            isOn: $devTeamPreviewTeammates
+                        )
+                        .onChange(of: devTeamPreviewTeammates) {
+                            Settings.shared.devTeamPreviewTeammates = $0
                         }
-                    )
+                    }
 
-                    promptEditor(
-                        title: "2. Long dictation polish prompt",
-                        note: "Used after longer dictations to format punctuation, paragraphs, lists, and quotes.",
-                        text: $dictationPromptTemplate,
-                        minHeight: 360,
-                        savedText: savedDictationPromptTemplate,
-                        defaultText: BackendAssistant.defaultDictationFormatPrompt,
-                        onSave: {
-                            Settings.shared.dictationFormatPromptTemplate = $0
-                            reloadPromptDrafts(overwriteUnsaved: true)
+                    FlowSettingsGroup("Prompt overrides") {
+                        HStack(alignment: .center, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Backend prompt editors")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(FlowTheme.ink)
+                                Text("Load these only when editing prompts; the large text editors can be expensive to create.")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(FlowTheme.inkSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 12)
+                            FlowSmallButton(title: showPromptEditors ? "Hide editors" : "Load editors") {
+                                showPromptEditors.toggle()
+                                if showPromptEditors {
+                                    reloadPromptDrafts(overwriteUnsaved: true)
+                                }
+                            }
                         }
-                    )
+                    }
 
-                    promptEditor(
-                        title: "3. Selected text correction prompt",
-                        note: "Used for selected text correction and sentence cleanup. Placeholders: \(TextCorrectionPrompt.languagePlaceholder), \(TextCorrectionPrompt.layoutRulePlaceholder)",
-                        text: $textCorrectionPromptTemplate,
-                        minHeight: 420,
-                        savedText: savedTextCorrectionPromptTemplate,
-                        defaultText: TextCorrectionPrompt.defaultTemplate,
-                        onSave: {
-                            Settings.shared.textCorrectionPromptTemplate = $0
-                            reloadPromptDrafts(overwriteUnsaved: true)
-                        }
-                    )
+                    if showPromptEditors {
+                        promptEditor(
+                            title: "1. STT transcription prompt",
+                            note: "Sent with the audio transcription request before the first transcript is produced.",
+                            text: $sttPromptTemplate,
+                            minHeight: 150,
+                            savedText: savedSttPromptTemplate,
+                            defaultText: STTTranscriptionPrompt.defaultText,
+                            onSave: {
+                                Settings.shared.sttTranscriptionPromptTemplate = $0
+                                reloadPromptDrafts(overwriteUnsaved: true)
+                            }
+                        )
+
+                        promptEditor(
+                            title: "2. Long dictation polish prompt",
+                            note: "Used after longer dictations to format punctuation, paragraphs, lists, and quotes.",
+                            text: $dictationPromptTemplate,
+                            minHeight: 360,
+                            savedText: savedDictationPromptTemplate,
+                            defaultText: BackendAssistant.defaultDictationFormatPrompt,
+                            onSave: {
+                                Settings.shared.dictationFormatPromptTemplate = $0
+                                reloadPromptDrafts(overwriteUnsaved: true)
+                            }
+                        )
+
+                        promptEditor(
+                            title: "3. Selected text correction prompt",
+                            note: "Used for selected text correction and sentence cleanup. Placeholders: \(TextCorrectionPrompt.languagePlaceholder), \(TextCorrectionPrompt.layoutRulePlaceholder)",
+                            text: $textCorrectionPromptTemplate,
+                            minHeight: 420,
+                            savedText: savedTextCorrectionPromptTemplate,
+                            defaultText: TextCorrectionPrompt.defaultTemplate,
+                            onSave: {
+                                Settings.shared.textCorrectionPromptTemplate = $0
+                                reloadPromptDrafts(overwriteUnsaved: true)
+                            }
+                        )
+                    }
                 } else {
                     FlowSettingsGroup("DevTools") {
                         Text("Signed in as \(auth.currentUser?.email ?? "unknown account").")
@@ -1078,10 +1114,15 @@ struct DevToolsTab: View {
         .onAppear {
             selectedModel = Settings.shared.devTextCorrectionModel
             keepSuccessfulDictationRecordings = Settings.shared.keepSuccessfulDictationRecordings
-            reloadPromptDrafts(overwriteUnsaved: true)
+            devTeamPreviewTeammates = Settings.shared.devTeamPreviewTeammates
+            if showPromptEditors {
+                reloadPromptDrafts(overwriteUnsaved: true)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            reloadPromptDrafts(overwriteUnsaved: false)
+            if showPromptEditors {
+                reloadPromptDrafts(overwriteUnsaved: false)
+            }
         }
     }
 

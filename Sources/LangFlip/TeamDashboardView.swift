@@ -1,16 +1,20 @@
 import SwiftUI
 
-/// Corporate "Team" section — a gamified activity dashboard for @uni.tech
-/// accounts: daily/weekly leaderboards (podium + ranked list), your XP/level
-/// standing, and locally-earned achievement badges. Everything animates in with
-/// the same staggered language as Insights; counters tick up, the podium grows,
+/// Corporate "Team" section — a words-first activity dashboard for @uni.tech
+/// accounts. The hero spotlights *your* rank with movement since the previous
+/// period; a team-pulse strip shows what the whole team dictated (with a trend
+/// vs the last period); a movers row celebrates the biggest climber and the
+/// most improved teammate; then the podium, the ranked list with rank-delta
+/// chips, and locally-earned badges. Everything animates in with the staggered
+/// language of Insights: counters tick, the podium grows with a shine sweep,
 /// badge tiles pop.
 struct TeamDashboardView: View {
     @ObservedObject private var auth = SupabaseBackendAuth.shared
     @ObservedObject private var history = DictationHistory.shared
     @StateObject private var model = TeamDashboardModel()
     @State private var appeared = false
-    @State private var period: TeamDashboardModel.Period = .daily
+    @State private var period: TeamDashboardModel.Period = .weekly
+    @AppStorage("lf.dev.teamPreviewTeammates") private var devTeamPreviewTeammates = false
 
     var body: some View {
         // Defense in depth: the sidebar already hides this section, but the
@@ -33,40 +37,59 @@ struct TeamDashboardView: View {
     }
 
     private var dashboard: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        let insights = model.insights(for: period)
+        return VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 10) {
-                DisplayText("Team", size: 26)
-                Text(TeamAccess.requiredDomain)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(FlowTheme.accent)
-                    .padding(.horizontal, 7).padding(.vertical, 2)
-                    .background(Capsule().fill(FlowTheme.accentSoft))
+                HStack(alignment: .center, spacing: 10) {
+                    DisplayText("Team Activity", size: 26)
+                    Text(TeamAccess.requiredDomain)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(FlowTheme.accent)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Capsule().fill(FlowTheme.accentSoft))
+                        .offset(y: 2)
+                }
                 Spacer()
                 if model.isLoading {
                     ProgressView().controlSize(.small)
                 }
-                FlowSmallButton(title: "Refresh") {
+                TeamIconButton(systemName: "arrow.clockwise", help: "Refresh") {
                     Task { await model.load() }
                 }
             }
             .appearStagger(0, appeared)
 
-            hero.appearStagger(1, appeared)
+            hero(insights).appearStagger(1, appeared)
 
-            if model.source == .localPreview {
+            if !devTeamPreviewTeammates && (model.isLocalPreview || (period == .monthly && model.isMonthlyLocalFallback)) {
                 previewBanner.appearStagger(2, appeared)
             }
 
-            FlowSegmented(
-                items: TeamDashboardModel.Period.allCases.map { (value: $0, label: $0.rawValue) },
-                selection: $period)
+            HStack {
+                Spacer()
+                FlowSegmented(
+                    items: TeamDashboardModel.Period.allCases.map { (value: $0, label: $0.rawValue) },
+                    selection: $period)
+                Spacer()
+            }
                 .appearStagger(2, appeared)
 
-            board.appearStagger(3, appeared)
+            TeamPulseStrip(pulse: insights.pulse, appeared: appeared)
+                .appearStagger(3, appeared)
 
-            FlowSectionLabel("Achievements").appearStagger(4, appeared)
+            if insights.topClimber != nil || insights.mostImproved != nil {
+                TeamMoversRow(topClimber: insights.topClimber,
+                              mostImproved: insights.mostImproved,
+                              periodSuffix: period.labelSuffix,
+                              appeared: appeared)
+                    .appearStagger(4, appeared)
+            }
+
+            board(insights).appearStagger(5, appeared)
+
+            FlowSectionLabel("Achievements").appearStagger(6, appeared)
             TeamBadgeGrid(badges: model.badges, appeared: appeared)
-                .appearStagger(5, appeared)
+                .appearStagger(7, appeared)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .appearTrigger($appeared)
@@ -75,47 +98,48 @@ struct TeamDashboardView: View {
             // Local dictations shift the preview board and can unlock badges live.
             Task { await model.load() }
         }
+        .onChange(of: devTeamPreviewTeammates) { _ in
+            Task { await model.load() }
+        }
     }
 
     // MARK: Hero
 
-    private var hero: some View {
-        let you = model.you
-        let xp = you?.xp ?? 0
-        let level = TeamGamification.level(forXP: xp)
-        return FlowHeroSurface {
+    private func hero(_ insights: TeamGamification.BoardInsights) -> some View {
+        FlowHeroSurface {
             HStack(alignment: .center, spacing: 24) {
                 VStack(alignment: .leading, spacing: 12) {
                     (
-                        Text("Climb the ")
+                        Text("Make words ")
                             .font(.system(size: 30, weight: .semibold, design: .serif))
-                        + Text("leaderboard")
+                        + Text("visible")
                             .font(.system(size: 30, weight: .semibold, design: .serif))
                             .italic()
                     )
                     .foregroundColor(.white)
 
-                    Text("Every dictated word is XP. Daily and weekly standings across the \(TeamAccess.requiredDomain) team.")
+                    Text("Team activity is ranked by dictated words — the same work signal people already track against the weekly Sayful quota.")
                         .font(.system(size: 15))
                         .foregroundColor(.white.opacity(0.8))
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack(spacing: 14) {
-                        heroStat(icon: "bolt.fill", label: "XP this week", value: xp)
-                        if let you {
-                            heroStat(icon: "flame.fill", label: "day streak", value: you.player.streakDays)
+                        heroStat(icon: "text.alignleft",
+                                 label: "words \(period.labelSuffix)",
+                                 value: insights.you?.words ?? 0)
+                        if let streak = model.youThisWeek?.player.streakDays, streak > 0 {
+                            heroStat(icon: "flame.fill", label: "day streak", value: streak)
                         }
                     }
                     .padding(.top, 2)
                 }
                 Spacer(minLength: 0)
-                TeamLevelRing(level: level,
-                              title: TeamGamification.title(forLevel: level),
-                              progress: TeamGamification.progressToNextLevel(forXP: xp),
-                              appeared: appeared)
+                TeamRankSpotlight(standing: insights.you,
+                                  periodSuffix: period.labelSuffix,
+                                  appeared: appeared)
             }
             .padding(28)
-            .frame(maxWidth: .infinity, minHeight: 170, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 176, alignment: .leading)
         }
     }
 
@@ -136,10 +160,12 @@ struct TeamDashboardView: View {
             Image(systemName: "sparkles")
                 .foregroundColor(FlowTheme.accent)
             VStack(alignment: .leading, spacing: 2) {
-                Text("The team server is warming up")
+                Text(model.isLocalPreview ? "The team server is warming up" : "Monthly team board is warming up")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(FlowTheme.ink)
-                Text("Showing your local stats for now — teammates appear here as soon as the leaderboard goes live.")
+                Text(model.isLocalPreview
+                     ? "Showing your local stats for now — teammates appear here as soon as the leaderboard goes live."
+                     : "Showing your local month for now — teammates appear here once the backend returns monthly rows.")
                     .font(.system(size: 12))
                     .foregroundColor(FlowTheme.inkSecondary)
             }
@@ -155,79 +181,351 @@ struct TeamDashboardView: View {
     // MARK: Board
 
     @ViewBuilder
-    private var board: some View {
+    private func board(_ insights: TeamGamification.BoardInsights) -> some View {
         let rows = model.rows(for: period)
+        let deltas = model.previousBoard(for: period) == nil ? nil : insights.rankDeltas
         VStack(alignment: .leading, spacing: 16) {
             if rows.count >= 3 {
-                TeamPodium(top: Array(rows.prefix(3)), appeared: appeared)
+                TeamPodium(top: Array(rows.prefix(3)), deltas: deltas, appeared: appeared)
                 if rows.count > 3 {
                     TeamBoardList(rows: Array(rows.dropFirst(3)),
-                                  maxXP: rows.first?.xp ?? 1)
+                                  maxWords: rows.first?.activityWords ?? 1,
+                                  deltas: deltas)
                 }
             } else if rows.isEmpty {
                 FlowCard {
                     HStack(spacing: 12) {
                         Image(systemName: "trophy").foregroundColor(FlowTheme.accent)
-                        Text("No activity yet \(period == .daily ? "today" : "this week") — dictate something and claim rank #1.")
+                        Text("No activity yet \(period.labelSuffix) — dictate something and claim rank #1.")
                             .font(.system(size: 14)).foregroundColor(FlowTheme.inkSecondary)
                     }
                 }
             } else {
-                TeamBoardList(rows: rows, maxXP: rows.first?.xp ?? 1)
+                TeamBoardList(rows: rows, maxWords: rows.first?.activityWords ?? 1, deltas: deltas)
             }
         }
         .animation(.easeInOut(duration: 0.25), value: period)
     }
 }
 
-// MARK: - Level ring
+private extension TeamDashboardModel.Period {
+    var labelSuffix: String {
+        switch self {
+        case .daily: return "today"
+        case .weekly: return "this week"
+        case .monthly: return "this month"
+        }
+    }
+}
 
-/// Circular level indicator for the hero: an accent arc sweeps to the progress
-/// toward the next level, with the level number in the middle.
-private struct TeamLevelRing: View {
-    let level: Int
-    let title: String
-    let progress: Double
+private struct TeamIconButton: View {
+    let systemName: String
+    let help: String
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(hovering ? FlowTheme.accent : FlowTheme.ink)
+                .frame(width: 32, height: 32)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            Circle()
+                .fill(hovering ? FlowTheme.rowHover : .clear)
+        )
+        .onHover { hovering = $0 }
+        .help(help)
+    }
+}
+
+// MARK: - Rank spotlight (hero, right side)
+
+/// Your rank as the hero's centerpiece: a big serif "#N" that springs in, a
+/// movement chip vs the previous period, and the concrete gap worth closing —
+/// "you lead", "N words to #K" — phrased per rank.
+private struct TeamRankSpotlight: View {
+    let standing: TeamGamification.YourStanding?
+    let periodSuffix: String
     let appeared: Bool
 
     var body: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.15), lineWidth: 8)
-                Circle()
-                    .trim(from: 0, to: appeared ? max(progress, 0.02) : 0)
-                    .stroke(
-                        AngularGradient(colors: [FlowTheme.accent, Color(red: 0.35, green: 0.85, blue: 0.65)],
-                                        center: .center,
-                                        startAngle: .degrees(-90), endAngle: .degrees(270)),
-                        style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(.easeOut(duration: 1.1).delay(0.3), value: appeared)
-                VStack(spacing: 0) {
-                    Text("LVL")
-                        .font(.system(size: 9, weight: .semibold)).tracking(1)
-                        .foregroundColor(.white.opacity(0.7))
-                    Text("\(level)")
-                        .font(.system(size: 28, weight: .semibold, design: .serif))
+        VStack(spacing: 6) {
+            if let standing {
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text("#")
+                        .font(.system(size: 24, weight: .semibold, design: .serif))
+                        .foregroundColor(.white.opacity(0.65))
+                    Text("\(standing.rank)")
+                        .font(.system(size: 52, weight: .bold, design: .serif))
                         .foregroundColor(.white)
+                        .monospacedDigit()
+                }
+                .scaleEffect(appeared ? 1 : 0.4)
+                .opacity(appeared ? 1 : 0)
+                .animation(.spring(response: 0.55, dampingFraction: 0.62).delay(0.25), value: appeared)
+
+                Text("of \(standing.totalPlayers) \(periodSuffix)")
+                    .font(.system(size: 11, weight: .semibold)).tracking(0.5)
+                    .foregroundColor(.white.opacity(0.7))
+
+                HStack(spacing: 6) {
+                    if let delta = standing.rankDelta {
+                        RankDeltaChip(delta: delta, onDark: true)
+                    }
+                    if let gap = gapLine {
+                        Text(gap)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white.opacity(0.85))
+                            .lineLimit(1)
+                    }
+                }
+                .padding(.top, 2)
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 8)
+                .animation(.easeOut(duration: 0.45).delay(0.55), value: appeared)
+            } else {
+                Image(systemName: "trophy")
+                    .font(.system(size: 30))
+                    .foregroundColor(.white.opacity(0.75))
+                Text("Dictate to enter\nthe board")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.75))
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(minWidth: 150)
+    }
+
+    private var gapLine: String? {
+        guard let standing else { return nil }
+        if standing.rank == 1 {
+            guard let lead = standing.leadOverNext, standing.totalPlayers > 1 else { return nil }
+            return "leads by \(StatsFormat.count(lead)) words"
+        }
+        if let toTopFive = standing.gapToTopFive {
+            return "\(StatsFormat.count(toTopFive)) words to top 5"
+        }
+        if let toNext = standing.gapToNext {
+            return "\(StatsFormat.count(toNext)) words to #\(standing.rank - 1)"
+        }
+        return nil
+    }
+}
+
+/// Compact rank-movement chip: ▲n (green) / ▼n (red) / = (neutral).
+private struct RankDeltaChip: View {
+    let delta: Int
+    var onDark = false
+
+    private var symbol: String { delta > 0 ? "arrowtriangle.up.fill" : (delta < 0 ? "arrowtriangle.down.fill" : "equal") }
+    private var tint: Color {
+        if delta > 0 { return Color(red: 0.25, green: 0.75, blue: 0.45) }
+        if delta < 0 { return Color(red: 0.88, green: 0.40, blue: 0.34) }
+        return onDark ? .white.opacity(0.7) : FlowTheme.inkSecondary
+    }
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: symbol).font(.system(size: 8, weight: .bold))
+            if delta != 0 {
+                Text("\(abs(delta))").font(.system(size: 11, weight: .bold)).monospacedDigit()
+            }
+        }
+        .foregroundColor(tint)
+        .padding(.horizontal, 7).padding(.vertical, 3)
+        .background(Capsule().fill(tint.opacity(onDark ? 0.22 : 0.14)))
+    }
+}
+
+/// "NEW" chip for players absent from the previous board.
+private struct NewEntrantChip: View {
+    var body: some View {
+        Text("NEW")
+            .font(.system(size: 8, weight: .bold)).tracking(0.6)
+            .foregroundColor(FlowTheme.accent)
+            .padding(.horizontal, 6).padding(.vertical, 3)
+            .background(Capsule().fill(FlowTheme.accentSoft))
+    }
+}
+
+// MARK: - Team pulse
+
+/// Team-wide totals for the selected period — the "we did this together"
+/// counterweight to the competitive board — plus a trend vs the last period.
+private struct TeamPulseStrip: View {
+    let pulse: TeamGamification.TeamPulse
+    let appeared: Bool
+
+    var body: some View {
+        FlowCard(padding: 14) {
+            HStack(spacing: 0) {
+                stat(icon: "text.word.spacing", value: pulse.totalWords, label: "team words")
+                divider
+                stat(icon: "person.2.fill", value: pulse.activeMembers, label: "active teammates")
+                divider
+                stat(icon: "chart.bar.fill", value: pulse.averageWords, label: "avg words / person")
+                if let trend = pulse.trendPercent {
+                    divider
+                    trendStat(trend)
                 }
             }
-            .frame(width: 88, height: 88)
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.white.opacity(0.85))
-                .lineLimit(1)
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 10)
+            .animation(.easeOut(duration: 0.45).delay(0.15), value: appeared)
         }
+    }
+
+    private func stat(icon: String, value: Int, label: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 13))
+                .foregroundColor(FlowTheme.accent)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(FlowTheme.accentSoft))
+            VStack(alignment: .leading, spacing: 2) {
+                AnimatedNumberText(value: value,
+                                   font: .system(size: 16, weight: .semibold, design: .serif),
+                                   color: FlowTheme.ink)
+                Text(label.uppercased())
+                    .font(.system(size: 9, weight: .semibold)).tracking(0.7)
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(minWidth: 112, maxWidth: .infinity, alignment: .center)
+        .padding(.horizontal, 12)
+    }
+
+    private func trendStat(_ trend: Int) -> some View {
+        let up = trend >= 0
+        let tint = up ? Color(red: 0.25, green: 0.75, blue: 0.45) : Color(red: 0.88, green: 0.40, blue: 0.34)
+        return HStack(spacing: 12) {
+            Image(systemName: up ? "arrow.up.right" : "arrow.down.right")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(tint)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(tint.opacity(0.14)))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(up ? "+" : "")\(trend)%")
+                    .font(.system(size: 16, weight: .semibold, design: .serif))
+                    .foregroundColor(tint)
+                    .monospacedDigit()
+                Text("VS PREVIOUS")
+                    .font(.system(size: 9, weight: .semibold)).tracking(0.7)
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(minWidth: 112, maxWidth: .infinity, alignment: .center)
+        .padding(.horizontal, 12)
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(FlowTheme.cardStroke)
+            .frame(width: 1, height: 34)
+    }
+}
+
+// MARK: - Movers
+
+/// Spotlights beyond the podium: the biggest rank climber and the largest word
+/// growth vs the previous period — so improving mid-pack teammates get shine,
+/// not only the perennial top-1.
+private struct TeamMoversRow: View {
+    let topClimber: TeamGamification.Mover?
+    let mostImproved: TeamGamification.Mover?
+    let periodSuffix: String
+    let appeared: Bool
+
+    var body: some View {
+        HStack(spacing: 16) {
+            if let climber = topClimber {
+                MoverCard(icon: "arrow.up.forward.circle.fill",
+                          label: "Biggest climb \(periodSuffix)",
+                          player: climber.player,
+                          headline: "▲\(climber.rankClimb) \(climber.rankClimb == 1 ? "place" : "places")",
+                          appeared: appeared, slideFrom: -24)
+            }
+            if let improved = mostImproved {
+                MoverCard(icon: "chart.line.uptrend.xyaxis.circle.fill",
+                          label: "Most improved \(periodSuffix)",
+                          player: improved.player,
+                          headline: "+\(StatsFormat.count(improved.wordsGained)) words",
+                          appeared: appeared, slideFrom: 24)
+            }
+        }
+    }
+}
+
+private struct MoverCard: View {
+    let icon: String
+    let label: String
+    let player: BackendLeaderboardPlayer
+    let headline: String
+    let appeared: Bool
+    let slideFrom: CGFloat
+
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 24))
+                .foregroundColor(FlowTheme.accent)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(label.uppercased())
+                    .font(.system(size: 9, weight: .semibold)).tracking(0.7)
+                    .foregroundColor(FlowTheme.inkSecondary)
+                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    TeamAvatar(name: player.name, seed: player.id, size: 22)
+                    Text(player.name)
+                        .font(.system(size: 14, weight: .semibold, design: .serif))
+                        .foregroundColor(FlowTheme.ink)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 10)
+            Text(headline)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(FlowTheme.accent)
+                .monospacedDigit()
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(Capsule().fill(FlowTheme.accentSoft))
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: FlowTheme.cornerRadius, style: .continuous)
+                .fill(FlowTheme.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: FlowTheme.cornerRadius, style: .continuous)
+                .stroke(hovering ? FlowTheme.accent.opacity(0.45) : FlowTheme.cardStroke, lineWidth: 1)
+        )
+        .scaleEffect(hovering ? 1.01 : 1)
+        .offset(x: appeared ? 0 : slideFrom)
+        .opacity(appeared ? 1 : 0)
+        .animation(.spring(response: 0.55, dampingFraction: 0.8).delay(0.3), value: appeared)
+        .animation(.easeOut(duration: 0.18), value: hovering)
+        .onHover { hovering = $0 }
     }
 }
 
 // MARK: - Podium
 
 /// Top-3 podium: silver | gold | bronze columns that grow from the floor, with
-/// a bouncing crown on the leader. Column height encodes XP relative to #1.
+/// a bouncing crown and a pulsing glow on the leader, movement chips under the
+/// names, and a one-shot shine sweep across the bars once they have grown.
 private struct TeamPodium: View {
     let top: [TeamGamification.RankedPlayer]   // ranks 1...3, in rank order
+    let deltas: [String: Int]?
     let appeared: Bool
 
     private var display: [TeamGamification.RankedPlayer] {
@@ -241,6 +539,8 @@ private struct TeamPodium: View {
                 ForEach(display) { row in
                     PodiumColumn(row: row,
                                  fraction: fraction(for: row),
+                                 delta: deltas?[row.id],
+                                 hasDeltas: deltas != nil,
                                  appeared: appeared)
                 }
             }
@@ -249,18 +549,22 @@ private struct TeamPodium: View {
     }
 
     private func fraction(for row: TeamGamification.RankedPlayer) -> Double {
-        let leader = max(top[0].xp, 1)
-        // Keep even a zero-XP podium visible.
-        return max(0.25, Double(row.xp) / Double(leader))
+        let leader = max(top[0].activityWords, 1)
+        // Keep even a zero-word podium visible.
+        return max(0.25, Double(row.activityWords) / Double(leader))
     }
 }
 
 private struct PodiumColumn: View {
     let row: TeamGamification.RankedPlayer
     let fraction: Double
+    let delta: Int?
+    let hasDeltas: Bool
     let appeared: Bool
 
     @State private var crownBounce = false
+    @State private var glowPulse = false
+    @State private var shine = false
 
     private var maxBarHeight: CGFloat { 110 }
     private var barHeight: CGFloat { maxBarHeight * fraction }
@@ -282,16 +586,38 @@ private struct PodiumColumn: View {
                     .animation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true), value: crownBounce)
                     .onAppear { crownBounce = true }
             }
-            TeamAvatar(name: row.player.name, seed: row.player.id, size: row.rank == 1 ? 46 : 38,
-                       highlighted: row.isYou)
-            Text(row.player.name)
-                .font(.system(size: 13, weight: row.isYou ? .bold : .semibold))
-                .foregroundColor(FlowTheme.ink)
-                .lineLimit(1)
-            AnimatedNumberText(value: row.xp,
+            ZStack {
+                if row.rank == 1 {
+                    // Soft breathing halo behind the leader.
+                    Circle()
+                        .fill(medal.opacity(0.45))
+                        .frame(width: 54, height: 54)
+                        .blur(radius: 10)
+                        .scaleEffect(glowPulse ? 1.25 : 0.9)
+                        .opacity(glowPulse ? 0.9 : 0.5)
+                        .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: glowPulse)
+                        .onAppear { glowPulse = true }
+                }
+                TeamAvatar(name: row.player.name, seed: row.player.id, size: row.rank == 1 ? 46 : 38,
+                           highlighted: row.isYou)
+            }
+            HStack(spacing: 5) {
+                Text(row.player.name)
+                    .font(.system(size: 13, weight: row.isYou ? .bold : .semibold))
+                    .foregroundColor(FlowTheme.ink)
+                    .lineLimit(1)
+                if hasDeltas {
+                    if let delta {
+                        RankDeltaChip(delta: delta)
+                    } else {
+                        NewEntrantChip()
+                    }
+                }
+            }
+            AnimatedNumberText(value: row.activityWords,
                                font: .system(size: 15, weight: .semibold, design: .serif),
                                color: FlowTheme.ink)
-            Text("XP")
+            Text("WORDS")
                 .font(.system(size: 9, weight: .semibold)).tracking(1)
                 .foregroundColor(FlowTheme.inkSecondary)
 
@@ -299,6 +625,16 @@ private struct PodiumColumn: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(LinearGradient(colors: [medal.opacity(0.85), medal.opacity(0.45)],
                                          startPoint: .top, endPoint: .bottom))
+                // One-shot shine sweep after the bar has grown.
+                GeometryReader { geo in
+                    LinearGradient(colors: [.clear, .white.opacity(0.55), .clear],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 36)
+                        .offset(y: shine ? geo.size.height + 20 : -56)
+                        .animation(.easeInOut(duration: 0.9).delay(1.0 + Double(row.rank) * 0.15), value: shine)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .allowsHitTesting(false)
                 Text("\(row.rank)")
                     .font(.system(size: 22, weight: .bold, design: .serif))
                     .foregroundColor(.white)
@@ -307,6 +643,7 @@ private struct PodiumColumn: View {
             .frame(height: appeared ? barHeight : 8)
             .animation(.spring(response: 0.6, dampingFraction: 0.75).delay(0.25 + Double(row.rank) * 0.12),
                        value: appeared)
+            .onAppear { shine = false; DispatchQueue.main.async { shine = true } }
         }
         .frame(maxWidth: .infinity)
     }
@@ -316,22 +653,84 @@ private struct PodiumColumn: View {
 
 private struct TeamBoardList: View {
     let rows: [TeamGamification.RankedPlayer]
-    let maxXP: Int
+    let maxWords: Int
+    let deltas: [String: Int]?
+
+    @State private var page = 0
+
+    private let pageSize = 10
+    private var maxPage: Int { max(0, (rows.count - 1) / pageSize) }
+    private var effectivePage: Int { min(page, maxPage) }
+    private var visibleRows: [TeamGamification.RankedPlayer] {
+        let start = effectivePage * pageSize
+        let end = min(start + pageSize, rows.count)
+        guard start < end else { return [] }
+        return Array(rows[start..<end])
+    }
 
     var body: some View {
         FlowCard(padding: 10) {
-            VStack(spacing: 2) {
-                ForEach(rows) { row in
-                    TeamBoardRow(row: row, maxXP: max(maxXP, 1))
+            VStack(spacing: 8) {
+                ForEach(visibleRows) { row in
+                    TeamBoardRow(row: row, maxWords: max(maxWords, 1),
+                                 delta: deltas?[row.id], hasDeltas: deltas != nil)
+                }
+                if rows.count > pageSize {
+                    pagination
                 }
             }
         }
+        .onChange(of: rows.map(\.id)) { _ in
+            page = min(page, maxPage)
+        }
+    }
+
+    private var pagination: some View {
+        HStack(spacing: 10) {
+            Text("Showing \(effectivePage * pageSize + 1)-\(min((effectivePage + 1) * pageSize, rows.count)) of \(rows.count)")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(FlowTheme.inkSecondary)
+            Spacer()
+            TeamPageButton(systemName: "chevron.left", disabled: effectivePage == 0) {
+                withAnimation(.easeInOut(duration: 0.2)) { page = max(0, page - 1) }
+            }
+            Text("\(effectivePage + 1) / \(maxPage + 1)")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(FlowTheme.ink)
+                .monospacedDigit()
+                .frame(width: 44)
+            TeamPageButton(systemName: "chevron.right", disabled: effectivePage >= maxPage) {
+                withAnimation(.easeInOut(duration: 0.2)) { page = min(maxPage, page + 1) }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 6)
+    }
+}
+
+private struct TeamPageButton: View {
+    let systemName: String
+    let disabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(disabled ? FlowTheme.inkSecondary.opacity(0.45) : FlowTheme.ink)
+                .frame(width: 26, height: 24)
+                .background(Capsule().fill(disabled ? FlowTheme.rowHover.opacity(0.45) : FlowTheme.rowHover))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
     }
 }
 
 private struct TeamBoardRow: View {
     let row: TeamGamification.RankedPlayer
-    let maxXP: Int
+    let maxWords: Int
+    let delta: Int?
+    let hasDeltas: Bool
 
     @State private var hovering = false
 
@@ -361,6 +760,13 @@ private struct TeamBoardRow: View {
                     .foregroundColor(FlowTheme.inkSecondary)
             }
             Spacer(minLength: 12)
+            if hasDeltas {
+                if let delta {
+                    RankDeltaChip(delta: delta)
+                } else {
+                    NewEntrantChip()
+                }
+            }
             if row.player.streakDays > 0 {
                 HStack(spacing: 3) {
                     Image(systemName: "flame.fill").font(.system(size: 10)).foregroundColor(.orange)
@@ -369,17 +775,17 @@ private struct TeamBoardRow: View {
                         .foregroundColor(FlowTheme.inkSecondary)
                 }
             }
-            // XP bar relative to the board leader.
+            // Word bar relative to the board leader.
             ZStack(alignment: .leading) {
                 Capsule().fill(FlowTheme.rowHover)
                 Capsule().fill(FlowTheme.accent)
-                    .frame(width: 90 * CGFloat(row.xp) / CGFloat(maxXP))
+                    .frame(width: 90 * CGFloat(row.activityWords) / CGFloat(maxWords))
             }
             .frame(width: 90, height: 6)
-            Text("\(row.xp) XP")
+            Text("\(StatsFormat.count(row.activityWords)) words")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(FlowTheme.ink)
-                .frame(width: 76, alignment: .trailing)
+                .frame(width: 92, alignment: .trailing)
         }
         .padding(.horizontal, 10).padding(.vertical, 8)
         .background(
