@@ -1,12 +1,16 @@
 # Changelog
 
-## 0.8.5 - Double-shift fallback hotfix
+## 0.8.5 - Stable word flips
 
 ### Fixed
 
-- Fixed double-shift fallback for wrong-layout words containing physical
-  punctuation keys, so `vj;tv` no longer degrades into `vj;ем` after a
-  buffered selection mismatch.
+- Rebuilt no-selection double-shift around Sayful's own word buffer instead of
+  macOS word selection, preventing tail-only rewrites like `vj;ет`.
+- Kept double-shift reliable for the current word and the word immediately
+  before one typed space, while safely doing nothing after Enter, Tab, or extra
+  spaces.
+- Limited automatic layout flips to ordinary spaces, so Enter and Shift+Enter
+  no longer trigger surprise rewrites while sending or breaking lines.
 
 ## 0.8.4 - Layout boundary hotfix
 

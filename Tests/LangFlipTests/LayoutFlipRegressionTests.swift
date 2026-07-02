@@ -36,14 +36,6 @@ final class LayoutFlipRegressionTests: XCTestCase {
         XCTAssertEqual(convert("vj;tv", from: .en, to: .ru), "можем")
     }
 
-    func testDoubleShiftDoesNotRetrySystemFallbackForPhysicalPunctuationToken() {
-        let tap = EventTap()
-
-        XCTAssertFalse(tap.shouldRetrySystemKeyboardFallback(afterBufferedMismatchFor: "vj;tv"))
-        XCTAssertFalse(tap.shouldRetrySystemKeyboardFallback(afterBufferedMismatchFor: "nfr;t"))
-        XCTAssertTrue(tap.shouldRetrySystemKeyboardFallback(afterBufferedMismatchFor: "ghbdtn"))
-    }
-
     func testBilIsNotAcceptedAsUkrainianDictionarySignal() {
         XCTAssertFalse(AutoFlip.shared.isKnown("біл", in: .uk))
         XCTAssertFalse(AutoFlip.shared.isKnownInUk("біл"))

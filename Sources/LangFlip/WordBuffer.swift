@@ -20,7 +20,8 @@ final class WordBuffer {
     private(set) var recentHistory: [String] = []
     private static let recentHistoryCap = 8
 
-    private static let boundary: Set<Character> = [" ", "\t", "\n", "\r"]
+    private static let completionBoundary: Set<Character> = [" "]
+    private static let resetBoundary: Set<Character> = ["\t", "\n", "\r"]
 
     /// Punctuation that can trail a normal word but is not itself a physical
     /// letter in the supported Cyrillic layouts. When the user types
@@ -35,8 +36,11 @@ final class WordBuffer {
 
     func feed(_ s: String) {
         for ch in s {
-            if Self.boundary.contains(ch) {
+            if Self.completionBoundary.contains(ch) || Self.resetBoundary.contains(ch) {
                 current.removeAll(keepingCapacity: true)
+                if Self.resetBoundary.contains(ch) {
+                    lastCompleted = nil
+                }
             } else {
                 current.append(ch)
             }
@@ -50,7 +54,7 @@ final class WordBuffer {
     func feedReturningCompleted(_ s: String) -> CompletedWord? {
         var completed: CompletedWord?
         for ch in s {
-            if Self.boundary.contains(ch) {
+            if Self.completionBoundary.contains(ch) {
                 if !current.isEmpty {
                     if let next = Self.completedWord(from: current, whitespace: String(ch)) {
                         if completed == nil {
@@ -59,8 +63,13 @@ final class WordBuffer {
                         appendToHistory(next.word)
                         lastCompleted = next
                     }
+                } else {
+                    lastCompleted = nil
                 }
                 current.removeAll(keepingCapacity: true)
+            } else if Self.resetBoundary.contains(ch) {
+                current.removeAll(keepingCapacity: true)
+                lastCompleted = nil
             } else {
                 current.append(ch)
             }
@@ -95,6 +104,16 @@ final class WordBuffer {
     func backspace() {
         lastCompleted = nil
         if !current.isEmpty { current.removeLast() }
+    }
+
+    func replaceLastToken(word: String, boundary: String) {
+        if boundary.isEmpty {
+            current = word
+            lastCompleted = nil
+        } else {
+            current.removeAll(keepingCapacity: true)
+            lastCompleted = CompletedWord(word: word, boundary: boundary)
+        }
     }
 
     func reset() {

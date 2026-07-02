@@ -1367,16 +1367,12 @@ final class EventTap {
 
 
     private func tryKeyboardLineDoubleShiftFallback(targetNonEnglish: Layout) -> Bool {
-        guard !AppContext.frontmostAppIsTerminal() else {
-            AppLog.write("double-shift no-selection fallback skipped in terminal")
-            return false
-        }
-
         if let buffered = bufferedKeyboardFlipTarget(targetNonEnglish: targetNonEnglish) {
-            return tryBufferedKeyboardDoubleShiftFallback(buffered, targetNonEnglish: targetNonEnglish)
+            return applyBufferedKeyboardDoubleShiftFallback(buffered)
         }
 
-        return trySystemKeyboardLineDoubleShiftFallback(targetNonEnglish: targetNonEnglish)
+        AppLog.write("double-shift no-selection fallback skipped: no current buffered word")
+        return false
     }
 
     private func trySystemKeyboardLineDoubleShiftFallback(targetNonEnglish: Layout) -> Bool {
@@ -1435,6 +1431,8 @@ final class EventTap {
     private struct BufferedKeyboardFlipTarget {
         let selectedText: String
         let replacementText: String
+        let replacementWord: String
+        let boundary: String
         let source: Layout
         let target: Layout
     }
@@ -1458,51 +1456,23 @@ final class EventTap {
         return BufferedKeyboardFlipTarget(
             selectedText: word + boundary,
             replacementText: candidate.converted + boundary,
+            replacementWord: candidate.converted,
+            boundary: boundary,
             source: candidate.source,
             target: candidate.target
         )
     }
 
-    private func tryBufferedKeyboardDoubleShiftFallback(_ target: BufferedKeyboardFlipTarget, targetNonEnglish: Layout) -> Bool {
-        let pb = NSPasteboard.general
-        let snapshot = PasteboardSnapshot.capture(pb)
-        let countBefore = pb.changeCount
-
-        AppLog.write("double-shift buffered keyboard fallback selectedLen=\(target.selectedText.count) replacementLen=\(target.replacementText.count)")
-        selectPreviousCharacters(target.selectedText.count)
-        tryCopyAfterKeyboardSelection(countBefore: countBefore) { [weak self] selectedText in
-            guard let self else { return }
-            guard selectedText == target.selectedText else {
-                AppLog.write("double-shift buffered keyboard fallback selection mismatch")
-                self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
-                snapshot.restore(to: pb)
-                guard self.shouldRetrySystemKeyboardFallback(afterBufferedMismatchFor: target.selectedText) else {
-                    AppLog.write("double-shift buffered mismatch skipped system fallback for punctuation token")
-                    return
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-                    _ = self.trySystemKeyboardLineDoubleShiftFallback(targetNonEnglish: targetNonEnglish)
-                }
-                return
-            }
-
-            pb.clearContents()
-            pb.setString(target.replacementText, forType: .string)
-            self.postCmdShortcut(virtualKey: CGKeyCode(kVK_ANSI_V))
-            self.playRewriteFeedback()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                InputSource.switchTo(target.target)
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.pasteRestoreDelay) {
-                snapshot.restore(to: pb)
-            }
+    private func applyBufferedKeyboardDoubleShiftFallback(_ target: BufferedKeyboardFlipTarget) -> Bool {
+        AppLog.write("double-shift buffered direct rewrite eraseLen=\(target.selectedText.count) replacementLen=\(target.replacementText.count)")
+        postBackspaces(target.selectedText.count)
+        postUnicode(target.replacementText)
+        buffer.replaceLastToken(word: target.replacementWord, boundary: target.boundary)
+        playRewriteFeedback()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
+            InputSource.switchTo(target.target)
         }
         return true
-    }
-
-    func shouldRetrySystemKeyboardFallback(afterBufferedMismatchFor selectedText: String) -> Bool {
-        let systemBoundarySensitiveChars: Set<Character> = [";", ",", ".", "[", "]", "'"]
-        return !selectedText.contains(where: { systemBoundarySensitiveChars.contains($0) })
     }
 
     private func tryCopyAfterKeyboardSelection(countBefore: Int, completion: @escaping (String?) -> Void) {

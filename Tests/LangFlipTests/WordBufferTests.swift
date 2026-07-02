@@ -21,4 +21,46 @@ final class WordBufferTests: XCTestCase {
         XCTAssertEqual(completed?.word, "ghbdtn")
         XCTAssertEqual(completed?.boundary, "! ")
     }
+
+    func testNewlineResetsWithoutCompletingWord() {
+        let buffer = WordBuffer()
+
+        XCTAssertNil(buffer.feedReturningCompleted("nfr;t\n"))
+
+        XCTAssertEqual(buffer.current, "")
+        XCTAssertNil(buffer.lastCompleted)
+    }
+
+    func testReplacementWithoutBoundaryBecomesCurrentToken() {
+        let buffer = WordBuffer()
+        buffer.feed("vj;tn")
+
+        buffer.replaceLastToken(word: "может", boundary: "")
+
+        XCTAssertEqual(buffer.current, "может")
+        XCTAssertNil(buffer.lastCompleted)
+    }
+
+    func testReplacementWithBoundaryBecomesLastCompletedToken() {
+        let buffer = WordBuffer()
+        _ = buffer.feedReturningCompleted("vj;tn ")
+
+        buffer.replaceLastToken(word: "может", boundary: " ")
+
+        XCTAssertEqual(buffer.current, "")
+        XCTAssertEqual(buffer.lastCompleted?.word, "может")
+        XCTAssertEqual(buffer.lastCompleted?.boundary, " ")
+    }
+
+    func testSecondSpaceClearsCompletedTokenFallback() {
+        let buffer = WordBuffer()
+
+        _ = buffer.feedReturningCompleted("vj;tn ")
+        XCTAssertEqual(buffer.lastCompleted?.word, "vj;tn")
+
+        XCTAssertNil(buffer.feedReturningCompleted(" "))
+
+        XCTAssertNil(buffer.lastCompleted)
+        XCTAssertEqual(buffer.current, "")
+    }
 }
