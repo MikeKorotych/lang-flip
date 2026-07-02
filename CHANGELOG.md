@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.5 - Double-shift fallback hotfix
+
+### Fixed
+
+- Fixed double-shift fallback for wrong-layout words containing physical
+  punctuation keys, so `vj;tv` no longer degrades into `vj;ем` after a
+  buffered selection mismatch.
+
 ## 0.8.4 - Layout boundary hotfix
 
 ### Fixed
