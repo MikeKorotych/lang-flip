@@ -13,8 +13,11 @@ import Sparkle
 /// installing.
 final class Updater: NSObject, ObservableObject {
     static let shared = Updater()
+    static let backgroundCheckInterval: TimeInterval = 30 * 60
 
     private(set) var controller: SPUStandardUpdaterController!
+    private var periodicCheckTimer: Timer?
+    private var notifiedAvailableVersion: String?
 
     /// Display version of a found-but-not-yet-installed update, or nil. Drives the
     /// title-bar update button so an available update stays one click away.
@@ -44,6 +47,22 @@ final class Updater: NSObject, ObservableObject {
     func checkInBackground() {
         guard controller.updater.canCheckForUpdates else { return }
         controller.updater.checkForUpdateInformation()
+    }
+
+    /// Keep probing the appcast while the app is running so the title-bar update
+    /// button appears without waiting for relaunch. Sparkle still owns download,
+    /// signature verification and installation.
+    func startPeriodicBackgroundChecks(after initialDelay: TimeInterval = 3) {
+        guard periodicCheckTimer == nil else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + initialDelay) { [weak self] in
+            self?.checkInBackground()
+        }
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.backgroundCheckInterval,
+                                         repeats: true) { [weak self] _ in
+            self?.checkInBackground()
+        }
+        timer.tolerance = 60
+        periodicCheckTimer = timer
     }
 
     var canCheckForUpdates: Bool {
@@ -77,6 +96,14 @@ extension Updater: SPUUpdaterDelegate {
                 title: "Update available",
                 body: "Sayful \(version) is ready — click the update button in the header to install it."
             )
+            if self.notifiedAvailableVersion != version {
+                self.notifiedAvailableVersion = version
+                Notifications.show(
+                    title: "Update available",
+                    body: "Sayful \(version) is ready to download and install.",
+                    identifier: "update-\(version)"
+                )
+            }
         }
     }
 
