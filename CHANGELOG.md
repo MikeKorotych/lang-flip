@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.4 - Layout boundary hotfix
+
+### Fixed
+
+- Fixed wrong-layout words with physical punctuation keys, such as `vj;tv`,
+  so Sayful flips the whole token to `можем` instead of only rewriting the tail.
+- Improved first-word layout detection after idle by preferring the layout
+  implied by the typed token before falling back to macOS' current input source.
+
 ## 0.8.3 - Faster layout fixes and team momentum
 
 ### Added
