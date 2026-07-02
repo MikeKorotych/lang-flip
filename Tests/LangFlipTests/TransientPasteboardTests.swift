@@ -38,6 +38,24 @@ final class TransientPasteboardTests: XCTestCase {
         wait(for: [checked], timeout: 1)
     }
 
+    func testTransientPasteRestoresWhenPasteboardWasTouchedButStillContainsTranscript() {
+        let pb = NSPasteboard(name: NSPasteboard.Name("lang-flip-test-\(UUID().uuidString)"))
+        pb.clearContents()
+        pb.setString("previous clipboard", forType: .string)
+
+        let restored = expectation(description: "clipboard restored after same transcript rewrite")
+        TransientPasteboard.pasteString("private transcript", to: pb, restoreAfter: 0.02) {
+            pb.clearContents()
+            pb.setString("private transcript", forType: .string)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            XCTAssertEqual(pb.string(forType: .string), "previous clipboard")
+            restored.fulfill()
+        }
+        wait(for: [restored], timeout: 1)
+    }
+
     func testTransientPasteCanRemainAsClipboardFallback() {
         let pb = NSPasteboard(name: NSPasteboard.Name("lang-flip-test-\(UUID().uuidString)"))
         pb.clearContents()

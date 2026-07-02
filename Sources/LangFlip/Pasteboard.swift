@@ -56,9 +56,49 @@ enum TransientPasteboard {
         paste()
 
         guard restoreOriginalClipboard else { return }
+        scheduleRestoreIfStillTransient(
+            string,
+            snapshot: snapshot,
+            pasteboard: pb,
+            transientChangeCount: transientChangeCount,
+            delay: delay
+        )
+
+        // Some apps touch the pasteboard after Cmd+V while leaving our transient
+        // string there. A second pass keeps the user's clipboard from being
+        // stranded on the transcript without clobbering a new user copy.
+        scheduleRestoreIfStillTransient(
+            string,
+            snapshot: snapshot,
+            pasteboard: pb,
+            transientChangeCount: transientChangeCount,
+            delay: max(delay * 3, 1.0)
+        )
+    }
+
+    private static func scheduleRestoreIfStillTransient(
+        _ string: String,
+        snapshot: PasteboardSnapshot,
+        pasteboard pb: NSPasteboard,
+        transientChangeCount: Int,
+        delay: TimeInterval
+    ) {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            guard pb.changeCount == transientChangeCount else { return }
+            guard shouldRestoreSnapshot(
+                transientString: string,
+                from: pb,
+                transientChangeCount: transientChangeCount
+            ) else { return }
             snapshot.restore(to: pb)
         }
+    }
+
+    static func shouldRestoreSnapshot(
+        transientString string: String,
+        from pb: NSPasteboard,
+        transientChangeCount: Int
+    ) -> Bool {
+        if pb.changeCount == transientChangeCount { return true }
+        return pb.string(forType: .string) == string
     }
 }
