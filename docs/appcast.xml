@@ -26,6 +26,27 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.8.5</title>
+      <pubDate>Thu, 02 Jul 2026 15:50:12 +0000</pubDate>
+      <sparkle:version>0.8.5</sparkle:version>
+      <sparkle:shortVersionString>0.8.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Stable word flips</h2>
+        <ul>
+          <li>Rebuilt no-selection double-shift around Sayful's own word buffer instead of macOS word selection, preventing tail-only rewrites like vj;ет.</li>
+          <li>Kept double-shift reliable for the current word and the word immediately before one typed space, while safely doing nothing after Enter, Tab, or extra spaces.</li>
+          <li>Limited automatic layout flips to ordinary spaces, so Enter and Shift+Enter no longer trigger surprise rewrites while sending or breaking lines.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.5/Sayful-0.8.5.dmg"
+        length="6968748"
+        type="application/octet-stream"
+        sparkle:edSignature="yXxHT/MPWmerRvDHMiuZQcvG4WeqNPcQP/++AnW5+FTSYFxCGx1v1MjwmpwK+zC7tQX5NprKNueapJHjo8h+Ag==" />
+    </item>
+
+    <item>
       <title>v0.8.4</title>
       <pubDate>Thu, 02 Jul 2026 15:06:39 +0000</pubDate>
       <sparkle:version>0.8.4</sparkle:version>
