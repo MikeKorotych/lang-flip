@@ -147,6 +147,32 @@ Quota headers use weighted quota units, not raw words.
 - Per-user rate limit (~60 req/min) → `429 { code: "rate_limited" }` (distinct from `quota_exceeded`).
 - HTTPS only.
 
+### 5.5 Team leaderboard (corporate-only, additive — client shipped ahead)
+
+`POST /v1/leaderboard` — body `{}` → 200:
+
+```json
+{
+  "daily":  [ { "id", "name", "words", "dictations", "streakDays" }, ... ],
+  "weekly": [ ... same shape ... ],
+  "generatedAt": "2026-07-02T10:00:00.000Z"
+}
+```
+
+- Caller must be signed in AND on the corporate domain (`uni.tech`); otherwise
+  `403 { code: "bad_request" }`. Boards only ever contain users of the caller's
+  own domain.
+- `daily` = current UTC day; `weekly` = current quota week (UTC Monday, §5.3).
+- Aggregated from the existing metering log: `words` = raw transcribed words
+  (unweighted), `dictations` = number of transcribe calls, `streakDays` =
+  consecutive UTC days with ≥1 dictation, ending today.
+- `name` = profile display name if known, else the email local-part. Never
+  return teammates' full emails.
+- Not metered (no quota charge); the normal per-user rate limit applies.
+- The macOS client (`BackendLeaderboard.swift` / `TeamDashboardModel`) treats
+  any error as "not live yet" and falls back to a local-only preview, so this
+  endpoint can ship after the app update without breaking anything.
+
 ---
 
 ## 6. Data model (Postgres — both branches)

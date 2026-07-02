@@ -62,6 +62,15 @@ final class HTTPBackendClient: BackendClient {
         try await send("tts", jsonBody: request)
     }
 
+    /// `POST /v1/leaderboard` — ranked daily + weekly team boards (spec §5.5).
+    /// Not part of `BackendClient`: it is a corporate-only extra, not a proxy
+    /// feature every AI backend must provide.
+    func leaderboard() async throws -> BackendLeaderboardResponse {
+        struct Empty: Encodable {}
+        let data = try await send("leaderboard", jsonBody: Empty())
+        return try BackendJSON.decoder.decode(BackendLeaderboardResponse.self, from: data)
+    }
+
     func ttsPCMStream(
         _ request: BackendTTSRequest,
         onResponse: (BackendPCMStreamInfo) throws -> Void,
