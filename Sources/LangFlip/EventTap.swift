@@ -1159,11 +1159,12 @@ final class EventTap {
     }
 
     private func autoFlipSourceCandidates(for word: String, currentLayout: Layout?) -> [Layout] {
-        if let currentLayout { return [currentLayout] }
-
         var result: [Layout] = []
         if let detected = detectLayout(word) {
             result.append(detected)
+        }
+        if let currentLayout, !result.contains(currentLayout) {
+            result.append(currentLayout)
         }
         for layout in Layout.allCases where !result.contains(layout) {
             result.append(layout)
