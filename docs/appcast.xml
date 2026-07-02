@@ -26,6 +26,26 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.8.4</title>
+      <pubDate>Thu, 02 Jul 2026 15:06:39 +0000</pubDate>
+      <sparkle:version>0.8.4</sparkle:version>
+      <sparkle:shortVersionString>0.8.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Layout boundary hotfix</h2>
+        <ul>
+          <li>Fixed wrong-layout words with physical punctuation keys, such as vj;tv, so Sayful flips the whole token to можем instead of only rewriting the tail.</li>
+          <li>Improved first-word layout detection after idle by preferring the layout implied by the typed token before falling back to macOS' current input source.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.4/Sayful-0.8.4.dmg"
+        length="6970570"
+        type="application/octet-stream"
+        sparkle:edSignature="63yvEyjWt5Rb9FJItH+qprFTa3Cs87ACJnkzIamIhsu2L8BbWJ+PGWTqJhOou1W4cRamYRFk3/9fQrlW2AaQAQ==" />
+    </item>
+
+    <item>
       <title>v0.8.3</title>
       <pubDate>Thu, 02 Jul 2026 14:57:51 +0000</pubDate>
       <sparkle:version>0.8.3</sparkle:version>
