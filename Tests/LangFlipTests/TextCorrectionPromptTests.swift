@@ -24,4 +24,12 @@ final class TextCorrectionPromptTests: XCTestCase {
         XCTAssertTrue(prompt.contains("instead of normalizing or\ntranslating everything into one language"))
         XCTAssertTrue(prompt.contains("individual Ukrainian/Russian code-switching words"))
     }
+
+    func testDefaultPromptProtectsProductNamesAndGlossaryTerms() {
+        let prompt = TextCorrectionPrompt.preview(language: "user's language", allowLayoutRepair: true)
+
+        XCTAssertTrue(prompt.contains("Preserve plausible app, product, model, and brand names"))
+        XCTAssertTrue(prompt.contains("Linear, GitHub, Pull Request, Qwen, Whisper"))
+        XCTAssertTrue(prompt.contains("Do not change an unknown name into a common word"))
+    }
 }

@@ -1413,11 +1413,18 @@ final class Settings {
     var sttTranscriptionPromptTemplate: String {
         get {
             let raw = defaults.string(forKey: Keys.sttTranscriptionPromptTemplate) ?? ""
-            return raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? STTTranscriptionPrompt.defaultText : raw
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty || trimmed == STTTranscriptionPrompt.legacyVocabularyPrompt.trimmingCharacters(in: .whitespacesAndNewlines) {
+                defaults.removeObject(forKey: Keys.sttTranscriptionPromptTemplate)
+                return STTTranscriptionPrompt.defaultText
+            }
+            return raw
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed == STTTranscriptionPrompt.defaultText.trimmingCharacters(in: .whitespacesAndNewlines) || trimmed.isEmpty {
+            if trimmed == STTTranscriptionPrompt.defaultText.trimmingCharacters(in: .whitespacesAndNewlines)
+                || trimmed == STTTranscriptionPrompt.legacyVocabularyPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                || trimmed.isEmpty {
                 defaults.removeObject(forKey: Keys.sttTranscriptionPromptTemplate)
             } else {
                 defaults.set(newValue, forKey: Keys.sttTranscriptionPromptTemplate)

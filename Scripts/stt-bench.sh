@@ -49,7 +49,7 @@ PRESET="${1:-openrouter-json}"
 RUNS="${2:-${RUNS:-10}}"
 FIXTURE="${FIXTURE:-/tmp/sayful-stt-fixture.wav}"
 PHRASE="${PHRASE:-Hey team, quick update on the project. I finished the latency instrumentation today and the next step is to benchmark the speech to text pipeline.}"
-STT_PROMPT="${STT_PROMPT:-Українська. Русский. English. Суржик. затестить фічу переводить язык но. GitHub Sayful speech-to-text pipeline.}"
+STT_PROMPT="${STT_PROMPT:-}"
 
 keychain_openrouter_key() {
   security find-generic-password -s com.antonpinkevych.lang-flip -a cloud-ai-api-key -w 2>/dev/null || true
@@ -122,8 +122,13 @@ trap 'rm -f "$BODY" "$PAYLOAD" "$AUTH_CONFIG"' EXIT
 # Pre-build the JSON payload (base64 audio) once for json mode.
 if [[ "$MODE" == "json" ]]; then
   B64=$(base64 -i "$FIXTURE" | tr -d '\n')
-  jq -n --arg model "$MODEL" --arg data "$B64" --arg prompt "$STT_PROMPT" \
-    '{model:$model,prompt:$prompt,input_audio:{data:$data,format:"wav"}}' > "$PAYLOAD"
+  if [[ -n "$STT_PROMPT" ]]; then
+    jq -n --arg model "$MODEL" --arg data "$B64" --arg prompt "$STT_PROMPT" \
+      '{model:$model,prompt:$prompt,input_audio:{data:$data,format:"wav"}}' > "$PAYLOAD"
+  else
+    jq -n --arg model "$MODEL" --arg data "$B64" \
+      '{model:$model,input_audio:{data:$data,format:"wav"}}' > "$PAYLOAD"
+  fi
 fi
 
 # Trailing \n matters: `read` returns non-zero at EOF with no newline, which

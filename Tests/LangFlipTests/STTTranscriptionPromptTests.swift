@@ -7,16 +7,22 @@ final class STTTranscriptionPromptTests: XCTestCase {
         super.tearDown()
     }
 
-    func testPromptGuidesLanguageDetectionWithoutKeyboardLayout() {
-        let prompt = STTTranscriptionPrompt.defaultText
+    func testDefaultPromptIsEmptyForBaselineTesting() {
+        XCTAssertEqual(STTTranscriptionPrompt.defaultText, "")
+        XCTAssertNil(STTTranscriptionPrompt.current())
+    }
 
-        XCTAssertTrue(prompt.contains("Українська"))
-        XCTAssertTrue(prompt.contains("Русский"))
-        XCTAssertTrue(prompt.contains("English"))
-        XCTAssertTrue(prompt.contains("Суржик"))
-        XCTAssertTrue(prompt.contains("затестить"))
-        XCTAssertTrue(prompt.contains("GitHub"))
-        XCTAssertTrue(prompt.contains("speech-to-text pipeline"))
+    func testWhitespacePromptIsNotSent() {
+        UserDefaults.standard.set(" \n\t ", forKey: "lf.dev.sttTranscriptionPromptTemplate")
+
+        XCTAssertNil(STTTranscriptionPrompt.current())
+    }
+
+    func testLegacyVocabularyPromptIsCleared() {
+        UserDefaults.standard.set(STTTranscriptionPrompt.legacyVocabularyPrompt, forKey: "lf.dev.sttTranscriptionPromptTemplate")
+
+        XCTAssertNil(STTTranscriptionPrompt.current())
+        XCTAssertNil(UserDefaults.standard.string(forKey: "lf.dev.sttTranscriptionPromptTemplate"))
     }
 
     func testPromptCanBeOverriddenFromSettings() {

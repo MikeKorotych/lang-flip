@@ -5,6 +5,8 @@ build/
 DerivedData/
 .DS_Store
 release-notes.md
+__pycache__/
+*.pyc
 
 # Local secrets / environment. Bench scripts intentionally load secrets from
 # ~/.sayful-bench.env outside the repo; keep accidental local copies out.

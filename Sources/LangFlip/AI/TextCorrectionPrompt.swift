@@ -22,6 +22,12 @@ enum TextCorrectionPrompt {
     Preserve the author's sentence, wording, tone, language, slang,
     loanwords, authenticity, names, code, URLs, markdown, line breaks, and
     formatting.
+    Preserve plausible app, product, model, and brand names, including
+    phonetic or transliterated forms, unless a known glossary match is very
+    clear. Known glossary: Linear, GitHub, Pull Request, Qwen, Whisper,
+    OpenRouter, Sayful, Dev Mode, STT, speech-to-text, git status,
+    git push origin main. Do not change an unknown name into a common word
+    such as "link" or "линк" just because it is plausible.
     Do not rewrite for style. Do not improve the text beyond correcting it.
     Do not add new concepts. Do not expand one misspelled word into a phrase.
     For each misspelled word, choose the nearest plausible intended word

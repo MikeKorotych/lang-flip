@@ -23,14 +23,16 @@ enum CloudTranscriber {
             "STT encode=\(String(format: "%.0f", NetworkLatency.elapsedMs(since: encodeStart)), privacy: .public)ms audio=\(data.count, privacy: .public)B b64=\(encoded.count, privacy: .public)B model=\(Settings.shared.cloudSTTModel, privacy: .public)"
         )
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": Settings.shared.cloudSTTModel,
-            "prompt": STTTranscriptionPrompt.current(),
             "input_audio": [
                 "data": encoded,
                 "format": format,
             ]
         ]
+        if let prompt = STTTranscriptionPrompt.current() {
+            body["prompt"] = prompt
+        }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"

@@ -966,8 +966,11 @@ struct DevToolsTab: View {
     @State private var selectedModel = Settings.shared.devTextCorrectionModel
     @State private var keepSuccessfulDictationRecordings = Settings.shared.keepSuccessfulDictationRecordings
     @State private var sttPromptTemplate = Settings.shared.sttTranscriptionPromptTemplate
+    @State private var savedSttPromptTemplate = Settings.shared.sttTranscriptionPromptTemplate
     @State private var dictationPromptTemplate = Settings.shared.dictationFormatPromptTemplate
+    @State private var savedDictationPromptTemplate = Settings.shared.dictationFormatPromptTemplate
     @State private var textCorrectionPromptTemplate = Settings.shared.textCorrectionPromptTemplate
+    @State private var savedTextCorrectionPromptTemplate = Settings.shared.textCorrectionPromptTemplate
 
     private var isAllowed: Bool {
         auth.currentUser?.email.localizedCaseInsensitiveCompare("mykhailo.korotych@uni.tech") == .orderedSame
@@ -1022,9 +1025,12 @@ struct DevToolsTab: View {
                         note: "Sent with the audio transcription request before the first transcript is produced.",
                         text: $sttPromptTemplate,
                         minHeight: 150,
+                        savedText: savedSttPromptTemplate,
                         defaultText: STTTranscriptionPrompt.defaultText,
-                        onChange: { Settings.shared.sttTranscriptionPromptTemplate = $0 },
-                        onReset: { Settings.shared.sttTranscriptionPromptTemplate = "" }
+                        onSave: {
+                            Settings.shared.sttTranscriptionPromptTemplate = $0
+                            reloadPromptDrafts(overwriteUnsaved: true)
+                        }
                     )
 
                     promptEditor(
@@ -1032,9 +1038,12 @@ struct DevToolsTab: View {
                         note: "Used after longer dictations to format punctuation, paragraphs, lists, and quotes.",
                         text: $dictationPromptTemplate,
                         minHeight: 360,
+                        savedText: savedDictationPromptTemplate,
                         defaultText: BackendAssistant.defaultDictationFormatPrompt,
-                        onChange: { Settings.shared.dictationFormatPromptTemplate = $0 },
-                        onReset: { Settings.shared.dictationFormatPromptTemplate = "" }
+                        onSave: {
+                            Settings.shared.dictationFormatPromptTemplate = $0
+                            reloadPromptDrafts(overwriteUnsaved: true)
+                        }
                     )
 
                     promptEditor(
@@ -1042,9 +1051,12 @@ struct DevToolsTab: View {
                         note: "Used for selected text correction and sentence cleanup. Placeholders: \(TextCorrectionPrompt.languagePlaceholder), \(TextCorrectionPrompt.layoutRulePlaceholder)",
                         text: $textCorrectionPromptTemplate,
                         minHeight: 420,
+                        savedText: savedTextCorrectionPromptTemplate,
                         defaultText: TextCorrectionPrompt.defaultTemplate,
-                        onChange: { Settings.shared.textCorrectionPromptTemplate = $0 },
-                        onReset: { Settings.shared.textCorrectionPromptTemplate = "" }
+                        onSave: {
+                            Settings.shared.textCorrectionPromptTemplate = $0
+                            reloadPromptDrafts(overwriteUnsaved: true)
+                        }
                     )
                 } else {
                     FlowSettingsGroup("DevTools") {
@@ -1066,9 +1078,10 @@ struct DevToolsTab: View {
         .onAppear {
             selectedModel = Settings.shared.devTextCorrectionModel
             keepSuccessfulDictationRecordings = Settings.shared.keepSuccessfulDictationRecordings
-            sttPromptTemplate = Settings.shared.sttTranscriptionPromptTemplate
-            dictationPromptTemplate = Settings.shared.dictationFormatPromptTemplate
-            textCorrectionPromptTemplate = Settings.shared.textCorrectionPromptTemplate
+            reloadPromptDrafts(overwriteUnsaved: true)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            reloadPromptDrafts(overwriteUnsaved: false)
         }
     }
 
@@ -1076,10 +1089,11 @@ struct DevToolsTab: View {
                               note: String,
                               text: Binding<String>,
                               minHeight: CGFloat,
+                              savedText: String,
                               defaultText: String,
-                              onChange: @escaping (String) -> Void,
-                              onReset: @escaping () -> Void) -> some View {
-        FlowSettingsGroup(title, spacing: 12) {
+                              onSave: @escaping (String) -> Void) -> some View {
+        let hasUnsavedChanges = text.wrappedValue != savedText
+        return FlowSettingsGroup(title, spacing: 12) {
             Text(note)
                 .font(.caption)
                 .foregroundColor(FlowTheme.inkSecondary)
@@ -1097,19 +1111,47 @@ struct DevToolsTab: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(FlowTheme.cardStroke, lineWidth: 1)
                 )
-                .onChange(of: text.wrappedValue, perform: onChange)
 
             HStack {
-                FlowSmallButton(title: "Reset prompt") {
+                FlowSmallButton(title: "Reset to default") {
                     text.wrappedValue = defaultText
-                    onReset()
+                }
+                FlowSmallButton(title: "Reload saved") {
+                    text.wrappedValue = savedText
                 }
                 Spacer()
+                Text(hasUnsavedChanges ? "Unsaved changes" : "Saved")
+                    .font(.caption)
+                    .foregroundColor(hasUnsavedChanges ? .orange : FlowTheme.inkSecondary)
                 Text("\(text.wrappedValue.count) chars")
                     .font(.caption)
                     .foregroundColor(FlowTheme.inkSecondary)
+                FlowSmallButton(title: "Save prompt", prominent: true) {
+                    onSave(text.wrappedValue)
+                }
+                .disabled(!hasUnsavedChanges)
             }
         }
+    }
+
+    private func reloadPromptDrafts(overwriteUnsaved: Bool) {
+        let stt = Settings.shared.sttTranscriptionPromptTemplate
+        let dictation = Settings.shared.dictationFormatPromptTemplate
+        let correction = Settings.shared.textCorrectionPromptTemplate
+
+        if overwriteUnsaved || sttPromptTemplate == savedSttPromptTemplate {
+            sttPromptTemplate = stt
+        }
+        if overwriteUnsaved || dictationPromptTemplate == savedDictationPromptTemplate {
+            dictationPromptTemplate = dictation
+        }
+        if overwriteUnsaved || textCorrectionPromptTemplate == savedTextCorrectionPromptTemplate {
+            textCorrectionPromptTemplate = correction
+        }
+
+        savedSttPromptTemplate = stt
+        savedDictationPromptTemplate = dictation
+        savedTextCorrectionPromptTemplate = correction
     }
 }
 
