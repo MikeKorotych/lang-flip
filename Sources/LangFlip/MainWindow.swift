@@ -80,13 +80,15 @@ final class MainWindowController {
 // MARK: - Sections
 
 enum MainSection: String, CaseIterable, Identifiable {
-    case home, langflip, hotkeys, insights, dictionary, snippets, transforms, settings
+    case home, langflip, hotkeys, insights, team, dictionary, snippets, transforms, settings
 
     var id: String { rawValue }
 
     /// Top sidebar group — the speech-to-text features. `settings` lives at the
     /// bottom; the layout-flip tools (`secondary`) sit in their own group below.
-    static let primary: [MainSection] = [.home, .insights, .snippets, .transforms]
+    /// `team` is corporate-only — the sidebar drops it for non-eligible accounts
+    /// (see `SidebarView.primaryItems`).
+    static let primary: [MainSection] = [.home, .insights, .team, .snippets, .transforms]
 
     /// Layout-flip tools + global shortcuts, grouped apart from the STT features.
     static let secondary: [MainSection] = [.dictionary, .langflip, .hotkeys]
@@ -97,6 +99,7 @@ enum MainSection: String, CaseIterable, Identifiable {
         case .langflip:   return "LangFlip"
         case .hotkeys:    return "Hotkeys"
         case .insights:   return "Insights"
+        case .team:       return "Team"
         case .dictionary: return "Dictionary"
         case .snippets:   return "Snippets"
         case .transforms: return "Transforms"
@@ -110,6 +113,7 @@ enum MainSection: String, CaseIterable, Identifiable {
         case .langflip:   return "keyboard"
         case .hotkeys:    return "command"
         case .insights:   return "chart.bar"
+        case .team:       return "trophy"
         case .dictionary: return "character.book.closed"
         case .snippets:   return "scissors"
         case .transforms: return "wand.and.stars"
@@ -133,6 +137,7 @@ final class MainNavigation: ObservableObject {
 
 struct MainView: View {
     @ObservedObject private var nav = MainNavigation.shared
+    @ObservedObject private var auth = SupabaseBackendAuth.shared
 
     var body: some View {
         HStack(spacing: 0) {
@@ -147,6 +152,16 @@ struct MainView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(FlowTheme.paper)
         .sheet(isPresented: $nav.showAccount) { AccountSheet() }
+        // Load the profile early so the corporate-only Team row is present from
+        // launch (elsewhere /me is only fetched when the profile popover opens).
+        .task { if auth.isSignedIn && auth.currentUser == nil { _ = try? await auth.refreshUser() } }
+        // If eligibility disappears (sign-out, account switch) while Team is
+        // open, bounce to Home rather than showing the locked placeholder.
+        .onReceive(auth.$currentUser) { user in
+            if nav.section == .team && !TeamAccess.isEligible(email: user?.email) {
+                nav.section = .home
+            }
+        }
     }
 
     @ViewBuilder
@@ -163,6 +178,7 @@ struct MainView: View {
                     case .langflip:   LangFlipView()
                     case .hotkeys:    HotkeysView()
                     case .insights:   InsightsView()
+                    case .team:       TeamDashboardView()
                     case .dictionary: DictionaryView()
                     case .snippets:   SnippetsView()
                     case .transforms: TransformsView()
@@ -184,6 +200,14 @@ struct MainView: View {
 private struct SidebarView: View {
     @Binding var section: MainSection
     let collapsed: Bool
+    @ObservedObject private var auth = SupabaseBackendAuth.shared
+
+    /// The Team dashboard row is only offered to corporate accounts.
+    private var primaryItems: [MainSection] {
+        MainSection.primary.filter {
+            $0 != .team || TeamAccess.isEligible(email: auth.currentUser?.email)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 2) {
@@ -206,7 +230,7 @@ private struct SidebarView: View {
             .padding(.top, 8)
             .padding(.bottom, 20)
 
-            ForEach(MainSection.primary) { navRow($0) }
+            ForEach(primaryItems) { navRow($0) }
 
             // Set the layout-flip tools (Dictionary, LangFlip) apart from the
             // speech-to-text features above with a divider + extra spacing.
