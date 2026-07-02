@@ -419,7 +419,7 @@ final class VoiceDictationController {
         let beforeContext = FocusedTextReader.current()
         let appBundleID = AppContext.frontmostBundleID()
 
-        let shouldRestoreClipboard = beforeContext != nil
+        let shouldRestoreClipboard = beforeContext != nil || FocusedTextReader.hasFocusedTextInput()
         TransientPasteboard.pasteString(cleaned, restoreOriginalClipboard: shouldRestoreClipboard) {
             postCommandV()
         }
@@ -444,7 +444,7 @@ final class VoiceDictationController {
     func pasteText(_ text: String) {
         let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return }
-        let shouldRestoreClipboard = FocusedTextReader.current() != nil
+        let shouldRestoreClipboard = FocusedTextReader.current() != nil || FocusedTextReader.hasFocusedTextInput()
         TransientPasteboard.pasteString(cleaned, restoreOriginalClipboard: shouldRestoreClipboard) {
             postCommandV()
         }
