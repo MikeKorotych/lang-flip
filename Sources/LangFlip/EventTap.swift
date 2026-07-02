@@ -1476,6 +1476,10 @@ final class EventTap {
                 AppLog.write("double-shift buffered keyboard fallback selection mismatch")
                 self.postKey(virtualKey: CGKeyCode(kVK_RightArrow))
                 snapshot.restore(to: pb)
+                guard self.shouldRetrySystemKeyboardFallback(afterBufferedMismatchFor: target.selectedText) else {
+                    AppLog.write("double-shift buffered mismatch skipped system fallback for punctuation token")
+                    return
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
                     _ = self.trySystemKeyboardLineDoubleShiftFallback(targetNonEnglish: targetNonEnglish)
                 }
@@ -1494,6 +1498,11 @@ final class EventTap {
             }
         }
         return true
+    }
+
+    func shouldRetrySystemKeyboardFallback(afterBufferedMismatchFor selectedText: String) -> Bool {
+        let systemBoundarySensitiveChars: Set<Character> = [";", ",", ".", "[", "]", "'"]
+        return !selectedText.contains(where: { systemBoundarySensitiveChars.contains($0) })
     }
 
     private func tryCopyAfterKeyboardSelection(countBefore: Int, completion: @escaping (String?) -> Void) {
