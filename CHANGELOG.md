@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.3 - Faster layout fixes and team momentum
+
+### Added
+
+- Added a Team dashboard polish pass with words-first rankings, previous-period
+  insights, movers, achievement badges, and rank-climb notifications.
+- Added recurring background update checks so Sayful can surface a new version
+  while it is already running.
+
+### Fixed
+
+- Fixed dictation paste cleanup so successful focused inserts restore the
+  clipboard even when the target app touches the pasteboard during paste.
+- Fixed the first wrong-layout terminal word after idle, including common
+  commands like `make`, `run`, `git`, `cd`, `ls`, and `pwd`.
+- Stabilized the dictation island hover animation and click target.
+
 ## 0.8.2 - Enterprise privacy and quota hardening
 
 ### Added
