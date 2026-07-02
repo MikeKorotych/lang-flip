@@ -26,6 +26,25 @@
     <!-- Releases — newest first. Add a new <item> when shipping. -->
 
     <item>
+      <title>v0.8.5</title>
+      <pubDate>Thu, 02 Jul 2026 15:17:58 +0000</pubDate>
+      <sparkle:version>0.8.5</sparkle:version>
+      <sparkle:shortVersionString>0.8.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Double-shift fallback hotfix</h2>
+        <ul>
+          <li>Fixed double-shift fallback for wrong-layout words containing physical punctuation keys, so vj;tv no longer degrades into vj;ем after a buffered selection mismatch.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.5/Sayful-0.8.5.dmg"
+        length="6970585"
+        type="application/octet-stream"
+        sparkle:edSignature="TMKPEvF3e0/PzbgXeoO6QjdkdmWRHKQLQQ0V+NZDAfaOcizeGVT6o7EabKcDxBnSwane4AwSGk39h1k5bqskBQ==" />
+    </item>
+
+    <item>
       <title>v0.8.4</title>
       <pubDate>Thu, 02 Jul 2026 15:06:39 +0000</pubDate>
       <sparkle:version>0.8.4</sparkle:version>
