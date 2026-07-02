@@ -1130,9 +1130,9 @@ final class EventTap {
     // MARK: - Auto-flip on word boundary
 
     private func autoFlipIfNeeded(completedWord: String, boundary: String) {
-        guard let current = InputSource.currentLayout() else { return }
-        guard let target = AutoFlip.shared.suggestedFlip(for: completedWord, currentLayout: current) else { return }
-        let converted = convert(completedWord, from: current, to: target)
+        let detectedCurrent = InputSource.currentLayout()
+        guard let candidate = autoFlipCandidate(completedWord: completedWord, currentLayout: detectedCurrent) else { return }
+        let converted = convert(completedWord, from: candidate.source, to: candidate.target)
         guard converted != completedWord else { return }
 
         // Auto-flip has to be immediate. Sending this path through AI
@@ -1144,9 +1144,31 @@ final class EventTap {
             original: completedWord,
             converted: converted,
             boundary: boundary,
-            source: current,
-            target: target
+            source: candidate.source,
+            target: candidate.target
         )
+    }
+
+    func autoFlipCandidate(completedWord: String, currentLayout: Layout?) -> (source: Layout, target: Layout)? {
+        for source in autoFlipSourceCandidates(for: completedWord, currentLayout: currentLayout) {
+            if let target = AutoFlip.shared.suggestedFlip(for: completedWord, currentLayout: source) {
+                return (source, target)
+            }
+        }
+        return nil
+    }
+
+    private func autoFlipSourceCandidates(for word: String, currentLayout: Layout?) -> [Layout] {
+        if let currentLayout { return [currentLayout] }
+
+        var result: [Layout] = []
+        if let detected = detectLayout(word) {
+            result.append(detected)
+        }
+        for layout in Layout.allCases where !result.contains(layout) {
+            result.append(layout)
+        }
+        return result
     }
 
     /// Submit the candidate flip to the AI assistant. On `.flip` /

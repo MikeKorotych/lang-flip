@@ -12,6 +12,21 @@ final class LayoutFlipRegressionTests: XCTestCase {
         XCTAssertEqual(AutoFlip.shared.suggestedFlip(for: "ьфлу", currentLayout: .uk), .en)
     }
 
+    func testMakeAndRunFlipBeforeDictionaryScoredWarmup() {
+        XCTAssertEqual(AutoFlip.deterministicFlipTarget(for: "ьфлу", currentLayout: .uk), .en)
+        XCTAssertEqual(AutoFlip.deterministicFlipTarget(for: "ьфлу", currentLayout: .ru), .en)
+        XCTAssertEqual(AutoFlip.deterministicFlipTarget(for: "кгт", currentLayout: .uk), .en)
+        XCTAssertEqual(AutoFlip.deterministicFlipTarget(for: "кгт", currentLayout: .ru), .en)
+    }
+
+    func testAutoFlipFallsBackToTypedWordLayoutWhenCurrentLayoutIsUnavailable() {
+        let tap = EventTap()
+        let candidate = tap.autoFlipCandidate(completedWord: "ьфлу", currentLayout: nil)
+
+        XCTAssertEqual(candidate?.target, .en)
+        XCTAssertEqual(convert("ьфлу", from: candidate?.source ?? .uk, to: .en), "make")
+    }
+
     func testBilIsNotAcceptedAsUkrainianDictionarySignal() {
         XCTAssertFalse(AutoFlip.shared.isKnown("біл", in: .uk))
         XCTAssertFalse(AutoFlip.shared.isKnownInUk("біл"))

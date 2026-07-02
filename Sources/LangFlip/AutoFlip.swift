@@ -30,6 +30,24 @@ final class AutoFlip {
     /// off entirely until the real dicts are in.
     private var dictsReady = false
     private let lock = NSLock()
+    private static let deterministicFlips: [Layout: [String: Layout]] = [
+        .uk: [
+            "ьфлу": .en, // make
+            "кгт": .en,  // run
+            "пше": .en,  // git
+            "св": .en,   // cd
+            "ді": .en,   // ls
+            "зцв": .en,  // pwd
+        ],
+        .ru: [
+            "ьфлу": .en, // make
+            "кгт": .en,  // run
+            "пше": .en,  // git
+            "св": .en,   // cd
+            "ды": .en,   // ls
+            "зцв": .en,  // pwd
+        ],
+    ]
 
     private init() {
         // Seed UK / RU synchronously from the tiny embedded fallback
@@ -171,6 +189,9 @@ final class AutoFlip {
         if let target = AlwaysFlipRules.shared.target(for: word, currentLayout: currentLayout) {
             return target
         }
+        if let target = Self.deterministicFlipTarget(for: lower, currentLayout: currentLayout) {
+            return target
+        }
         // Hand-picked short phrases where dictionary scoring is too
         // conservative but the intent is clear in day-to-day typing.
         if let forced = forcedFlip(lower: lower, currentLayout: currentLayout) {
@@ -226,6 +247,10 @@ final class AutoFlip {
             return nil
         }
         return layout
+    }
+
+    static func deterministicFlipTarget(for lower: String, currentLayout: Layout) -> Layout? {
+        deterministicFlips[currentLayout]?[lower]
     }
 
     private func forcedFlip(lower: String, currentLayout: Layout) -> Layout? {
