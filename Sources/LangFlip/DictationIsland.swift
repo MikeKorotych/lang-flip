@@ -128,9 +128,10 @@ final class DictationIslandController {
         // Detection footprint: current pill width (so ✕/✓ stay clickable while
         // recording), but at least the mic size when idle to avoid flicker.
         let base = IslandMetrics.contentSize(for: state).width
+        let hysteresis: CGFloat = state.hovering ? 18 : 0
         let detW = (state.phase == .idle && !state.showsToast
-                    ? max(base, IslandMetrics.micWidth) : base) + 20
-        let detH = IslandMetrics.pillSlotHeight + 16
+                    ? max(base, IslandMetrics.micWidth) : base) + 20 + hysteresis
+        let detH = IslandMetrics.pillSlotHeight + 16 + hysteresis
         // The panel frame is anchored at the fullscreen (physical-bottom)
         // resting spot; the pill is lifted up by `currentLiftOffset` for normal
         // Spaces, so the detection footprint must follow that lift.
@@ -513,6 +514,7 @@ struct DictationIslandView: View {
 
     private var pillWidth: CGFloat { IslandMetrics.contentSize(for: state).width }
     private var pillHeight: CGFloat { IslandMetrics.contentSize(for: state).height }
+    private var pillSlotWidth: CGFloat { IslandMetrics.panelSize.width - IslandMetrics.pad * 2 }
     private var animationKey: IslandAnimationKey {
         IslandAnimationKey(
             phase: state.phase,
@@ -525,6 +527,7 @@ struct DictationIslandView: View {
     // Pill grow/shrink — a touch longer with a soft overshoot so it springs in
     // place rather than snapping. (Grows from the centre; the panel never moves.)
     private var pillSpring: Animation { .spring(response: 0.44, dampingFraction: 0.70) }
+    private var hoverPopSpring: Animation { .spring(response: 0.30, dampingFraction: 0.82) }
 
     var body: some View {
         // Fixed-size root so NSHostingController never resizes the window; the
@@ -559,32 +562,91 @@ struct DictationIslandView: View {
 
     // Reserve the tooltip band always so the pill never shifts when it appears.
     private var tooltipSlot: some View {
-        ZStack {
-            if IslandMetrics.showsTooltipExpanded(state) {
-                tooltip
-                    // Fade + straight-down movement only (no horizontal drift).
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
+        let showing = IslandMetrics.showsTooltipExpanded(state)
+
+        return ZStack {
+            tooltip
+                .scaleEffect(showing ? 1 : 0.8, anchor: .bottom)
+                .opacity(showing ? 1 : 0)
+                .animation(
+                    hoverPopSpring.delay(showing ? 0.04 : 0),
+                    value: showing
+                )
+                .allowsHitTesting(showing)
         }
         .frame(height: IslandMetrics.tooltipHeight)
     }
 
     private var pill: some View {
-        ZStack { innerContent }
-            .frame(width: pillWidth, height: pillHeight)
-            .background(capsuleBackground)
+        ZStack {
+            capsuleShell
+                .frame(width: pillWidth, height: pillHeight)
+            innerContent
+                .frame(width: pillWidth, height: pillHeight)
+            idleMic
             // Recording controls (✕ · waves · ✓) — mounted only while recording (so
             // the live-wave TimelineView doesn't tick when idle), revealed with a
             // centred scale transition so on finish they shrink into the pill's
             // centre instead of sliding out down-right (matching every other state,
             // which already uses centred overlays).
-            .overlay {
-                if state.phase == .recording {
-                    recordingContent
-                        .frame(width: IslandMetrics.recordingWidth)
-                        .transition(.scale(scale: 0.4, anchor: .center).combined(with: .opacity))
+            if state.phase == .recording {
+                recordingContent
+                    .frame(width: IslandMetrics.recordingWidth)
+                    .transition(.scale(scale: 0.4, anchor: .center).combined(with: .opacity))
+            }
+            // Transcribing label as a persistent, centred overlay: its scale +
+            // opacity are driven straight from the phase, so on finish it shrinks
+            // into the pill's centre and fades (no transition, no reflow drift).
+            transcribingContent(active: state.phase == .transcribing)
+                .fixedSize()
+                .scaleEffect(state.phase == .transcribing ? 1 : 0.3, anchor: .center)
+                .opacity(state.phase == .transcribing ? 1 : 0)
+                .animation(pillSpring, value: state.phase)
+                .allowsHitTesting(false)
+            // TTS buffering spinner — same persistent-overlay trick so it scales
+            // in/out from the pill's centre (no off-centre pop on enter/exit).
+            speakingContent(active: state.phase == .speaking)
+                .scaleEffect(state.phase == .speaking ? 1 : 0.3, anchor: .center)
+                .opacity(state.phase == .speaking ? 1 : 0)
+                .animation(pillSpring, value: state.phase)
+                .allowsHitTesting(false)
+            // TTS playback controls use the same persistent-overlay pattern as
+            // the spinner/toasts. Keeping them mounted prevents SwiftUI from
+            // inserting the HStack from the panel edge while the capsule width
+            // is animating; clipping reveals them from the island centre.
+            ZStack {
+                playbackContent
+                    .frame(width: IslandMetrics.ttsPlaybackWidth, height: IslandMetrics.pillHeight)
+                    .scaleEffect(state.phase == .ttsPlayback ? 1 : 0.35, anchor: .center)
+                    .opacity(state.phase == .ttsPlayback ? 1 : 0)
+                    .animation(pillSpring, value: state.phase)
+            }
+            .frame(width: pillWidth, height: pillHeight)
+            .clipShape(Capsule())
+            .allowsHitTesting(state.phase == .ttsPlayback)
+            // "Transcript cancelled" toast — persistent overlay so on dismiss it
+            // shrinks into the centre + fades (not slides out). Fixed width keeps
+            // its spread layout stable; hit-testing is on only while it's shown so
+            // the Undo button stays tappable.
+            toastContent
+                .frame(width: IslandMetrics.toastWidth)
+                .scaleEffect(state.showsToast ? 1 : 0.3, anchor: .center)
+                .opacity(state.showsToast ? 1 : 0)
+                .animation(pillSpring, value: state.showsToast)
+                .allowsHitTesting(state.showsToast)
+        }
+            .frame(width: pillSlotWidth, height: IslandMetrics.pillSlotHeight)
+            .scaleEffect(pillPop, anchor: .center)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if state.phase == .idle && !state.showsToast {
+                    VoiceDictationController.shared.toggleRecording()
                 }
             }
+    }
+
+    private var capsuleShell: some View {
+        capsuleBackground
             // Toast lifetime bar — sits right on the capsule's bottom border,
             // filling left→right. Inset past the rounded corners so it stays
             // flush with the bottom edge.
@@ -597,61 +659,20 @@ struct DictationIslandView: View {
                     .padding(.bottom, 0)
                     .opacity(state.showsToast ? 1 : 0)
             }
-            // Transcribing label as a persistent, centred overlay: its scale +
-            // opacity are driven straight from the phase, so on finish it shrinks
-            // into the pill's centre and fades (no transition, no reflow drift).
-            .overlay {
-                transcribingContent(active: state.phase == .transcribing)
-                    .fixedSize()
-                    .scaleEffect(state.phase == .transcribing ? 1 : 0.3, anchor: .center)
-                    .opacity(state.phase == .transcribing ? 1 : 0)
-                    .animation(pillSpring, value: state.phase)
-                    .allowsHitTesting(false)
-            }
-            // TTS buffering spinner — same persistent-overlay trick so it scales
-            // in/out from the pill's centre (no off-centre pop on enter/exit).
-            .overlay {
-                speakingContent(active: state.phase == .speaking)
-                    .scaleEffect(state.phase == .speaking ? 1 : 0.3, anchor: .center)
-                    .opacity(state.phase == .speaking ? 1 : 0)
-                    .animation(pillSpring, value: state.phase)
-                    .allowsHitTesting(false)
-            }
-            // TTS playback controls use the same persistent-overlay pattern as
-            // the spinner/toasts. Keeping them mounted prevents SwiftUI from
-            // inserting the HStack from the panel edge while the capsule width
-            // is animating; clipping reveals them from the island centre.
-            .overlay {
-                ZStack {
-                    playbackContent
-                        .frame(width: IslandMetrics.ttsPlaybackWidth, height: IslandMetrics.pillHeight)
-                        .scaleEffect(state.phase == .ttsPlayback ? 1 : 0.35, anchor: .center)
-                        .opacity(state.phase == .ttsPlayback ? 1 : 0)
-                        .animation(pillSpring, value: state.phase)
-                }
-                .frame(width: pillWidth, height: pillHeight)
-                .clipShape(Capsule())
-                .allowsHitTesting(state.phase == .ttsPlayback)
-            }
-            // "Transcript cancelled" toast — persistent overlay so on dismiss it
-            // shrinks into the centre + fades (not slides out). Fixed width keeps
-            // its spread layout stable; hit-testing is on only while it's shown so
-            // the Undo button stays tappable.
-            .overlay {
-                toastContent
-                    .frame(width: IslandMetrics.toastWidth)
-                    .scaleEffect(state.showsToast ? 1 : 0.3, anchor: .center)
-                    .opacity(state.showsToast ? 1 : 0)
-                    .animation(pillSpring, value: state.showsToast)
-                    .allowsHitTesting(state.showsToast)
-            }
-            .scaleEffect(pillPop, anchor: .center)
-            .contentShape(Capsule())
-            .onTapGesture {
-                if state.phase == .idle && !state.showsToast {
-                    VoiceDictationController.shared.toggleRecording()
-                }
-            }
+    }
+
+    private var idleMic: some View {
+        Image(systemName: "mic.fill")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundColor(IslandColor.text)
+            .frame(width: IslandMetrics.micWidth, height: IslandMetrics.pillHeight)
+            .scaleEffect(state.phase == .idle && state.hovering && !state.showsToast ? 1 : 0.45, anchor: .center)
+            .opacity(state.phase == .idle && state.hovering && !state.showsToast ? 1 : 0)
+            .animation(
+                hoverPopSpring.delay(state.hovering ? 0.08 : 0),
+                value: state.hovering
+            )
+            .allowsHitTesting(false)
     }
 
     @ViewBuilder
@@ -664,11 +685,7 @@ struct DictationIslandView: View {
         } else {
             switch state.phase {
             case .idle:
-                // Mic fades by opacity only — no movement.
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(IslandColor.text)
-                    .opacity(state.hovering ? 1 : 0)
+                EmptyView()
             // Recording controls live in a centred overlay (see `pill`) so they
             // collapse into the pill's centre on finish, not down-right.
             case .recording:    EmptyView()
