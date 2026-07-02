@@ -6,8 +6,7 @@ import SwiftUI
 /// vs the last period); a movers row celebrates the biggest climber and the
 /// most improved teammate; then the podium, the ranked list with rank-delta
 /// chips, and locally-earned badges. Everything animates in with the staggered
-/// language of Insights: counters tick, the podium grows with a shine sweep,
-/// badge tiles pop.
+/// language of Insights: counters tick, the podium grows, badge tiles pop.
 struct TeamDashboardView: View {
     @ObservedObject private var auth = SupabaseBackendAuth.shared
     @ObservedObject private var history = DictationHistory.shared
@@ -118,7 +117,7 @@ struct TeamDashboardView: View {
                     )
                     .foregroundColor(.white)
 
-                    Text("Team activity is ranked by dictated words — the same work signal people already track against the weekly Sayful quota.")
+                    Text("Team activity ranked by dictated words. Dictate more, type less, and turn saved time into visible team momentum.")
                         .font(.system(size: 15))
                         .foregroundColor(.white.opacity(0.8))
                         .fixedSize(horizontal: false, vertical: true)
@@ -368,7 +367,7 @@ private struct TeamPulseStrip: View {
                 divider
                 stat(icon: "person.2.fill", value: pulse.activeMembers, label: "active teammates")
                 divider
-                stat(icon: "chart.bar.fill", value: pulse.averageWords, label: "avg words / person")
+                stat(icon: "chart.bar.fill", value: pulse.averageWords, label: "words / person")
                 if let trend = pulse.trendPercent {
                     divider
                     trendStat(trend)
@@ -435,13 +434,14 @@ private struct TeamPulseStrip: View {
 // MARK: - Movers
 
 /// Spotlights beyond the podium: the biggest rank climber and the largest word
-/// growth vs the previous period — so improving mid-pack teammates get shine,
+/// growth vs the previous period — so improving mid-pack teammates get attention,
 /// not only the perennial top-1.
 private struct TeamMoversRow: View {
     let topClimber: TeamGamification.Mover?
     let mostImproved: TeamGamification.Mover?
     let periodSuffix: String
     let appeared: Bool
+    @State private var rowAppeared = false
 
     var body: some View {
         HStack(spacing: 16) {
@@ -449,15 +449,28 @@ private struct TeamMoversRow: View {
                 MoverCard(icon: "arrow.up.forward.circle.fill",
                           label: "Biggest climb \(periodSuffix)",
                           player: climber.player,
-                          headline: "▲\(climber.rankClimb) \(climber.rankClimb == 1 ? "place" : "places")",
-                          appeared: appeared, slideFrom: -24)
+                          headline: "▲\(climber.rankClimb)")
             }
             if let improved = mostImproved {
                 MoverCard(icon: "chart.line.uptrend.xyaxis.circle.fill",
                           label: "Most improved \(periodSuffix)",
                           player: improved.player,
-                          headline: "+\(StatsFormat.count(improved.wordsGained)) words",
-                          appeared: appeared, slideFrom: 24)
+                          headline: "+\(StatsFormat.count(improved.wordsGained))")
+            }
+        }
+        .opacity(appeared && rowAppeared ? 1 : 0)
+        .offset(y: appeared && rowAppeared ? 0 : 16)
+        .animation(.easeOut(duration: 0.5), value: rowAppeared)
+        .task(id: appeared) {
+            if appeared {
+                rowAppeared = false
+                try? await Task.sleep(nanoseconds: 60_000_000)
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.5)) {
+                    rowAppeared = true
+                }
+            } else {
+                rowAppeared = false
             }
         }
     }
@@ -468,8 +481,6 @@ private struct MoverCard: View {
     let label: String
     let player: BackendLeaderboardPlayer
     let headline: String
-    let appeared: Bool
-    let slideFrom: CGFloat
 
     @State private var hovering = false
 
@@ -510,9 +521,6 @@ private struct MoverCard: View {
                 .stroke(hovering ? FlowTheme.accent.opacity(0.45) : FlowTheme.cardStroke, lineWidth: 1)
         )
         .scaleEffect(hovering ? 1.01 : 1)
-        .offset(x: appeared ? 0 : slideFrom)
-        .opacity(appeared ? 1 : 0)
-        .animation(.spring(response: 0.55, dampingFraction: 0.8).delay(0.3), value: appeared)
         .animation(.easeOut(duration: 0.18), value: hovering)
         .onHover { hovering = $0 }
     }
@@ -521,8 +529,8 @@ private struct MoverCard: View {
 // MARK: - Podium
 
 /// Top-3 podium: silver | gold | bronze columns that grow from the floor, with
-/// a bouncing crown and a pulsing glow on the leader, movement chips under the
-/// names, and a one-shot shine sweep across the bars once they have grown.
+/// a bouncing crown and a pulsing glow on the leader, plus movement chips under
+/// the names.
 private struct TeamPodium: View {
     let top: [TeamGamification.RankedPlayer]   // ranks 1...3, in rank order
     let deltas: [String: Int]?
@@ -534,18 +542,19 @@ private struct TeamPodium: View {
     }
 
     var body: some View {
-        FlowCard {
-            HStack(alignment: .bottom, spacing: 18) {
-                ForEach(display) { row in
-                    PodiumColumn(row: row,
-                                 fraction: fraction(for: row),
-                                 delta: deltas?[row.id],
-                                 hasDeltas: deltas != nil,
-                                 appeared: appeared)
-                }
+        HStack(alignment: .bottom, spacing: 18) {
+            ForEach(display) { row in
+                PodiumColumn(row: row,
+                             fraction: fraction(for: row),
+                             delta: deltas?[row.id],
+                             hasDeltas: deltas != nil,
+                             appeared: appeared)
             }
-            .frame(maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 10)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
     }
 
     private func fraction(for row: TeamGamification.RankedPlayer) -> Double {
@@ -564,7 +573,6 @@ private struct PodiumColumn: View {
 
     @State private var crownBounce = false
     @State private var glowPulse = false
-    @State private var shine = false
 
     private var maxBarHeight: CGFloat { 110 }
     private var barHeight: CGFloat { maxBarHeight * fraction }
@@ -625,16 +633,6 @@ private struct PodiumColumn: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(LinearGradient(colors: [medal.opacity(0.85), medal.opacity(0.45)],
                                          startPoint: .top, endPoint: .bottom))
-                // One-shot shine sweep after the bar has grown.
-                GeometryReader { geo in
-                    LinearGradient(colors: [.clear, .white.opacity(0.55), .clear],
-                                   startPoint: .top, endPoint: .bottom)
-                        .frame(height: 36)
-                        .offset(y: shine ? geo.size.height + 20 : -56)
-                        .animation(.easeInOut(duration: 0.9).delay(1.0 + Double(row.rank) * 0.15), value: shine)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .allowsHitTesting(false)
                 Text("\(row.rank)")
                     .font(.system(size: 22, weight: .bold, design: .serif))
                     .foregroundColor(.white)
@@ -643,7 +641,6 @@ private struct PodiumColumn: View {
             .frame(height: appeared ? barHeight : 8)
             .animation(.spring(response: 0.6, dampingFraction: 0.75).delay(0.25 + Double(row.rank) * 0.12),
                        value: appeared)
-            .onAppear { shine = false; DispatchQueue.main.async { shine = true } }
         }
         .frame(maxWidth: .infinity)
     }

@@ -16,8 +16,16 @@ final class TeamDashboardModel: ObservableObject {
 
     enum Period: String, CaseIterable {
         case daily = "Today"
-        case weekly = "This Week"
-        case monthly = "This Month"
+        case weekly = "Week"
+        case monthly = "Month"
+
+        var storageKey: String {
+            switch self {
+            case .daily: return "daily"
+            case .weekly: return "weekly"
+            case .monthly: return "monthly"
+            }
+        }
     }
 
     @Published private(set) var daily: [TeamGamification.RankedPlayer] = []
@@ -35,13 +43,16 @@ final class TeamDashboardModel: ObservableObject {
     private let client: HTTPBackendClient
     private let history: DictationHistory
     private let auth: SupabaseBackendAuth
+    private let defaults: UserDefaults
 
     init(client: HTTPBackendClient = .shared,
          history: DictationHistory = .shared,
-         auth: SupabaseBackendAuth? = nil) {
+         auth: SupabaseBackendAuth? = nil,
+         defaults: UserDefaults = .standard) {
         self.client = client
         self.history = history
         self.auth = auth ?? SupabaseBackendAuth.shared
+        self.defaults = defaults
     }
 
     func rows(for period: Period) -> [TeamGamification.RankedPlayer] {
@@ -79,7 +90,9 @@ final class TeamDashboardModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        badges = TeamGamification.badges(TeamGamification.badgeInputs(entries: history.entries))
+        let freshBadges = TeamGamification.badges(TeamGamification.badgeInputs(entries: history.entries))
+        badges = freshBadges
+        notifyNewAchievementsIfNeeded(freshBadges)
 
         let yourID = auth.currentUser?.id
         let includeDevPreviewTeammates = Settings.shared.devTeamPreviewTeammates
@@ -117,6 +130,7 @@ final class TeamDashboardModel: ObservableObject {
                                                                    fallbackYou: preview.previousMonthly,
                                                                    enabled: includeDevPreviewTeammates)
             source = .live(generatedAt: response.generatedAt, includesMonthly: monthlyRows != nil)
+            notifyRankImprovementsIfNeeded()
         } catch {
             daily = TeamGamification.ranked(
                 Self.withDevPreviewTeammates([preview.daily], period: .daily,
@@ -143,6 +157,70 @@ final class TeamDashboardModel: ObservableObject {
                                                                    fallbackYou: preview.previousMonthly,
                                                                    enabled: includeDevPreviewTeammates)
             source = .localPreview
+            notifyRankImprovementsIfNeeded()
+        }
+    }
+
+    private func notifyNewAchievementsIfNeeded(_ freshBadges: [TeamGamification.Badge]) {
+        let baselineKey = "lf.team.achievementsBaselineReady"
+        let seenKey = "lf.team.seenUnlockedAchievements"
+        let unlocked = freshBadges.filter(\.unlocked)
+        let unlockedIDs = Set(unlocked.map(\.id))
+        let seen = Set(defaults.stringArray(forKey: seenKey) ?? [])
+
+        guard defaults.bool(forKey: baselineKey) else {
+            defaults.set(Array(unlockedIDs), forKey: seenKey)
+            defaults.set(true, forKey: baselineKey)
+            return
+        }
+
+        let newIDs = unlockedIDs.subtracting(seen)
+        guard !newIDs.isEmpty else {
+            defaults.set(Array(seen.union(unlockedIDs)), forKey: seenKey)
+            return
+        }
+
+        for badge in unlocked where newIDs.contains(badge.id) {
+            AppNotifications.shared.post(
+                id: "achievement-\(badge.id)",
+                kind: .info,
+                title: "Achievement unlocked",
+                body: "\(badge.title) — \(badge.detail)"
+            )
+            Notifications.show(
+                title: "Achievement unlocked",
+                body: "\(badge.title) — \(badge.detail)",
+                identifier: "achievement-\(badge.id)"
+            )
+        }
+        defaults.set(Array(seen.union(unlockedIDs)), forKey: seenKey)
+    }
+
+    private func notifyRankImprovementsIfNeeded() {
+        for period in Period.allCases {
+            guard let standing = insights(for: period).you else { continue }
+            let baselineKey = "lf.team.rankBaselineReady.\(period.storageKey)"
+            let rankKey = "lf.team.lastRank.\(period.storageKey)"
+            let previousRank = defaults.integer(forKey: rankKey)
+
+            guard defaults.bool(forKey: baselineKey) else {
+                defaults.set(standing.rank, forKey: rankKey)
+                defaults.set(true, forKey: baselineKey)
+                continue
+            }
+
+            if previousRank > 0, standing.rank < previousRank {
+                let title = "Leaderboard climb"
+                let body = "You moved from #\(previousRank) to #\(standing.rank) on the \(period.rawValue.lowercased()) board."
+                AppNotifications.shared.post(
+                    id: "rank-\(period.storageKey)",
+                    kind: .info,
+                    title: title,
+                    body: body
+                )
+                Notifications.show(title: title, body: body, identifier: "rank-\(period.storageKey)")
+            }
+            defaults.set(standing.rank, forKey: rankKey)
         }
     }
 

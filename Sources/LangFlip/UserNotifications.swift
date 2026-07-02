@@ -9,13 +9,13 @@ enum Notifications {
 
     private static var didRequestAuthorization = false
 
-    static func show(title: String, body: String) {
+    static func show(title: String, body: String, identifier: String? = nil) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
 
         let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
+            identifier: identifier ?? UUID().uuidString,
             content: content,
             trigger: nil // deliver immediately
         )

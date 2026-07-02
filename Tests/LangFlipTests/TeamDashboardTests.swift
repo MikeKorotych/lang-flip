@@ -207,6 +207,47 @@ final class TeamDashboardTests: XCTestCase {
                                   "warming-up", "on-fire", "marathon", "early-bird"])
     }
 
+    func testExtendedBadgesUnlockForLongTermUse() {
+        let input = TeamGamification.BadgeInputs(totalWords: 250_000,
+                                                 totalDictations: 100,
+                                                 currentStreak: 14,
+                                                 longestStreak: 14,
+                                                 maxWordsInOneDictation: 1_500)
+        let unlocked = Set(TeamGamification.badges(input).filter(\.unlocked).map(\.id))
+
+        XCTAssertTrue(unlocked.isSuperset(of: [
+            "chapter-builder",
+            "voice-archive",
+            "two-week-flow",
+            "habit-builder",
+            "meeting-scribe",
+            "century-mic",
+            "deep-session",
+        ]))
+        XCTAssertFalse(unlocked.contains("voice-vault"), "500K words should stay locked at 250K")
+        XCTAssertFalse(unlocked.contains("relay-runner"), "21-day streak should stay locked at 14 days")
+        XCTAssertFalse(unlocked.contains("unstoppable"), "30-day streak should stay locked at 14 days")
+        XCTAssertFalse(unlocked.contains("daily-driver"), "250 dictations should stay locked at 100")
+        XCTAssertFalse(unlocked.contains("longform-mode"), "3,000-word single dictation should stay locked at 1,500")
+    }
+
+    func testTopTierBadgesUnlockAtHigherThresholds() {
+        let input = TeamGamification.BadgeInputs(totalWords: 500_000,
+                                                 totalDictations: 250,
+                                                 currentStreak: 60,
+                                                 longestStreak: 60,
+                                                 maxWordsInOneDictation: 3_000)
+        let unlocked = Set(TeamGamification.badges(input).filter(\.unlocked).map(\.id))
+
+        XCTAssertTrue(unlocked.isSuperset(of: [
+            "voice-vault",
+            "relay-runner",
+            "iron-streak",
+            "daily-driver",
+            "longform-mode",
+        ]))
+    }
+
     func testBadgeInputsFromHistory() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
