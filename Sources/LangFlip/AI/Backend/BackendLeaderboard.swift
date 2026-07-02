@@ -1,9 +1,9 @@
 import Foundation
 
 // Team leaderboard contract (spec §5.5). The server aggregates per-user
-// activity from the metering log and returns ranked daily + weekly boards for
-// the caller's corporate domain. Only corporate (@uni.tech) accounts may call
-// it; everyone else gets `403 { code: "bad_request" }`.
+// activity from the metering log and returns ranked daily / weekly / optional
+// monthly boards for the caller's corporate domain. Only corporate (@uni.tech)
+// accounts may call it; everyone else gets `403 { code: "bad_request" }`.
 
 /// One player on a board. `words`/`dictations` are the aggregated totals for
 /// the board's period; `streakDays` counts consecutive active days up to today
@@ -20,5 +20,12 @@ struct BackendLeaderboardPlayer: Codable, Equatable {
 struct BackendLeaderboardResponse: Codable, Equatable {
     let daily: [BackendLeaderboardPlayer]
     let weekly: [BackendLeaderboardPlayer]
+    let monthly: [BackendLeaderboardPlayer]?
+    /// Closed previous periods (yesterday / last quota week / last calendar
+    /// month), same shape as the current boards. Additive — older deployments
+    /// omit them and the client simply hides rank deltas, trends and movers.
+    let previousDaily: [BackendLeaderboardPlayer]?
+    let previousWeekly: [BackendLeaderboardPlayer]?
+    let previousMonthly: [BackendLeaderboardPlayer]?
     let generatedAt: Date
 }

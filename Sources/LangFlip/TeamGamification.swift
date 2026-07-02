@@ -1,8 +1,8 @@
 import Foundation
 
-// Pure logic behind the Team dashboard: who may see it, how activity converts
-// to XP/levels, which badges unlock, and how players are ranked. No UI, no IO —
-// everything here is deterministic and unit-tested (TeamDashboardTests).
+// Pure logic behind the Team dashboard: who may see it, how words are ranked,
+// which badges unlock, and the legacy XP helpers kept for compatibility. No UI,
+// no IO — everything here is deterministic and unit-tested (TeamDashboardTests).
 
 /// Gate for the corporate Team section. Only signed-in accounts on the
 /// company domain see the sidebar entry or the dashboard itself.
@@ -74,25 +74,183 @@ enum TeamGamification {
     struct RankedPlayer: Identifiable, Equatable {
         let rank: Int
         let player: BackendLeaderboardPlayer
+        let activityWords: Int
         let xp: Int
         let isYou: Bool
         var id: String { player.id }
     }
 
-    /// Sorts by XP (ties: more words, then name for stability), assigns 1-based
-    /// ranks, and flags the caller's own row.
+    /// Sorts by raw dictated words — the activity users already understand from
+    /// the weekly quota. Dictations and streaks only break ties, then name keeps
+    /// the order stable.
     static func ranked(_ players: [BackendLeaderboardPlayer], yourID: String?) -> [RankedPlayer] {
         let scored = players.map { player in
-            (player: player, xp: xp(words: player.words, dictations: player.dictations, streakDays: player.streakDays))
+            (player: player,
+             words: max(0, player.words),
+             xp: xp(words: player.words, dictations: player.dictations, streakDays: player.streakDays))
         }
         let sorted = scored.sorted {
-            if $0.xp != $1.xp { return $0.xp > $1.xp }
-            if $0.player.words != $1.player.words { return $0.player.words > $1.player.words }
+            if $0.words != $1.words { return $0.words > $1.words }
+            if $0.player.dictations != $1.player.dictations { return $0.player.dictations > $1.player.dictations }
+            if $0.player.streakDays != $1.player.streakDays { return $0.player.streakDays > $1.player.streakDays }
             return $0.player.name.localizedCaseInsensitiveCompare($1.player.name) == .orderedAscending
         }
         return sorted.enumerated().map { index, entry in
-            RankedPlayer(rank: index + 1, player: entry.player, xp: entry.xp, isYou: entry.player.id == yourID)
+            RankedPlayer(rank: index + 1, player: entry.player, activityWords: entry.words,
+                         xp: entry.xp, isYou: entry.player.id == yourID)
         }
+    }
+
+    // MARK: Board insights (team pulse / your standing / movers)
+
+    /// Team-wide totals for one board, with an optional trend against the
+    /// closed previous period.
+    struct TeamPulse: Equatable {
+        let totalWords: Int
+        let activeMembers: Int       // players with any words this period
+        let averageWords: Int        // per active member
+        let previousTotalWords: Int?
+
+        /// Whole-percent change vs the previous period; nil when there is no
+        /// (or an empty) previous board to compare against.
+        var trendPercent: Int? {
+            guard let previous = previousTotalWords, previous > 0 else { return nil }
+            return Int((Double(totalWords - previous) / Double(previous) * 100).rounded())
+        }
+    }
+
+    /// Where you sit on a board, phrased for motivation: rank, movement since
+    /// the previous period, and the concrete word gaps worth closing.
+    struct YourStanding: Equatable {
+        let rank: Int
+        let totalPlayers: Int
+        let words: Int
+        /// Positive = climbed that many places since the previous period;
+        /// nil when you were not on the previous board.
+        let rankDelta: Int?
+        /// Words behind the player directly above you; nil when you lead.
+        let gapToNext: Int?
+        /// Words behind #5 — only set when you are outside the top five.
+        let gapToTopFive: Int?
+        /// Your lead over #2 when you are the leader (and not alone).
+        let leadOverNext: Int?
+    }
+
+    /// Someone who moved — either up the ranks or by sheer word growth.
+    struct Mover: Equatable {
+        let player: BackendLeaderboardPlayer
+        let rankClimb: Int
+        let wordsGained: Int
+    }
+
+    /// Everything the dashboard shows about one board beyond the raw rows.
+    /// `previous` is the closed previous period (unranked, as the server sent
+    /// it); pass nil when unavailable and the comparative fields stay empty.
+    struct BoardInsights: Equatable {
+        let pulse: TeamPulse
+        let you: YourStanding?
+        let topClimber: Mover?
+        let mostImproved: Mover?
+        /// id → rank movement (+ up, − down) for row chips. Absent id = new
+        /// entrant this period.
+        let rankDeltas: [String: Int]
+
+        static let empty = BoardInsights(
+            pulse: TeamPulse(totalWords: 0, activeMembers: 0, averageWords: 0, previousTotalWords: nil),
+            you: nil, topClimber: nil, mostImproved: nil, rankDeltas: [:])
+    }
+
+    static func insights(current: [RankedPlayer], previous: [BackendLeaderboardPlayer]?) -> BoardInsights {
+        let previousRanked = previous.map { ranked($0, yourID: nil) }
+        let previousRankByID = Dictionary(uniqueKeysWithValues: (previousRanked ?? []).map { ($0.id, $0.rank) })
+        let previousWordsByID = Dictionary(uniqueKeysWithValues: (previousRanked ?? []).map { ($0.id, $0.activityWords) })
+
+        let totalWords = current.reduce(0) { $0 + $1.activityWords }
+        let active = current.filter { $0.activityWords > 0 }.count
+        let pulse = TeamPulse(
+            totalWords: totalWords,
+            activeMembers: active,
+            averageWords: active > 0 ? Int((Double(totalWords) / Double(active)).rounded()) : 0,
+            previousTotalWords: previousRanked.map { boards in boards.reduce(0) { $0 + $1.activityWords } })
+
+        var deltas: [String: Int] = [:]
+        for row in current {
+            if let was = previousRankByID[row.id] { deltas[row.id] = was - row.rank }
+        }
+
+        var you: YourStanding?
+        if let yourRow = current.first(where: \.isYou) {
+            let above = current.first { $0.rank == yourRow.rank - 1 }
+            let fifth = current.first { $0.rank == 5 }
+            let second = current.first { $0.rank == 2 }
+            you = YourStanding(
+                rank: yourRow.rank,
+                totalPlayers: current.count,
+                words: yourRow.activityWords,
+                rankDelta: deltas[yourRow.id],
+                gapToNext: above.map { max(0, $0.activityWords - yourRow.activityWords) },
+                gapToTopFive: yourRow.rank > 5
+                    ? fifth.map { max(0, $0.activityWords - yourRow.activityWords) }
+                    : nil,
+                leadOverNext: yourRow.rank == 1
+                    ? second.map { max(0, yourRow.activityWords - $0.activityWords) }
+                    : nil)
+        }
+
+        // Biggest climb: best positive rank movement among returning players;
+        // ties go to whoever gained more words.
+        let climber = current
+            .compactMap { row -> Mover? in
+                guard let delta = deltas[row.id], delta > 0 else { return nil }
+                return Mover(player: row.player, rankClimb: delta,
+                             wordsGained: row.activityWords - (previousWordsByID[row.id] ?? 0))
+            }
+            .max { a, b in
+                if a.rankClimb != b.rankClimb { return a.rankClimb < b.rankClimb }
+                return a.wordsGained < b.wordsGained
+            }
+
+        // Most improved: largest word growth vs the previous period (new
+        // entrants count from zero). Only meaningful with a previous board.
+        let improved = previousRanked == nil ? nil : current
+            .map { row in
+                Mover(player: row.player, rankClimb: deltas[row.id] ?? 0,
+                      wordsGained: row.activityWords - (previousWordsByID[row.id] ?? 0))
+            }
+            .filter { $0.wordsGained > 0 }
+            .max { $0.wordsGained < $1.wordsGained }
+
+        return BoardInsights(pulse: pulse, you: you, topClimber: climber,
+                             mostImproved: improved, rankDeltas: deltas)
+    }
+
+    // MARK: Activity summaries
+
+    struct ActivitySummary: Equatable {
+        var words = 0
+        var dictations = 0
+        var activeDays = 0
+        var bestDayWords = 0
+
+        var averageWordsPerActiveDay: Int {
+            guard activeDays > 0 else { return 0 }
+            return Int((Double(words) / Double(activeDays)).rounded())
+        }
+    }
+
+    static func activitySummary(entries: [DictationEntry], interval: DateInterval,
+                                calendar: Calendar = .current) -> ActivitySummary {
+        var summary = ActivitySummary()
+        var wordsByDay: [Date: Int] = [:]
+        for entry in entries where entry.isTranscribed && interval.contains(entry.date) {
+            let words = entry.wordCount
+            summary.words += words
+            summary.dictations += 1
+            wordsByDay[calendar.startOfDay(for: entry.date), default: 0] += words
+        }
+        summary.activeDays = wordsByDay.count
+        summary.bestDayWords = wordsByDay.values.max() ?? 0
+        return summary
     }
 
     // MARK: Badges

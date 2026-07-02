@@ -155,23 +155,43 @@ Quota headers use weighted quota units, not raw words.
 {
   "daily":  [ { "id", "name", "words", "dictations", "streakDays" }, ... ],
   "weekly": [ ... same shape ... ],
+  "monthly": [ ... same shape ... ],
+  "previousDaily":  [ ... same shape ... ],
+  "previousWeekly": [ ... same shape ... ],
+  "previousMonthly": [ ... same shape ... ],
   "generatedAt": "2026-07-02T10:00:00.000Z"
 }
 ```
 
+- `previous*` = the fully-closed previous period (yesterday / last quota week /
+  last calendar month), same shape and semantics as the current boards. They are
+  additive and may be omitted; the client uses them to render rank-movement
+  chips ("▲2 since yesterday"), the team trend ("+18% vs previous") and the
+  "biggest climb / most improved" movers row, and simply hides all of those
+  when the fields are absent.
+
 - Caller must be signed in AND on the corporate domain (`uni.tech`); otherwise
   `403 { code: "bad_request" }`. Boards only ever contain users of the caller's
   own domain.
-- `daily` = current UTC day; `weekly` = current quota week (UTC Monday, §5.3).
+- `daily` = current UTC day; `weekly` = current quota week (UTC Monday, §5.3);
+  `monthly` = current UTC calendar month. `monthly` is additive and may be
+  omitted by older deployments; the macOS client falls back to the caller's
+  local month and shows a "monthly team board is warming up" banner.
 - Aggregated from the existing metering log: `words` = raw transcribed words
   (unweighted), `dictations` = number of transcribe calls, `streakDays` =
   consecutive UTC days with ≥1 dictation, ending today.
+- Boards should be returned in any order; the macOS client ranks by raw
+  `words`, then `dictations`, then `streakDays`, then display name for stable
+  ties. The visible UI treats `words` as the primary activity number because it
+  matches the weekly quota language.
 - `name` = profile display name if known, else the email local-part. Never
   return teammates' full emails.
 - Not metered (no quota charge); the normal per-user rate limit applies.
 - The macOS client (`BackendLeaderboard.swift` / `TeamDashboardModel`) treats
   any error as "not live yet" and falls back to a local-only preview, so this
-  endpoint can ship after the app update without breaking anything.
+  endpoint can ship after the app update without breaking anything. In that
+  fallback state the banner "The team server is warming up" means no corporate
+  teammate data is being displayed yet.
 
 ---
 
