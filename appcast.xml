@@ -1,0 +1,1074 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sparkle update feed for LangFlip.
+
+  Hosted by GitHub Pages from the /docs folder of the main branch:
+      https://mikekorotych.github.io/lang-flip/appcast.xml
+
+  Each release adds an <item> entry near the top of <channel>. Use
+      make sign-update DMG=build/LangFlip-X.Y.Z.dmg
+  to print the sparkle:edSignature + length values for the enclosure.
+
+  Sparkle in the running app verifies the signature against the
+  SUPublicEDKey baked into Info.plist. The matching private key lives
+  in the maintainer's login.keychain (created once via
+  Scripts/.../generate_keys).
+-->
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Sayful</title>
+    <link>https://github.com/MikeKorotych/lang-flip</link>
+    <description>Sayful update feed</description>
+    <language>en</language>
+
+    <!-- Releases — newest first. Add a new <item> when shipping. -->
+
+    <item>
+      <title>v0.9.6.4</title>
+      <pubDate>Sun, 13 Jul 2026 00:00:00 +0000</pubDate>
+      <sparkle:version>0.9.6.4</sparkle:version>
+      <sparkle:shortVersionString>0.9.6.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Dictation reliability</h2>
+        <p>
+          Quiet recordings are now peak-normalized before transcription —
+          fixes dictations that came back as a couple of words or a stock
+          phrase on low-level microphones. Impossibly short transcripts
+          silently retry through the Quality model. Audio levels are logged
+          per dictation for diagnostics.
+        </p>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/sayful-releases/releases/download/v0.9.6.4/Sayful-0.9.6.4.dmg"
+        length="8366974"
+        type="application/octet-stream"
+        sparkle:edSignature="2QTflm/M3Fu/nICapfYlAiCkMtx4s9E/hojY7T5tF36doRV3ilPhODVK35h2g7vkphIHBjw/yVvmoJcMQy6ZCA==" />
+    </item>
+
+
+    <item>
+      <title>v0.9.6.3</title>
+      <pubDate>Sat, 11 Jul 2026 13:14:48 +0000</pubDate>
+      <sparkle:version>0.9.6.3</sparkle:version>
+      <sparkle:shortVersionString>0.9.6.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Reliable Bluetooth dictation</h2>
+        <ul>
+          <li>Dictation continues receiving audio from the selected Mac microphone when a Bluetooth speaker with a different sample rate is connected.</li>
+          <li>The Insights WPM gauge now uses the same percentile scale as its displayed standing.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.9.6.3/Sayful-0.9.6.3.dmg"
+        length="8346568"
+        type="application/octet-stream"
+        sparkle:edSignature="zEHQ3qc6tyNsYGCYpNBMrIEs0jN7/7inMgCnxBov/zuIAtNG2Ccrw1oI3dMuz0DABFPz7tPA8UwZA8UNBEtKCQ==" />
+    </item>
+
+    <item>
+      <title>v0.9.6.2</title>
+      <pubDate>Sat, 11 Jul 2026 12:23:09 +0000</pubDate>
+      <sparkle:version>0.9.6.2</sparkle:version>
+      <sparkle:shortVersionString>0.9.6.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Focused Notes and typing polish</h2>
+        <ul>
+          <li>Daily-note generation now routes new information only into sections the user can see, with Notes as the safe fallback.</li>
+          <li>Team aggregate activity sharing is enabled by default on new installations while preserving explicit opt-out.</li>
+          <li>Dictation start and stop cues now use distinct, consistently ordered sounds.</li>
+          <li>Typing passages no longer include accidental quotation marks, and restart guidance is clearer.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.9.6.2/Sayful-0.9.6.2.dmg"
+        length="9251782"
+        type="application/octet-stream"
+        sparkle:edSignature="f/C42GiPCoRQeGZFNFFM6DbJHcocJh6HYvutDpBgNsDZ5fKiCF0urELHTc+hN1rm58JblYeOQr5mc7hgAsX3Dg==" />
+    </item>
+
+    <item>
+      <title>v0.9.6.1</title>
+      <pubDate>Sat, 11 Jul 2026 03:44:58 +0000</pubDate>
+      <sparkle:version>0.9.6.1</sparkle:version>
+      <sparkle:shortVersionString>0.9.6.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Security hardening, browser fixes, and Notes polish</h2>
+        <ul>
+          <li>Double Shift, translation, transforms, grammar correction, and read-aloud work again in Chromium browsers while Secure Input and recognized sensitive fields remain protected.</li>
+          <li>Sign-in now uses PKCE and callback-state validation; BYOK endpoints and backend provider options have stricter trust and resource boundaries.</li>
+          <li>Notes adds Achievements, renames Action items to ToDo, and improves native hover help and workspace controls.</li>
+          <li>Aggregate Team activity sharing is now an explicit privacy setting.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.9.6.1/Sayful-0.9.6.1.dmg"
+        length="8342873"
+        type="application/octet-stream"
+        sparkle:edSignature="qZxFxzhv3fyNmp3DPX0BPjf71IBtJSd9wLCUss6uZ7AwdoMwPzXotJcfigpYjd5XkhJnr9ngoE3upL51vj1+Aw==" />
+    </item>
+
+    <item>
+      <title>v0.9.6</title>
+      <pubDate>Fri, 10 Jul 2026 15:21:35 +0000</pubDate>
+      <sparkle:version>0.9.6</sparkle:version>
+      <sparkle:shortVersionString>0.9.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Typing practice, feedback inbox, and Notes sorting</h2>
+        <ul>
+          <li>Practice touch typing in English, Ukrainian, or Russian with timed tests, animated results, and local-only progress statistics.</li>
+          <li>Send ratings, feedback, attachments, and optional diagnostics directly to Sayful's private authenticated inbox.</li>
+          <li>Reorder Notes items reliably from a dedicated drag handle; Action items, Decisions, and Notes are now the default workspace.</li>
+          <li>Typing results and statistics are cleaner and more balanced, with no repeated celebration after returning from Statistics.</li>
+          <li>The Obsidian export action now uses transparent gradient artwork.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.9.6/Sayful-0.9.6.dmg"
+        length="8327943"
+        type="application/octet-stream"
+        sparkle:edSignature="Z7h0pUNDvH91paXtgVLM3+vRBGxKk/MrwM1ghZm1Ny4mcJ7Gb/Pa0D/P3Cpe7VfwaespIpmePWwu/62h8FUaAA==" />
+    </item>
+
+    <item>
+      <title>v0.9.5.5</title>
+      <pubDate>Thu, 09 Jul 2026 22:36:12 +0000</pubDate>
+      <sparkle:version>0.9.5.5</sparkle:version>
+      <sparkle:shortVersionString>0.9.5.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Additive Notes + smoother Insights</h2>
+        <ul>
+          <li>Notes is now an editable daily workspace: manual items survive AI updates, and only new dictations are appended.</li>
+          <li>Voice Context processes one spoken instruction in isolation, routes each fact to one relevant section, and avoids cross-section duplicates.</li>
+          <li>Auto updates can be toggled from Notes and preserve existing content.</li>
+          <li>Insights keeps its animated calendar while drawing the heatmap as one efficient surface for smoother entrance performance.</li>
+          <li>DevTools adds explicit Fast, Quality (Qwen), and Turbo re-transcription controls.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.9.5.5/Sayful-0.9.5.5.dmg"
+        length="7958516"
+        type="application/octet-stream"
+        sparkle:edSignature="nZID6qZGN2te2d81yNkSm/v+38TY7af3UGauUIms/seyvRs3OxYY0apRAlweWJ3+uSuU88uCAO5ucH5UqeM+CQ==" />
+    </item>
+
+    <item>
+      <title>v0.9.5.4</title>
+      <pubDate>Thu, 09 Jul 2026 11:30:00 +0000</pubDate>
+      <sparkle:version>0.9.5.4</sparkle:version>
+      <sparkle:shortVersionString>0.9.5.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Dictation cleanup + insights polish</h2>
+        <ul>
+          <li>More Whisper hallucination variants are cleaned from transcripts (stray credit names, subscribe-style outros).</li>
+          <li>Long-dictation polishing aims for livelier, more readable text — punctuation and paragraphing only, your words untouched.</li>
+          <li>Insights: the WPM gauge shows your Top X%; the menubar Language switcher hides when only one non-English layout is installed.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.9.5.4/Sayful-0.9.5.4.dmg"
+        length="7346222"
+        type="application/octet-stream"
+        sparkle:edSignature="KE1D+oF91uEUVYzkD7LN85rvJ9ARRWJeRXWpsBIivuiwWTIg0iLGgUbWQbK8isbUldMz9G4am5H7pUZ+eZeFDA==" />
+    </item>
+
+    <item>
+      <title>v0.9.5.3</title>
+      <pubDate>Wed, 08 Jul 2026 17:20:00 +0000</pubDate>
+      <sparkle:version>0.9.5.3</sparkle:version>
+      <sparkle:shortVersionString>0.9.5.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Dictation reliability + rock-solid flips in Electron apps</h2>
+        <ul>
+          <li>Long dictations no longer vanish into "No speech was recognized": Whisper's stock hallucination phrases are surgically cut out, an empty transcript keeps the recording with a Retry button, and installs stuck on an old local-AI mode migrate to Sayful Cloud automatically.</li>
+          <li>Instant dictation start: the island reacts the moment you press the hotkey.</li>
+          <li>Flips no longer mangle text in Chromium-based editors (Claude Desktop, Codex): replacements there use one accessibility-verified selection plus one paste — atomic and self-checking.</li>
+          <li>No Russian without a Russian keyboard: layout detection now uses each keyboard's primary language, so machines with only Ukrainian + English never get Russian auto-flips or letter repairs.</li>
+          <li>Transcript polishing runs on a much faster model (~1 s instead of 5–15 s); Settings gains a Features command center, an Appearance tab, and a Reset app data button.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.9.5.3/Sayful-0.9.5.3.dmg"
+        length="7346076"
+        type="application/octet-stream"
+        sparkle:edSignature="DR0rPuSESQ4Ttd+eCoj6KtDjXNHGeW6wtd1TTG28crEN/hTmh/LDsDTn/VWZ/ZeV+F54zi/HBKDpV5vRSfrfAg==" />
+    </item>
+
+    <item>
+      <title>v0.9.5</title>
+      <pubDate>Wed, 08 Jul 2026 01:13:51 +0000</pubDate>
+      <sparkle:version>0.9.5</sparkle:version>
+      <sparkle:shortVersionString>0.9.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Learning v2 + Features command center</h2>
+        <ul>
+          <li>Learning v2 applies your personal terms even when STT hears close variants, declensions, typos, or Cyrillic↔Latin spellings, while avoiding URLs and emails.</li>
+          <li>Fix transcripts from History with the pencil button; Sayful diffs your correction and remembers the spelling across apps, including browsers and Electron.</li>
+          <li>Learning suggestions can now be reviewed in Dictionary → Learning, with Learn / Dismiss cards, auto-paused noisy rules, decay for unused rules, and a try-a-phrase preview.</li>
+          <li>Settings → Features gathers feature master switches and required permissions into one command center.</li>
+          <li>Settings → Appearance gathers visual effects, notifications, sound feedback, and scan overlay controls with Preview buttons.</li>
+          <li>Long dictations no longer come back truncated, and silent recordings now filter common Whisper subtitle-credit hallucinations.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.9.5/Sayful-0.9.5.dmg"
+        length="7318863"
+        type="application/octet-stream"
+        sparkle:edSignature="A5KFixDVAflHFcaaXt5y+jWKt9zm/nS8QU5zwo838zuPZpptc43BlDusbIhPtLHU/nHFkaTLfEIXHUqg/PivCg==" />
+    </item>
+
+    <item>
+      <title>v0.9.3</title>
+      <pubDate>Tue, 07 Jul 2026 09:38:12 +0000</pubDate>
+      <sparkle:version>0.9.3</sparkle:version>
+      <sparkle:shortVersionString>0.9.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Clipboard restore + Fast by default</h2>
+        <ul>
+          <li>After a transcript is auto-pasted, Sayful now restores whatever was on your clipboard before dictation — the dictated text no longer lingers on the shared clipboard. This works everywhere now, including browsers and Electron apps, where the previous version silently skipped the restore.</li>
+          <li>The transcript stays on the clipboard for a short grace window, so if the auto-paste couldn't find a focused text field you can still paste it manually; then your previous clipboard is put back.</li>
+          <li>New installs default to Fast transcription (Groq/Whisper large-v3) for quicker, cheaper dictation. If you already picked a mode, it's unchanged.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.9.3/Sayful-0.9.3.dmg"
+        length="7079179"
+        type="application/octet-stream"
+        sparkle:edSignature="+rHNgmQmNkdouLF1rRd/XbdvlM6kgeq8ChWwaOU2SrexnGAi4FBta78XCJQ8ZgDmPME37VWsWzXHu5oxDQuICQ==" />
+    </item>
+
+    <item>
+      <title>v0.9.2</title>
+      <pubDate>Mon, 06 Jul 2026 18:32:58 +0000</pubDate>
+      <sparkle:version>0.9.2</sparkle:version>
+      <sparkle:shortVersionString>0.9.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Faster dictation fallback</h2>
+        <ul>
+          <li>Sayful now retries transient speech-to-text server failures twice immediately, then automatically falls back to the other supported transcription model.</li>
+          <li>Groq/Whisper now receives a shorter language hint tuned for Ukrainian, Russian, and English dictation without nudging English speech into translation.</li>
+          <li>Fallback attempts now receive the prompt tuned for the model actually handling that attempt.</li>
+          <li>Speech-to-text failures now include HTTP status and backend error codes in diagnostics, making upstream provider rate limits easier to understand.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.9.2/Sayful-0.9.2.dmg"
+        length="7080617"
+        type="application/octet-stream"
+        sparkle:edSignature="msto86AeBQ0RWMV53A1EoSb6LdpMJj/qBWBNJHV3UrZLeicHVmSk0//fjvEtI7oyu5uHAOf3gf3b9s18vt2/AQ==" />
+    </item>
+
+    <item>
+      <title>v0.9.1</title>
+      <pubDate>Mon, 06 Jul 2026 17:42:56 +0000</pubDate>
+      <sparkle:version>0.9.1</sparkle:version>
+      <sparkle:shortVersionString>0.9.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Keyboard-aware dictation</h2>
+        <ul>
+          <li>Added a Dictation setting, on by default, that hints speech-to-text models with your enabled keyboard languages to reduce wrong-language transcripts.</li>
+          <li>Fresh installs now only enable a secondary flip language when that keyboard layout is actually installed on the Mac.</li>
+          <li>Auto-flip, Always Flip targets, and language menus now respect available keyboard layouts.</li>
+          <li>Fixed a macOS 26 crash caused by reading input sources from a background transcription task.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.9.1/Sayful-0.9.1.dmg"
+        length="7072136"
+        type="application/octet-stream"
+        sparkle:edSignature="DDhjJdAEMAU8QuKbzmHZFIOSRLKEqlz7+aqOkevN+TfudeCvY2LYeLIJA4j/083QtH7YXh+R0q/lSe5T2Wa0Dw==" />
+    </item>
+
+    <item>
+      <title>v0.9.0</title>
+      <pubDate>Mon, 06 Jul 2026 15:45:28 +0000</pubDate>
+      <sparkle:version>0.9.0</sparkle:version>
+      <sparkle:shortVersionString>0.9.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Bluetooth dictation polish</h2>
+        <ul>
+          <li>Kept Bluetooth headphones in high-quality playback mode during dictation when Sayful is set to record from a Mac or other non-headset microphone.</li>
+          <li>Released the recorder's CoreAudio engine after each dictation so headphone playback returns to normal immediately after recording.</li>
+          <li>Added a startup fallback for protected microphone routing, avoiding CoreAudio !dev failures when macOS needs a moment to settle the selected input.</li>
+          <li>Stopped sending empty microphone recordings to transcription and now reports a clear error when capture produces no usable audio.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.9.0/Sayful-0.9.0.dmg"
+        length="7065425"
+        type="application/octet-stream"
+        sparkle:edSignature="IktjTiOuZZp1eOZy++l9CTFJILQ2LR+HXoM+30sNdWT1MrWZhpyHGAijRhuDbNOI/mS+ATN0lFLjeQGmplKXDQ==" />
+    </item>
+
+    <item>
+      <title>v0.8.14</title>
+      <pubDate>Mon, 06 Jul 2026 13:21:00 +0000</pubDate>
+      <sparkle:version>0.8.14</sparkle:version>
+      <sparkle:shortVersionString>0.8.14</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Window focus fixes</h2>
+        <ul>
+          <li>The Sparkle update window is now brought to the front when opening the update flow from Sayful's in-app update button or menu item.</li>
+          <li>Returning from Google sign-in now activates Sayful and raises an existing window, including when the app was minimized before clicking "Open app".</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.14/Sayful-0.8.14.dmg"
+        length="7064922"
+        type="application/octet-stream"
+        sparkle:edSignature="b2kt1n670vMsGb7MFpxoGdMsvJbAJlceNLwjbEXYVRLvrmXR0DpF2uGt6D1ZbufMzzpkixRAPSpGxZ34BRl/DQ==" />
+    </item>
+
+    <item>
+      <title>v0.8.13</title>
+      <pubDate>Mon, 06 Jul 2026 13:11:27 +0000</pubDate>
+      <sparkle:version>0.8.13</sparkle:version>
+      <sparkle:shortVersionString>0.8.13</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Team avatars</h2>
+        <ul>
+          <li>Team leaderboards now show real teammate avatars when the backend returns a public profile image URL.</li>
+          <li>Custom profile pictures are uploaded to Sayful Cloud storage on save, so the avatar chosen in Manage Account can appear for teammates too.</li>
+          <li>Existing local profile pictures sync to the backend automatically on the next signed-in launch.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.13/Sayful-0.8.13.dmg"
+        length="7060576"
+        type="application/octet-stream"
+        sparkle:edSignature="vG9YwN/Crb4Hh7k29Tah++dWkhkdtUPZxvvR1A5AQ81XfCdAuipYAKDt99ZA1UL4cXSJxxYnhYacbeEaTCO8Cg==" />
+    </item>
+
+    <item>
+      <title>v0.8.12</title>
+      <pubDate>Mon, 06 Jul 2026 11:51:28 +0000</pubDate>
+      <sparkle:version>0.8.12</sparkle:version>
+      <sparkle:shortVersionString>0.8.12</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>OAuth sign-in repair</h2>
+        <ul>
+          <li>Fixed Google sign-in for the macOS app by routing Supabase OAuth through the saful.app callback page before returning to Sayful.</li>
+          <li>Sign-in failures now reset the in-app button state and show an error instead of leaving onboarding or the profile popover stuck on "Signing in...".</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.12/Sayful-0.8.12.dmg"
+        length="7027688"
+        type="application/octet-stream"
+        sparkle:edSignature="FlP42tCydKIQ2u6MAgXP2sHqukg3iRmp9NZSFNAWX5JbCgvWr7mJLkrsHqWue/27lsb/3kaodyadprmZiFBLBw==" />
+    </item>
+
+    <item>
+      <title>v0.8.11</title>
+      <pubDate>Sun, 05 Jul 2026 18:39:25 +0000</pubDate>
+      <sparkle:version>0.8.11</sparkle:version>
+      <sparkle:shortVersionString>0.8.11</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Quality dictation by default</h2>
+        <ul>
+          <li>Fresh installs now default dictation transcription to Quality mode, so Sayful uses the cleaner Qwen ASR path unless the user explicitly chooses Fast.</li>
+          <li>The Fast / Quality picker now opens on Quality for users without a saved dictation mode preference.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.11/Sayful-0.8.11.dmg"
+        length="7758957"
+        type="application/octet-stream"
+        sparkle:edSignature="kjgRXVd0QcYPGJKwE1v8AaO2va0QrT3zPmv/h+1KKpuUu6G4VP/9FU4YXz378o27VNB2g+1xGlmz5sXXZn7RAA==" />
+    </item>
+
+    <item>
+      <title>v0.8.10</title>
+      <pubDate>Sun, 05 Jul 2026 15:50:24 +0000</pubDate>
+      <sparkle:version>0.8.10</sparkle:version>
+      <sparkle:shortVersionString>0.8.10</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Steadier layout flips</h2>
+        <ul>
+          <li>Double Shift with no selection now flips the whole word even in editors, IDEs and terminals — including wrong-layout words that contain punctuation keys (e.g. F,j → Або, phj,bnb → зробити), which previously flipped only the tail after the comma.</li>
+          <li>Manual flips are now deterministic: Double Shift always switches to your primary language and Triple Shift to your secondary, without second-guessing the target from dictionaries.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.10/Sayful-0.8.10.dmg"
+        length="7051014"
+        type="application/octet-stream"
+        sparkle:edSignature="vErxJVlMaNyqXx43W8UJgmtg/p+1uv868sM6H4Reyf2v3u1JHi+TGu0QrfOuq/Jbg7F/C4Yo9ZqBC+K8JxdbDA==" />
+    </item>
+
+    <item>
+      <title>v0.8.9</title>
+      <pubDate>Fri, 03 Jul 2026 17:11:41 +0000</pubDate>
+      <sparkle:version>0.8.9</sparkle:version>
+      <sparkle:shortVersionString>0.8.9</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Achievements leaderboard</h2>
+        <ul>
+          <li>Added a fourth "Achievements" tab to the Team dashboard, ranking the team by total unlocked badges (personal habits and team standing, combined) instead of a period-bound activity metric.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.9/Sayful-0.8.9.dmg"
+        length="7027429"
+        type="application/octet-stream"
+        sparkle:edSignature="EUy1Ro+144VSwo+nTTVeN9+QZ1Z8fRBMWSH/ELEzOL0ko0fAQphj2hiMlImi0IPa9YiFpYVqVqfrVsVXJTCrDA==" />
+    </item>
+
+    <item>
+      <title>v0.8.8</title>
+      <pubDate>Fri, 03 Jul 2026 16:31:54 +0000</pubDate>
+      <sparkle:version>0.8.8</sparkle:version>
+      <sparkle:shortVersionString>0.8.8</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Team leaderboard goes live</h2>
+        <ul>
+          <li>The Team leaderboard is now live: /v1/leaderboard is deployed, so the Team dashboard shows real teammate rankings instead of the local-preview banner.</li>
+          <li>Added achievement badges for auto-flip usage (First Flip, Flip Fluent, Flip Master, Autopilot) and for "copy text from screenshot" usage (Screen Reader, Copy Paste Pro, OCR Veteran).</li>
+          <li>Added social/rank-based team achievements: Podium Finish, Top of the Board, Biggest Climber, and Most Improved.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.8/Sayful-0.8.8.dmg"
+        length="6987989"
+        type="application/octet-stream"
+        sparkle:edSignature="QAhPGBOVgjuIQQKdSUYkd7Q6F4QOfcYhb+fnQwy7i+eO7oO9Nfz5Lk6BVtZeHiuD2ah/EMOZ+7MUUQi05StLDQ==" />
+    </item>
+
+    <item>
+      <title>v0.8.7</title>
+      <pubDate>Fri, 03 Jul 2026 15:35:34 +0000</pubDate>
+      <sparkle:version>0.8.7</sparkle:version>
+      <sparkle:shortVersionString>0.8.7</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Manual flip stability</h2>
+        <ul>
+          <li>Made no-selection double Shift consistently flip the last word before the cursor, including Cyrillic → English conversions such as дела → ltkf.</li>
+          <li>Added a caret fallback for editors where Accessibility cannot read the text value, so Sayful can select the word immediately before a moved cursor and replace it in place.</li>
+          <li>Reset layout-flip typing context on app switches, pointer clicks, and regular shortcuts so stale buffered text no longer affects later flips.</li>
+          <li>Delayed keyboard-layout switching until after focused rewrites land, avoiding intermittent cases where the word changed but the active layout did not.</li>
+          <li>Auto-flip exception notifications now open Dictionary → Learning directly, and Escape cancels an active dictation recording.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.7/Sayful-0.8.7.dmg"
+        length="6983083"
+        type="application/octet-stream"
+        sparkle:edSignature="5rQ21riogxKnzAxYG4hALhUzQ2W1wR13IDIWrJWR9CUO1HeFJ8qgNAK9ySdckACTb+kup3UyJ3R4XKdJhOHIBQ==" />
+    </item>
+
+    <item>
+      <title>v0.8.6</title>
+      <pubDate>Fri, 03 Jul 2026 09:48:00 +0000</pubDate>
+      <sparkle:version>0.8.6</sparkle:version>
+      <sparkle:shortVersionString>0.8.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Team dashboard polish</h2>
+        <ul>
+          <li>Added the corporate Team dashboard with Today / Week / Month boards, podium, paginated rankings, movers, achievement badges, and rank-climb notifications.</li>
+          <li>Added local Team leaderboard caching so the last live board appears immediately while a fresh response loads.</li>
+          <li>Kept Team refresh economical: leaderboard requests run only while the Team tab is open and Sayful is active.</li>
+          <li>Added recurring update checks and a title-bar update indicator when Sparkle finds a newer version.</li>
+          <li>Fixed the DevTools settings freeze by lazy-loading heavy prompt editors.</li>
+          <li>Polished Team animations, centered summary metrics, removed the podium shine effect, and tightened the Team copy.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.6/Sayful-0.8.6.dmg"
+        length="6975045"
+        type="application/octet-stream"
+        sparkle:edSignature="igg4h+63BwbyN42JEOLpzDS04ku5LUvgjlJm1lBHnr8WvGmcUkwz6fPgvMTfq7U1yOMJsHteCsS6bKURCTPZAQ==" />
+    </item>
+
+    <item>
+      <title>v0.8.5</title>
+      <pubDate>Thu, 02 Jul 2026 15:50:12 +0000</pubDate>
+      <sparkle:version>0.8.5</sparkle:version>
+      <sparkle:shortVersionString>0.8.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Stable word flips</h2>
+        <ul>
+          <li>Rebuilt no-selection double-shift around Sayful's own word buffer instead of macOS word selection, preventing tail-only rewrites like vj;ет.</li>
+          <li>Kept double-shift reliable for the current word and the word immediately before one typed space, while safely doing nothing after Enter, Tab, or extra spaces.</li>
+          <li>Limited automatic layout flips to ordinary spaces, so Enter and Shift+Enter no longer trigger surprise rewrites while sending or breaking lines.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.5/Sayful-0.8.5.dmg"
+        length="6968748"
+        type="application/octet-stream"
+        sparkle:edSignature="yXxHT/MPWmerRvDHMiuZQcvG4WeqNPcQP/++AnW5+FTSYFxCGx1v1MjwmpwK+zC7tQX5NprKNueapJHjo8h+Ag==" />
+    </item>
+
+    <item>
+      <title>v0.8.4</title>
+      <pubDate>Thu, 02 Jul 2026 15:06:39 +0000</pubDate>
+      <sparkle:version>0.8.4</sparkle:version>
+      <sparkle:shortVersionString>0.8.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Layout boundary hotfix</h2>
+        <ul>
+          <li>Fixed wrong-layout words with physical punctuation keys, such as vj;tv, so Sayful flips the whole token to можем instead of only rewriting the tail.</li>
+          <li>Improved first-word layout detection after idle by preferring the layout implied by the typed token before falling back to macOS' current input source.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.4/Sayful-0.8.4.dmg"
+        length="6970570"
+        type="application/octet-stream"
+        sparkle:edSignature="63yvEyjWt5Rb9FJItH+qprFTa3Cs87ACJnkzIamIhsu2L8BbWJ+PGWTqJhOou1W4cRamYRFk3/9fQrlW2AaQAQ==" />
+    </item>
+
+    <item>
+      <title>v0.8.3</title>
+      <pubDate>Thu, 02 Jul 2026 14:57:51 +0000</pubDate>
+      <sparkle:version>0.8.3</sparkle:version>
+      <sparkle:shortVersionString>0.8.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Faster layout fixes and team momentum</h2>
+        <ul>
+          <li>Added a Team dashboard polish pass with words-first rankings, previous-period insights, movers, achievement badges, and rank-climb notifications.</li>
+          <li>Added recurring background update checks so Sayful can surface a new version while it is already running.</li>
+          <li>Fixed dictation paste cleanup so successful focused inserts restore the clipboard even when the target app touches the pasteboard during paste.</li>
+          <li>Fixed the first wrong-layout terminal word after idle, including common commands like make, run, git, cd, ls, and pwd.</li>
+          <li>Stabilized the dictation island hover animation and click target.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.3/Sayful-0.8.3.dmg"
+        length="6970440"
+        type="application/octet-stream"
+        sparkle:edSignature="XaIUkfQXkkvxYx2mqq2rTnkiG+K9frxaF4PHwuTc9zZbZUj3tYvaQWR4eSLdhJkbiB5E0fBlOp9JNV05k9UjDQ==" />
+    </item>
+
+    <item>
+      <title>v0.8.2</title>
+      <pubDate>Wed, 01 Jul 2026 16:59:47 +0000</pubDate>
+      <sparkle:version>0.8.2</sparkle:version>
+      <sparkle:shortVersionString>0.8.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Enterprise privacy and quota hardening</h2>
+        <ul>
+          <li>Hardened token, clipboard, logging, OAuth, and sensitive-field handling for safer enterprise rollout.</li>
+          <li>Kept local history available by default while tightening cleanup for temporary dictation recordings and generated files.</li>
+          <li>Added backend-weighted quota accounting for dictation, screen text, chat, and text-to-speech.</li>
+          <li>Fixed dictation cancellation so Undo can restore a recording while the Undo island is visible, then clean it up afterward.</li>
+          <li>Added clearer notifications when words are added to layout-flip exceptions.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.2/Sayful-0.8.2.dmg"
+        length="6755919"
+        type="application/octet-stream"
+        sparkle:edSignature="K0F38rorGoXw5uqx3bNaOZIFN2EzBPygZNG7BpZoNgTV2UB2EgjTmxq22Y5XHdfKT6Oa4BCfKmnwqZOXbZXpAg==" />
+    </item>
+
+    <item>
+      <title>v0.8.1</title>
+      <pubDate>Tue, 30 Jun 2026 11:58:48 +0000</pubDate>
+      <sparkle:version>0.8.1</sparkle:version>
+      <sparkle:shortVersionString>0.8.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Hotkey fixes</h2>
+        <ul>
+          <li>Dictation hotkeys now keep working when LangFlip is disabled. Push-to-talk and hands-free dictation are controlled only by their toggles in Hotkeys.</li>
+          <li>Double Shift now flips only the last word before the cursor, using spaces, newlines, or the cursor as word boundaries.</li>
+          <li>Punctuation keys that map to Cyrillic letters, such as "," in ",hfnbr", are included in the flip.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.1/Sayful-0.8.1.dmg"
+        length="6725498"
+        type="application/octet-stream"
+        sparkle:edSignature="zUDVLVP3mXacNVeTVh5JvwB71J0QXDwdgdC3hWbQHj74vlgRM9Bgnzzk2Y14uM743jJRPxKOQpZgotBlXpOmDA==" />
+    </item>
+
+    <item>
+      <title>v0.8.0</title>
+      <pubDate>Tue, 30 Jun 2026 08:33:39 +0000</pubDate>
+      <sparkle:version>0.8.0</sparkle:version>
+      <sparkle:shortVersionString>0.8.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Tidy history + shareable logs</h2>
+        <ul>
+          <li>Manage your history — each day in the Dictation, Screen Text, and Speech tabs has a trash button to clear that day or everything (single entries deletable on hover); recordings are removed too.</li>
+          <li>Share diagnostic logs from Settings → About. The log records what happened, never what you typed or dictated.</li>
+          <li>The Home dictation list opens to your 50 most recent entries with a "Show older" control.</li>
+          <li>Fixed: the Home tab could freeze (spinning loader, dead tabs) with a large history — scrolling and hover are now smooth.</li>
+          <li>Fixed: the dictation island now stays above the Dock on the empty desktop too.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.8.0/Sayful-0.8.0.dmg"
+        length="6725431"
+        type="application/octet-stream"
+        sparkle:edSignature="dQCFCWGJZP99rJE/7+JKGwefEg4stNayN7YhUbbFYBN0LceZrQt2thWwh1kxH7W5v1Fy0k+pQ5D6omRrcJgQCw==" />
+    </item>
+
+    <item>
+      <title>v0.7.3</title>
+      <pubDate>Sat, 27 Jun 2026 11:29:49 +0000</pubDate>
+      <sparkle:version>0.7.3</sparkle:version>
+      <sparkle:shortVersionString>0.7.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>One-click updates from the title bar</h2>
+        <ul>
+          <li>Sayful checks for updates in the background after launch — when a newer version is available, a green update button appears in the title bar next to the bell; click it to install and relaunch.</li>
+          <li>The failed-dictation "Retry" label is now white for clear reading on both themes.</li>
+          <li>Removed a stray focus ring on the notifications "Clear" button.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.7.3/Sayful-0.7.3.dmg"
+        length="6661884"
+        type="application/octet-stream"
+        sparkle:edSignature="pMv5BQfPUuumUVxXLLCZmKYY7JfbZI1b4wAsKMd9i5mR2GeumjQYD7E35tlWlflIZSE20CSNPABFNU3bUp68DQ==" />
+    </item>
+
+    <item>
+      <title>v0.7.2</title>
+      <pubDate>Sat, 27 Jun 2026 11:12:31 +0000</pubDate>
+      <sparkle:version>0.7.2</sparkle:version>
+      <sparkle:shortVersionString>0.7.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Always-flip: English and case-sensitive</h2>
+        <ul>
+          <li>Always-flip rules can now target English — wrong-layout Cyrillic typing meant for English (e.g. "срфеПЗЕ" → "ChatGPT") is rewritten on the spot.</li>
+          <li>Always-flip rules are now case-sensitive and keep the casing you enter, so a rule for "ChatGPT" preserves its capitals.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.7.2/Sayful-0.7.2.dmg"
+        length="6672659"
+        type="application/octet-stream"
+        sparkle:edSignature="qobvJ4rEY/phq236JilmrB9TSfzDaJToaGnMcAP2I0LM7ywLHoY7SnasscUnIyeBjkNJs/6JEgbLfkJPVE4sCw==" />
+    </item>
+
+    <item>
+      <title>v0.7.1</title>
+      <pubDate>Sat, 27 Jun 2026 10:49:17 +0000</pubDate>
+      <sparkle:version>0.7.1</sparkle:version>
+      <sparkle:shortVersionString>0.7.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Smoother dictation island</h2>
+        <ul>
+          <li>Fixed stuttering in the dictation island's transitions (expanding to record, switching to transcribing, and collapsing afterward).</li>
+          <li>Recording controls now collapse into the island's centre on finish instead of sliding off to the bottom-right.</li>
+          <li>The animated Home backdrop pauses when its window isn't on screen, lowering idle CPU.</li>
+          <li>Recorder teardown moved off the main thread and transcripts insert immediately, keeping transitions hitch-free.</li>
+          <li>Removed the mic button from the Home banner — dictation runs from the global hotkey and the always-present island.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.7.1/Sayful-0.7.1.dmg"
+        length="6672874"
+        type="application/octet-stream"
+        sparkle:edSignature="QKayPKcnmzIQqvbJEqYIF/kkW0yyE17+4fPwi3ag44zQiKB+r9iQrsj3oVUTiCp5OFn1vbULo7mCuF15HmlmCA==" />
+    </item>
+
+    <item>
+      <title>v0.7.0</title>
+      <pubDate>Fri, 26 Jun 2026 13:40:57 +0000</pubDate>
+      <sparkle:version>0.7.0</sparkle:version>
+      <sparkle:shortVersionString>0.7.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Dictation, Home, and playback polish</h2>
+        <ul>
+          <li>Added a simple Dictation Mode switch: Fast for lower latency, Quality for richer transcription.</li>
+          <li>Added retry for failed transcriptions from both the dictation island and Home history, reusing the recorded audio instead of losing the attempt.</li>
+          <li>Added Home activity tabs for dictations, screen text captures, and generated speech files.</li>
+          <li>Added generated speech playback controls, including pause/resume in the island and Home history.</li>
+          <li>Streamlined onboarding so a ready account opens straight into Home, with hands-free dictation and Shift+Space translation enabled by default.</li>
+          <li>Polished Superpowers hotkey chips, the Dictation hero, Transform demo, and TTS control animations.</li>
+          <li>Fixed LangFlip word boundaries so punctuation keys that are Cyrillic letters on another layout, such as ; for ж, no longer trigger an early auto-flip.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.7.0/Sayful-0.7.0.dmg"
+        length="6676957"
+        type="application/octet-stream"
+        sparkle:edSignature="wKMig1xvLZ6+U80NpDWVzCq7XQ6gP6F/+b+omTJMSe5nU3MuUeuJxOYyuMVyKwva3AHpteaDAsAN3VFIutjxDQ==" />
+    </item>
+
+    <item>
+      <title>v0.6.0</title>
+      <pubDate>Thu, 25 Jun 2026 18:28:26 +0000</pubDate>
+      <sparkle:version>0.6.0</sparkle:version>
+      <sparkle:shortVersionString>0.6.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Personal dictation spellings</h2>
+        <ul>
+          <li>Added Personal dictation words in Dictionary → Learning, with manual entries and automatically learned spellings.</li>
+          <li>Sayful now watches short edits after a transcript is inserted and can learn safe recognized phrase → preferred spelling pairs.</li>
+          <li>Personal dictionary replacements run before and after dictation auto-formatting, so saved product names, people, jargon, and casing survive cleanup.</li>
+          <li>Cached Insights usage and heatmap snapshots for a smoother Insights tab.</li>
+          <li>Made the dictation island lift animation quicker.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.6.0/Sayful-0.6.0.dmg"
+        length="6517358"
+        type="application/octet-stream"
+        sparkle:edSignature="gAwSoaXPvSfFp8GxObFtB4W7qPwrxNRmParA/Sd2dXEb4F7lZ36ZOhtj833pm6z9f7c2CBE+uzQAtrPuYRsPCw==" />
+    </item>
+
+    <item>
+      <title>v0.5.0</title>
+      <pubDate>Thu, 25 Jun 2026 09:52:22 +0000</pubDate>
+      <sparkle:version>0.5.0</sparkle:version>
+      <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Sayful Cloud — sign in and dictate, no API key</h2>
+        <ul>
+          <li>LangFlip is now <b>Sayful</b>, with a new name and icon.</li>
+          <li>Added Sayful Cloud: sign in with Google and dictation, grammar fixes, translation, transforms, and screenshot text all work out of the box — no API key to set up. A profile menu in the title bar shows your plan and weekly word usage.</li>
+          <li>Added auto-format for longer dictations: punctuation, casing, merging sentences split by pauses, and bulleting lists — without changing your words. Toggle it in Voice → Dictation.</li>
+          <li>Added read-aloud (text-to-speech) through the cloud with a choice of voice, speed, and instructions.</li>
+          <li>Added screenshot-to-text: select a region of the screen and copy the recognized text.</li>
+          <li>Added a Manage Account window and an in-app notification center.</li>
+          <li>Polished the dictation island: springier open/close, controls that cascade in, sound waves that ramp up, and a smoother spinner.</li>
+          <li>Refreshed Settings: app-styled tabs, an animated light/dark switch, a per-app microphone picker, and a Dictation-first Voice tab. Engineering options now live behind an Advanced/Developer view.</li>
+          <li>Single Shift now fixes the selected text only; the hands-free dictation default is Left Option.</li>
+          <li>Faster Insights and a dictation history that loads as you scroll.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.5.0/Sayful-0.5.0.dmg"
+        length="6380715"
+        type="application/octet-stream"
+        sparkle:edSignature="taeinaw0P2G/jt7kra37YiPN/l1dHzETg6/8txOt21NI/xfe1iQZBuZBFqa9U3jPQ6SEbhspqJgzWD3TjZ89Dg==" />
+    </item>
+
+    <item>
+      <title>v0.4.0</title>
+      <pubDate>Wed, 24 Jun 2026 11:30:24 +0000</pubDate>
+      <sparkle:version>0.4.0</sparkle:version>
+      <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>A dictation island, and a tidier Settings</h2>
+        <ul>
+          <li>Added an always-on dictation island at the bottom of the screen (Wispr-style): hover it to reveal the mic and its shortcut, see live sound waves while recording, and cancel or confirm right there.</li>
+          <li>Added a "Transcript cancelled" toast with Undo and a lifetime progress bar.</li>
+          <li>Redesigned the Settings tabs (Behavior, Hotkeys, Apps, About, and Voice) in the new look, and centered everything on wider windows.</li>
+          <li>Dictation no longer shows the flip overlay — the island is its feedback now.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.4.0/LangFlip-0.4.0.dmg"
+        length="4826244"
+        type="application/octet-stream"
+        sparkle:edSignature="fOFe5rLgz5ze2qCANeLp4Jcb2gK3WsD8qCwBoH7ju1mRPaQ3Ql0K44xXFcAfPUR8XsEdhfOk2VLSozSQOuDOBA==" />
+    </item>
+
+    <item>
+      <title>v0.3.0</title>
+      <pubDate>Wed, 24 Jun 2026 07:47:03 +0000</pubDate>
+      <sparkle:version>0.3.0</sparkle:version>
+      <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>A real home for LangFlip</h2>
+        <ul>
+          <li>Added a full main window with a sidebar: Home, Insights, Dictionary, Snippets, Transforms, and Settings — all settings now live here.</li>
+          <li>Added an Insights dashboard: total words, words-per-minute, a per-app breakdown, an activity heatmap, and a heuristic voice profile.</li>
+          <li>Added Snippets — short triggers that expand to longer text automatically right after you dictate.</li>
+          <li>Added Transforms — rewrite selected text with a custom AI prompt via Option+number hotkeys, with Polish and Prompt Engineer built in.</li>
+          <li>Changed extended dictionaries to install automatically in the background on first launch.</li>
+          <li>Changed the default appearance to dark.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.3.0/LangFlip-0.3.0.dmg"
+        length="4794859"
+        type="application/octet-stream"
+        sparkle:edSignature="eOZ+qX5YDXuzUv7k5enpGOz1bHb/XOdHzhpU8b6bvN2rCE5v3f1r07Oqq2RNLu4wJ38qAvFTB8+Vnzi/AJz6CQ==" />
+    </item>
+
+    <item>
+      <title>v0.2.9</title>
+      <pubDate>Sun, 31 May 2026 21:53:26 +0000</pubDate>
+      <sparkle:version>0.2.9</sparkle:version>
+      <sparkle:shortVersionString>0.2.9</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Cloud speech and AI providers</h2>
+        <ul>
+          <li>Added opt-in Cloud TTS with curated OpenRouter/OpenAI-compatible speech models, voice selection, speed, instructions, and a built-in sample generator.</li>
+          <li>Added Cloud STT for dictation through /audio/transcriptions with provider-side language auto-detection.</li>
+          <li>Added Cloud OCR for screenshot text capture with a dedicated vision-model picker.</li>
+          <li>Added curated OpenRouter model choices for AI text correction and selected text fixes.</li>
+          <li>Changed hands-free dictation to default to Fn+Option and added a picker for alternate hands-free shortcuts.</li>
+          <li>Removed weak or unreliable Cloud STT choices from the curated list, including Whisper 1, GPT-4o Mini Transcribe, and Whisper Large V3.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.9/LangFlip-0.2.9.dmg"
+        length="4370616"
+        type="application/octet-stream"
+        sparkle:edSignature="k2KY7mziQ9AlAIGgC3rnFAaIOn7vW5aTduOsbbUMV99X0KN/btHyQhaCz0ebmaF0YEeiBfzlQmVIgJWU/SANDQ==" />
+    </item>
+
+    <item>
+      <title>v0.2.8</title>
+      <pubDate>Fri, 22 May 2026 12:36:19 +0000</pubDate>
+      <sparkle:version>0.2.8</sparkle:version>
+      <sparkle:shortVersionString>0.2.8</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Double Shift hotfix</h2>
+        <ul>
+          <li>Prevented Obsidian-style Cmd+C-without-selection behavior from duplicating and converting the whole current line.</li>
+          <li>Added a keyboard fallback for Codex/Claude-style inputs that do not expose focused text through Accessibility.</li>
+          <li>Limited the fallback to the previous word/token instead of selecting the whole line.</li>
+          <li>Preserved leading spaces when replacing the previous token.</li>
+          <li>Made manual no-selection double/triple Shift deterministic: English tokens convert to the configured target language, and non-English tokens convert to English.</li>
+          <li>Removed dictionary checks from manual no-selection Shift flips.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.8/LangFlip-0.2.8.dmg"
+        length="4319730"
+        type="application/octet-stream"
+        sparkle:edSignature="YyJSy5WiRfFBUkjnKXI/VWIc5Kn0u9hvPDV1C7N6sY2zvLc4igKDe+CBiwUMsUy8Ng2RdaFJ7m7E/b03WLRgDQ==" />
+    </item>
+
+    <item>
+      <title>v0.2.7</title>
+      <pubDate>Tue, 19 May 2026 19:05:23 +0000</pubDate>
+      <sparkle:version>0.2.7</sparkle:version>
+      <sparkle:shortVersionString>0.2.7</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Stability after performance tuning</h2>
+        <ul>
+          <li>Stabilized the first auto-flip after launch so the word rewrite lands before LangFlip switches the active input source.</li>
+          <li>Fixed double-Shift focused-word rewrites that could miss the first character or select too much text after performance changes.</li>
+          <li>Added manual Always flip rules in General &gt; Learning, with a target language per word.</li>
+          <li>Loaded larger dictionaries in the background while keeping deterministic built-in and manual rules available immediately.</li>
+          <li>Reduced per-keystroke overhead from repeated lowercase work and frontmost-app suppression checks.</li>
+          <li>Improved selected-text action latency with exponential pasteboard polling.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.7/LangFlip-0.2.7.dmg"
+        length="4318734"
+        type="application/octet-stream"
+        sparkle:edSignature="zihl38yHZ6Rb3clvJ1hAfX2F657NxtbY74LORIPiY0A66Ip0dvV8aUXSQ/ausubngZZ6q2sOI0CKqgMmLnM3DQ==" />
+    </item>
+
+    <item>
+      <title>v0.2.6</title>
+      <pubDate>Tue, 19 May 2026 10:30:48 +0000</pubDate>
+      <sparkle:version>0.2.6</sparkle:version>
+      <sparkle:shortVersionString>0.2.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Translation and first-run polish</h2>
+        <ul>
+          <li>Shift+Space now translates selected text into the language of the active keyboard layout.</li>
+          <li>Fixed Shift+Space replacement so translated text no longer appears next to the original selection.</li>
+          <li>Triple Shift now defaults to Russian as the secondary language, while Double Shift keeps Ukrainian as the primary default.</li>
+          <li>Added optional Screen Recording and Microphone permission rows in General settings.</li>
+          <li>Onboarding now returns to the setup checklist after macOS asks to restart LangFlip for Screen Recording.</li>
+          <li>Disabled speech-to-text hotkeys by default so voice features stay opt-in.</li>
+          <li>Fixed bracket-key auto-flips such as <code>[jxe</code> → <code>хочу</code>.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.6/LangFlip-0.2.6.dmg"
+        length="4292132"
+        type="application/octet-stream"
+        sparkle:edSignature="/zU13BxWkO6SDKn9B/YoogQtZn0BAc16uKJhll4M2d9QeAHza++4+Ft+rCFcZwCH0svjOOC84DEKOR37BKnWCw==" />
+    </item>
+
+    <item>
+      <title>v0.2.5</title>
+      <pubDate>Mon, 11 May 2026 16:05:06 +0000</pubDate>
+      <sparkle:version>0.2.5</sparkle:version>
+      <sparkle:shortVersionString>0.2.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>First-run setup, local AI, and voice tools</h2>
+        <ul>
+          <li>Added a first-run setup checklist after macOS permissions.</li>
+          <li>Made Qwen 3.5 2B the default local AI model, with 4B kept as a heavier option for 16 GB+ Macs.</li>
+          <li>Added built-in grammar and copy-text-from-screenshot tests.</li>
+          <li>Improved no-selection Single Shift fallback in text fields that do not expose their content through Accessibility.</li>
+          <li>Added configurable hotkeys, local dictation groundwork, Whisper model management, and experimental OmniVoice text-to-speech controls.</li>
+          <li>Polished onboarding copy, dictionary setup, and release reset commands for testing new-user flows.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.5/LangFlip-0.2.5.dmg"
+        length="4284747"
+        type="application/octet-stream"
+        sparkle:edSignature="nXLu8NHTTXHceK2EWWGYbn2a/mbNSIuxVfrHGKEXdC3lYyhGbBzcLGLTd31OvsrteSBmljAVKBmtagH9sQfjAg==" />
+    </item>
+
+    <item>
+      <title>v0.2.4</title>
+      <pubDate>Sun, 10 May 2026 09:48:24 +0000</pubDate>
+      <sparkle:version>0.2.4</sparkle:version>
+      <sparkle:shortVersionString>0.2.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>No-selection Shift actions</h2>
+        <ul>
+          <li>Single Shift can now fix the last sentence before the cursor, even when no text is selected.</li>
+          <li>Double Shift can now flip the last wrong-layout word run before the cursor.</li>
+          <li>No-selection Shift actions are enabled by default and can be disabled in Preferences.</li>
+          <li>Rewrite feedback is more visible: the flip overlay is enabled by default and appears lower on screen.</li>
+          <li>More stable focused-field rewrites preserve surrounding text, blank lines, and cursor position better.</li>
+          <li>Added a built-in short-word rule for Ukrainian-layout <code>бі</code> → Russian <code>бы</code>.</li>
+          <li>Roadmap now tracks user-defined always-flip and never-flip layout rules.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.4/LangFlip-0.2.4.dmg"
+        length="3980517"
+        type="application/octet-stream"
+        sparkle:edSignature="GhL2qqfFYWrsdW4/ybNPgOKGdnHREYyEdQkN3PLazcHjl/ZbQvdZFpxwqZak2MEYEoaVgPl9aF2LbKjDkoOmCA==" />
+    </item>
+
+    <item>
+      <title>v0.2.3</title>
+      <pubDate>Sat, 9 May 2026 17:16:08 +0000</pubDate>
+      <sparkle:version>0.2.3</sparkle:version>
+      <sparkle:shortVersionString>0.2.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>First-session polish + installable dictionaries</h2>
+        <ul>
+          <li>Cleaner onboarding with a direct path to permissions, dictionaries, and local AI setup.</li>
+          <li>Simpler menu with direct actions for selected text: flip, fix, translate, and capture text from screen.</li>
+          <li>Installable extended dictionaries for English, Ukrainian, and Russian.</li>
+          <li>Dictionary status now shows active word counts clearly, with update and reset actions.</li>
+          <li>Preferences copy is shorter, calmer, and closer to release quality.</li>
+          <li>Local AI shortcuts enable automatically when the selected Ollama model is installed and ready.</li>
+          <li>Single Shift fixes selected text by default once local AI is ready.</li>
+          <li>Shift+Space translation turns on automatically for a ready local model unless disabled manually.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.3/LangFlip-0.2.3.dmg"
+        length="3973600"
+        type="application/octet-stream"
+        sparkle:edSignature="JzVjms3LpdimCjm8SuHbHoUKJ4AFbDPeq9/3MQR/J2K0oxkiSUMgZ4O5eiQTiHVRxbzt2C/BVfhGZrrZ+VczDw==" />
+    </item>
+
+    <item>
+      <title>v0.2.2</title>
+      <pubDate>Sat, 9 May 2026 13:00:00 +0000</pubDate>
+      <sparkle:version>0.2.2</sparkle:version>
+      <sparkle:shortVersionString>0.2.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Local AI grammar assist + screen-region OCR</h2>
+        <ul>
+          <li>Single-tap Shift is now the all-purpose AI fix gesture: rewrites the selection if any, else the most recent sentence. Double-tap stays purely mechanical.</li>
+          <li>Screen-region OCR via ⇧⌘S — pick a region, the active vision model drops the recognized text on your clipboard.</li>
+          <li>Auto-fix sentences when you finish a thought with . / ! / ?.</li>
+          <li>Translate selection (⇧Space hotkey + menubar submenu) into a configurable target.</li>
+          <li>OpenAI / OpenRouter / Together / Groq backend (BYOK) alongside Apple Intelligence and Ollama.</li>
+          <li>New onboarding window only appears when permissions are missing — fixes the "looks like the app didn't launch" race.</li>
+          <li>Re-clicking the dock / Applications icon now opens Preferences for an instant visual confirmation.</li>
+          <li>Faster word-flip events: bulk paste + sub-ms gap between backspaces fixes "only the tail of the word flipped" in Slack / Notion / Electron apps.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.2/LangFlip-0.2.2.dmg"
+        length="3936628"
+        type="application/octet-stream"
+        sparkle:edSignature="+C4Wrm0zTKR3yYu715mbonhIQhcgbCNh2Uczl1cQr9Tluw1I0Rea2L8RUNqt+n0tO9rT3ibe0ItlHq/30BQYDw==" />
+    </item>
+
+    <item>
+      <title>v0.2.1</title>
+      <pubDate>Fri, 8 May 2026 22:00:00 +0000</pubDate>
+      <sparkle:version>0.2.1</sparkle:version>
+      <sparkle:shortVersionString>0.2.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>Polish + AI scaffold</h2>
+        <ul>
+          <li>Cross-layout fixes no longer oscillate on real words ("стороны" / "сторони").</li>
+          <li>Standalone "ы" / "э" now correct to "і" / "є" without needing a dictionary lookup.</li>
+          <li>Configurable hotkey: double-tap Shift / right Cmd / right Option.</li>
+          <li>Menu-bar icon replaces the "⌥" placeholder; dims when paused.</li>
+          <li>Refined overlay animation (180° flip, split-spring timing) + Preview button.</li>
+          <li>AI scaffold ready for Apple Intelligence integration (opt-in, dormant by default).</li>
+          <li>README ships with screenshots and animation GIFs.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.1/LangFlip-0.2.1.dmg"
+        length="3858334"
+        type="application/octet-stream"
+        sparkle:edSignature="3ixr7TBhjEQ5csDFPnfdb8IDXYwMbpbYr6aN+zYYXEwgCqkO+jUZM9qM7LitiZDTGvKsKfWMoQmwKv43oELlBA==" />
+    </item>
+
+    <item>
+      <title>v0.2.0</title>
+      <pubDate>Fri, 8 May 2026 18:00:00 +0000</pubDate>
+      <sparkle:version>0.2.0</sparkle:version>
+      <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <h2>First public release</h2>
+        <p>
+          Auto-flip on the fly between EN ↔ UK ↔ RU. Manual hotkey via
+          double-tap Shift (configurable in Preferences). Selection mode
+          for fixing whole sentences. Self-learning Backspace.
+          Cross-layout letter fixes (ы↔і, э↔є). Sticky-shift correction.
+          Per-app blacklist + built-in silence in terminals and password
+          managers. Bouncy icon-flip overlay. Launch at login. Bundled
+          ~45 k UK and ~48 k RU dictionaries.
+        </p>
+        <p>
+          Signed with a Developer ID and notarized by Apple. Auto-update
+          via Sparkle from this point forward.
+        </p>
+      ]]></description>
+      <enclosure
+        url="https://github.com/MikeKorotych/lang-flip/releases/download/v0.2.0/LangFlip-0.2.0.dmg"
+        length="3794550"
+        type="application/octet-stream"
+        sparkle:edSignature="J1LW9gfgwn6XX+abcNDY+U0i4F1ZPi9nmFHGZVB1Z5mdcRdtwMt8iN2ErkZOx/4JU/9BLWt/X0XOWqOM0ip2BA==" />
+    </item>
+  </channel>
+</rss>
